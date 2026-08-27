@@ -1,54 +1,67 @@
-/** Tür-Dossier: zeigt genau das, was das Team tatsaechlich herausgefunden hat. */
+/**
+ * Befund-Panel: was an DEINER Station bisher herausgefunden wurde.
+ * Zeigt nur Ergebnisse eigener Kontrollen - keine versteckte Wahrheit.
+ */
 
 import { escapeHtml } from './hud.js';
-import { visibleTells } from '../systems/guests.js';
-import { coopVerification } from '../systems/decision.js';
 import { scannerLabel } from '../systems/scanner.js';
-import { upgradeLevel } from '../systems/state.js';
+import { upgradeLevel, isSolo } from '../systems/state.js';
+import { idSummary } from '../systems/identity.js';
+import { AREAS } from '../data/config.js';
 
-export function renderDossier(el, game) {
+export function renderDossier(el, titleEl, game) {
   const night = game.state.night;
-  const guest = night?.door;
+  const roleId = game.dossierRole ?? game.localRole ?? game.players[0]?.id ?? 'bouncer';
+  const player = game.players.find((p) => p.id === roleId) ?? game.players[0];
+  const station = game.stationFor(roleId);
+  const guest = station?.guest;
 
-  if (!guest) {
+  if (titleEl) {
+    const area = player?.area === 'airlock' ? AREAS.airlock : AREAS.outside;
+    titleEl.textContent = `${area.label} — BEFUNDE`;
+  }
+
+  if (!night || !guest) {
     el.className = 'dossier-empty';
-    el.textContent = 'Kein Gast an der Tür.';
-    el.dataset.guest = '';
+    el.textContent = player?.area === 'airlock' ? 'Schleuse frei.' : 'Niemand an der Tür.';
     return;
   }
 
-  const checks = night.doorChecks;
-  const tells = visibleTells(guest, game.state.talents.street);
-  const verify = coopVerification(checks);
+  const checks = station.checks;
+  const airlock = player?.area === 'airlock';
+  const verdict = guest.doorVerdict;
 
   el.className = '';
   el.innerHTML = `
-    <div class="dossier-head">
-      <span class="dossier-name">${escapeHtml(guest.isArtist || checks.id ? guest.doc.name : 'UNBEKANNT')}</span>
-      <span class="dossier-type">${escapeHtml(guest.archetypeLabel.toUpperCase())}</span>
+    <div class="check-row">
+      <span class="label">GAST</span>
+      <span class="value">${escapeHtml(checks.id ? checks.id.doc.name : 'unbekannt')}
+        <span style="color:var(--dim)"> · ${escapeHtml(guest.archetypeLabel ?? '')}</span></span>
     </div>
-    ${row('SICHT', tells.length ? tells.join(', ') : 'unauffällig', tells.length ? 'warn' : 'pending')}
-    ${idRow(checks)}
-    ${scanRow(game, checks)}
-    ${searchRow(night, checks)}
-    ${talkRow(checks)}
-    ${alcoholRow(checks)}
-    ${checks.id ? idCard(guest, checks.id) : ''}
-    ${verify.state === 'verified' ? '<div class="verify-badge">SECURITY VERIFIED</div>' : ''}
-    ${verify.state === 'conflict' ? '<div class="verify-badge conflict">CHECK AGAIN</div>' : ''}
+    ${airlock && verdict ? row('TÜR', doorVerdictText(verdict), verdict.clean === false ? 'warn' : 'ok') : ''}
+    ${!airlock ? row('AUSWEIS', checks.id ? idSummary(checks.id) : 'nicht verlangt',
+      checks.id ? (checks.id.found.length ? 'bad' : 'ok') : 'pending') : ''}
+    ${!airlock ? row('AUSSAGE', checks.talk ? `"${checks.talk.realName}" · ${checks.talk.hint}` : 'kein Gespräch',
+      checks.talk ? 'warn' : 'pending') : ''}
+    ${airlock || isSolo(game.state) ? scanRow(game, checks) : ''}
+    ${airlock || isSolo(game.state) ? searchRow(station, checks) : ''}
+    ${airlock || isSolo(game.state) ? alcoholRow(checks) : ''}
+    ${checks.verified ? '<div class="verify-badge">SECURITY VERIFIED</div>' : ''}
+    ${checks.conflict ? '<div class="verify-badge conflict">CHECK AGAIN</div>' : ''}
+    ${player?.lastResult ? `<div class="check-row"><span class="label">ZULETZT</span>
+      <span class="value ${resultClass(player.lastResult.kind)}">${escapeHtml(player.lastResult.text)}</span></div>` : ''}
   `;
+}
+
+function doorVerdictText(verdict) {
+  if (!verdict.checked) return 'ungeprüft durchgelassen';
+  if (verdict.clean) return 'Ausweis geprüft, sauber';
+  return `beanstandet: ${verdict.found.join(', ')}`;
 }
 
 function row(label, value, cls = '') {
   return `<div class="check-row"><span class="label">${label}</span>` +
     `<span class="value ${cls}">${escapeHtml(value)}</span></div>`;
-}
-
-function idRow(checks) {
-  if (!checks.id) return row('ID', 'nicht geprüft', 'pending');
-  if (checks.id.docTooYoung) return row('ID', `ZU JUNG (${checks.id.doc.age})`, 'bad');
-  if (checks.id.detected.length) return row('ID', checks.id.detectedLabels.join(', '), 'bad');
-  return row('ID', 'keine Auffälligkeit', 'ok');
 }
 
 function scanRow(game, checks) {
@@ -58,40 +71,21 @@ function scanRow(game, checks) {
   return row('SCAN', checks.scan.text, checks.scan.ok === false ? 'bad' : checks.scan.ok ? 'ok' : 'warn');
 }
 
-function searchRow(night, checks) {
-  if (!night.patdown) return row('SEARCH', 'nicht abgetastet', 'pending');
+function searchRow(station, checks) {
+  if (!station.patdown) return row('ABTASTEN', 'nicht begonnen', 'pending');
   const res = checks.search;
-  if (!res) return row('SEARCH', 'läuft', 'warn');
-  if (res.found) return row('SEARCH', res.text, 'bad');
-  if (res.done) return row('SEARCH', 'keine Auffälligkeiten', 'ok');
-  return row('SEARCH', res.text, 'warn');
-}
-
-function talkRow(checks) {
-  if (!checks.talk) return row('TALK', 'kein Gespräch', 'pending');
-  return row('TALK', `${checks.talk.hint}, ${checks.talk.moodHint}`, 'warn');
+  if (!res) return row('ABTASTEN', 'läuft', 'warn');
+  if (res.found) return row('ABTASTEN', res.text, 'bad');
+  if (res.done) return row('ABTASTEN', 'keine Auffälligkeiten', 'ok');
+  return row('ABTASTEN', res.text, 'warn');
 }
 
 function alcoholRow(checks) {
-  if (!checks.alcohol) return row('ALKO', 'kein Test', 'pending');
-  return row('ALKO', `${checks.alcohol.promille} ‰ — ${checks.alcohol.text}`,
+  if (!checks.alcohol) return row('ALKOHOL', 'kein Test', 'pending');
+  return row('ALKOHOL', `${checks.alcohol.promille} ‰ — ${checks.alcohol.text}`,
     checks.alcohol.overLimit ? 'bad' : 'ok');
 }
 
-function idCard(guest, id) {
-  const doc = guest.doc;
-  const bad = (flag) => (flag ? 'style="color:var(--red)"' : '');
-  return `
-    <div class="id-card">
-      <div class="id-photo"></div>
-      <div class="id-fields">
-        <div><span>NAME</span><span ${bad(id.detected.includes('name'))}>${escapeHtml(doc.name)}</span></div>
-        <div><span>GEB.</span><span ${bad(id.detected.includes('age'))}>${escapeHtml(doc.birth)}</span></div>
-        <div><span>ALTER</span><span ${bad(doc.age < 18)}>${doc.age}</span></div>
-        <div><span>GÜLTIG</span><span ${bad(id.expired)}>${escapeHtml(doc.expiry)}</span></div>
-        <div><span>MERKMALE</span><span ${bad(id.detected.includes('marks'))}>${id.detected.includes('marks') ? 'FEHLEN' : 'OK'}</span></div>
-        <div><span>FOTO</span><span ${bad(id.detected.includes('photo'))}>${id.detected.includes('photo') ? 'ABWEICHUNG' : 'PASST'}</span></div>
-        <div><span>NR.</span><span>${escapeHtml(doc.number)}</span></div>
-      </div>
-    </div>`;
+function resultClass(kind) {
+  return kind === 'ok' ? 'ok' : kind === 'bad' || kind === 'deny' ? 'bad' : 'warn';
 }

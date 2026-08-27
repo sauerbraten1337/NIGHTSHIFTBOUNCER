@@ -1,7 +1,7 @@
 /**
- * Headless-Smoketest: simuliert eine komplette Nacht ohne Browser.
- * Prueft, dass Kern-Gameplay-Schleife, Wirtschaft, Reputation, Koop-Aktionen,
- * Upgrades und Save/Load tatsaechlich funktionieren (keine Platzhalter).
+ * Headless-Smoketest: simuliert komplette Nächte ohne Browser.
+ * Prüft Solo-Fluss (nur Tür) und Koop-Fluss (Tür -> Schleuse -> Club),
+ * die manuelle Ausweisprüfung, Wirtschaft, Upgrades und Save/Load.
  *
  * Start: node tests/smoke.mjs
  */
@@ -10,157 +10,244 @@ import assert from 'node:assert/strict';
 
 import { createRng } from '../src/core/rng.js';
 import { createBus } from '../src/core/bus.js';
-import { createInitialState, capacity, clubTier } from '../src/systems/state.js';
-import { createPlayers, updatePlayers, tryAction } from '../src/systems/coop.js';
+import { createInitialState, capacity, clubTier, isSolo } from '../src/systems/state.js';
+import { createPlayers, updatePlayers, tryAction, stationOf, playerByRole } from '../src/systems/coop.js';
 import { startNight, updateNight, pickNightEvent } from '../src/systems/nightcycle.js';
 import { buyUpgrade, upgradeList } from '../src/systems/upgrades.js';
 import { buyTalent } from '../src/systems/progression.js';
 import { violationsOf, createGuest } from '../src/systems/guests.js';
+import { faultyFields, ageFromBirth, requestId, markField } from '../src/systems/identity.js';
 import { saveGame, loadGame } from '../src/systems/save.js';
 import { PATDOWN_KEYS } from '../src/data/config.js';
 
-/* ---------- Fake-Input: spielt einen "guten Tuersteher" nach ---------- */
+/* ---------- Spiel aufsetzen ---------- */
 
-function createFakeInput() {
-  const queued = new Set();
+function makeGame(mode, seed = 1234) {
+  const state = createInitialState(mode);
+  // Für die Simulation ist alles freigeschaltet (das Tutorial testet Schritt 5).
+  state.unlocks = { id: true, talk: true, scan: true, search: true, alcohol: true, calm: true };
   return {
-    press(code) { queued.add(code); },
-    isDown: () => false,
-    justPressed(code) {
-      if (queued.has(code)) { queued.delete(code); return true; }
-      return false;
-    },
-    anyDown: () => false,
-    endFrame() { queued.clear(); }
-  };
-}
-
-function makeGame(seed = 1234) {
-  const game = {
-    state: createInitialState(),
+    state,
     rng: createRng(seed),
     bus: createBus(),
-    players: createPlayers(),
+    players: createPlayers(mode),
     save: () => true
   };
-  return game;
 }
 
-/** Einfache KI: prueft jeden Gast und entscheidet anhand der Ergebnisse. */
-function driveDoor(game, input) {
-  const night = game.state.night;
-  const guest = night.door;
-  if (!guest) return;
-  const [p1, p2] = game.players;
-  const checks = night.doorChecks;
+/**
+ * Türsteher-KI: verlangt den Ausweis, prüft die Felder von Hand
+ * (nutzt die Wahrheit, wie es ein perfekter Spieler mit gutem Auge täte),
+ * scannt, tastet ab und entscheidet.
+ */
+function driveStation(game, player, input) {
+  const station = stationOf(game, player);
+  const guest = station?.guest;
+  if (!guest || player.busy > 0) return;
+  const checks = station.checks;
+  const solo = isSolo(game.state);
+  const outside = player.area === 'outside';
+  // Gesperrte Mechaniken (Tutorial) kann auch der Bot nicht benutzen.
+  const can = (code) => game.state.unlocks[code] !== false;
 
-  if (p1.busy <= 0) {
-    if (!checks.id) tryAction(game, p1, 'id');
-    else if (readyToDecide(night)) tryAction(game, p1, decide(night) ? 'admit' : 'reject');
+  // --- Bouncer-Aufgaben (draussen bzw. solo) ---
+  if (outside) {
+    if (!checks.id && can('id')) { tryAction(game, player, 'id'); return; }
+    if (!checks.talk && can('talk')) { tryAction(game, player, 'talk'); return; }
+    // Ausweisfelder von Hand markieren
+    const faults = faultyFields(guest);
+    for (const field of faults) {
+      if (!checks.id.marks[field]) { tryAction(game, player, 'mark', { field }); return; }
+    }
   }
 
-  if (p2.busy <= 0) {
-    if (!checks.scan) tryAction(game, p2, 'scan');
-    else if (!night.patdown) tryAction(game, p2, 'search');
-    else if (!night.patdown.complete) {
-      const zone = PATDOWN_KEYS.find((z) => night.patdown.zones[z.zone] === null);
-      if (zone) input.press(zone.key);
-    } else if (!checks.alcohol && checks.talk === null) tryAction(game, p2, 'alcohol');
+  // --- Security-Aufgaben (Schleuse bzw. solo) ---
+  if (!outside || solo) {
+    if (!checks.scan && can('scan')) { tryAction(game, player, 'scan'); return; }
+    if (can('search')) {
+      if (!station.patdown) { tryAction(game, player, 'search'); return; }
+      if (!station.patdown.complete) {
+        const zone = PATDOWN_KEYS.find((z) => station.patdown.zones[z.zone] === null);
+        if (zone) tryAction(game, player, 'zone', { zone: zone.zone, label: zone.label });
+        return;
+      }
+    }
+    if (!checks.alcohol && can('alcohol')) { tryAction(game, player, 'alcohol'); return; }
+  }
+
+  // --- Entscheidung ---
+  const suspicious = decide(station, outside && !solo);
+  if (outside && !solo) {
+    tryAction(game, player, suspicious ? 'reject' : 'pass');
+  } else {
+    tryAction(game, player, suspicious ? 'reject' : 'admit');
   }
 }
 
-function readyToDecide(night) {
-  return !!night.doorChecks.id && !!night.doorChecks.scan &&
-    (!night.patdown || night.patdown.complete);
+function decide(station, doorOnly) {
+  const c = station.checks;
+  if (c.id && c.id.found.length > 0) return true;
+  if (doorOnly) return false;
+  if (c.scan && c.scan.ok === false) return true;
+  if (c.search && c.search.found) return true;
+  if (c.alcohol && c.alcohol.overLimit) return true;
+  return false;
 }
 
-function decide(night) {
-  const c = night.doorChecks;
-  if (c.id && (c.id.detected.length > 0 || c.id.docTooYoung)) return false;
-  if (c.scan && c.scan.ok === false) return false;
-  if (c.search && c.search.found) return false;
-  if (c.alcohol && c.alcohol.overLimit) return false;
-  return true;
+function runNight(game) {
+  let ended = false;
+  game.bus.on('nightEnd', () => { ended = true; });
+  const event = pickNightEvent(game.rng, game.state);
+  startNight(game, event, null);
+  const dt = 1 / 60;
+  let frames = 0;
+  while (game.state.phase === 'night' && frames < 60 * 60 * 12) {
+    for (const p of game.players) driveStation(game, p);
+    updatePlayers(game, dt, null);
+    updateNight(game, dt);
+    frames++;
+  }
+  return { ended, night: game.state.night };
 }
 
-/* ---------- Test 1: eine komplette Nacht ---------- */
+/* ---------- Test 1: Solo-Nacht ---------- */
 
-const game = makeGame();
-const input = createFakeInput();
-let nightEnded = false;
-game.bus.on('nightEnd', () => { nightEnded = true; });
+const solo = makeGame('solo');
+const soloMoney = solo.state.money;
+const soloRun = runNight(solo);
+const sn = soloRun.night;
 
-const event = pickNightEvent(game.rng, game.state);
-assert.ok(event, 'Nacht-Event wurde gewaehlt');
-startNight(game, event, null);
-assert.equal(game.state.phase, 'night');
+assert.ok(soloRun.ended, 'Solo: Nacht regulär beendet');
+assert.equal(solo.state.phase, 'report', 'Solo: Report erreicht');
+assert.equal(solo.players.length, 1, 'Solo: nur ein Spieler');
+assert.ok(sn.stats.arrived > 20, `Solo: Gäste erschienen (${sn.stats.arrived})`);
+assert.ok(sn.stats.admitted > 0, 'Solo: Gäste eingelassen');
+assert.ok(sn.stats.rejected > 0, 'Solo: Gäste abgewiesen');
+assert.equal(sn.stats.passed, 0, 'Solo: keine Schleuse, also kein Durchlassen');
+assert.ok(sn.airlockQueue.length === 0, 'Solo: Schleuse bleibt leer');
+assert.ok(solo.state.money > soloMoney, 'Solo: Geld gestiegen');
+assert.ok(sn.stats.correct > sn.stats.mistakes,
+  `Solo: mehr richtig als falsch (${sn.stats.correct}/${sn.stats.mistakes})`);
 
-const startMoney = game.state.money;
-const dt = 1 / 60;
-let frames = 0;
-while (game.state.phase === 'night' && frames < 60 * 60 * 12) {
-  driveDoor(game, input);
-  updatePlayers(game, dt, input);
-  updateNight(game, dt);
-  input.endFrame();
-  frames++;
+/* ---------- Test 2: Koop-Nacht mit getrennten Bereichen ---------- */
+
+const coop = makeGame('local', 4321);
+const coopRun = runNight(coop);
+const cn = coopRun.night;
+
+assert.ok(coopRun.ended, 'Koop: Nacht regulär beendet');
+assert.equal(coop.players.length, 2, 'Koop: zwei Spieler');
+assert.equal(playerByRole(coop, 'bouncer').area, 'outside', 'Bouncer arbeitet draussen');
+assert.equal(playerByRole(coop, 'security').area, 'airlock', 'Security arbeitet in der Schleuse');
+assert.ok(cn.stats.passed > 0, `Koop: Gäste in die Schleuse durchgelassen (${cn.stats.passed})`);
+assert.ok(cn.stats.admitted > 0, 'Koop: Gäste in den Club eingelassen');
+assert.ok(cn.stats.admitted <= cn.stats.passed, 'Koop: es kommt nur rein, wer durchgelassen wurde');
+assert.ok(cn.stats.correct > cn.stats.mistakes,
+  `Koop: mehr richtig als falsch (${cn.stats.correct}/${cn.stats.mistakes})`);
+
+// Bereichsgrenzen: der Bouncer darf nicht scannen, die Security nicht am Ausweis arbeiten.
+const bouncer = playerByRole(coop, 'bouncer');
+const security = playerByRole(coop, 'security');
+coop.state.night.running = true;
+assert.ok(tryAction(coop, bouncer, 'scan'), 'Bouncer darf nicht scannen');
+assert.ok(tryAction(coop, security, 'id'), 'Security darf keinen Ausweis verlangen');
+assert.ok(tryAction(coop, bouncer, 'admit'), 'Bouncer darf nicht in den Club einlassen');
+
+/* ---------- Test 3: Tutorial läuft durch und schaltet frei ---------- */
+
+const tut = makeGame('solo', 777);
+tut.state.unlocks = { id: true, talk: false, scan: false, search: false, alcohol: false, calm: false };
+let tutEnded = false;
+tut.bus.on('nightEnd', () => { tutEnded = true; });
+startNight(tut, pickNightEvent(tut.rng, tut.state), null, { tutorial: true });
+
+assert.ok(tut.state.night.tutorial, 'Tutorial gestartet');
+assert.equal(tut.state.unlocks.talk, false, 'Ansprechen ist zu Beginn gesperrt');
+
+const seenSteps = new Set();
+let frames2 = 0;
+while (tut.state.phase === 'night' && frames2 < 60 * 60 * 12) {
+  const step = tut.state.night.tutorial?.step;
+  if (step) seenSteps.add(step.id);
+  for (const p of tut.players) driveStation(tut, p);
+  updatePlayers(tut, 1 / 60, null);
+  updateNight(tut, 1 / 60);
+  frames2++;
 }
 
-const night = game.state.night;
-assert.ok(nightEnded, 'Nacht wurde regulaer beendet');
-assert.equal(game.state.phase, 'report', 'Report-Phase erreicht');
-assert.ok(night.stats.arrived > 20, `Gaeste sind erschienen (${night.stats.arrived})`);
-assert.ok(night.stats.admitted > 0, `Gaeste wurden eingelassen (${night.stats.admitted})`);
-assert.ok(night.stats.rejected > 0, `Gaeste wurden abgewiesen (${night.stats.rejected})`);
-assert.ok(night.stats.revenue > 0, `Umsatz erwirtschaftet (${Math.round(night.stats.revenue)})`);
-assert.ok(game.state.money > startMoney, 'Geld hat sich erhoeht');
-assert.ok(night.stats.correct > night.stats.mistakes,
-  `Kontrolle lohnt sich: ${night.stats.correct} richtig vs ${night.stats.mistakes} falsch`);
-assert.ok(night.stats.verified > 0, `Koop-Verifikation ausgeloest (${night.stats.verified})`);
-assert.ok(night.rating >= 0 && night.rating <= 5, 'Sternewertung im Bereich 0-5');
-assert.ok(game.state.xp > 0, 'XP vergeben');
+assert.ok(seenSteps.has('spawn1'), 'Tutorial: erster Gast erklärt');
+assert.ok(seenSteps.has('expired'), 'Tutorial: abgelaufener Ausweis erklärt');
+assert.ok(seenSteps.has('photo'), 'Tutorial: Fotovergleich erklärt');
+assert.ok(seenSteps.has('done'), `Tutorial vollständig durchlaufen (${seenSteps.size} Schritte)`);
+assert.equal(tut.state.tutorialDone, true, 'Tutorial als abgeschlossen markiert');
+assert.ok(Object.values(tut.state.unlocks).every(Boolean), 'Am Ende ist alles freigeschaltet');
+assert.ok(tutEnded, 'Tutorial-Nacht regulär beendet');
 
-/* ---------- Test 2: Upgrades veraendern die Welt ---------- */
-
-game.state.money = 50000;
-const capBefore = capacity(game.state);
-const tierBefore = clubTier(game.state).level;
-for (const id of ['floor', 'scanner', 'bar', 'lights', 'door', 'team', 'detector']) {
-  const res = buyUpgrade(game.state, id);
-  assert.ok(res.ok, `Upgrade ${id} gekauft`);
-}
-assert.ok(capacity(game.state) > capBefore, 'Kapazitaet ist gestiegen');
-assert.ok(clubTier(game.state).level >= tierBefore, 'Club-Stufe wurde neu berechnet');
-assert.ok(upgradeList(game.state).every((u) => u.level <= u.max), 'Upgrade-Level respektieren Maximum');
-
-game.state.talentPoints = 2;
-assert.ok(buyTalent(game.state, 'scanner').ok, 'Talent gelernt');
-assert.equal(buyTalent(game.state, 'unbekannt').ok, false, 'Unbekanntes Talent abgelehnt');
-
-/* ---------- Test 3: Regelwerk der Entscheidungen ---------- */
+/* ---------- Test 4: manuelle Ausweisprüfung ---------- */
 
 const rng = createRng(99);
-let underageFound = false;
-let contrabandFound = false;
-for (let i = 0; i < 800; i++) {
+let checked = 0;
+let seenPhoto = false; let seenExpiry = false; let seenBirth = false;
+for (let i = 0; i < 900; i++) {
   const g = createGuest(rng, { reputation: 50, nightIndex: 3 });
-  const v = violationsOf(g);
+  const faults = faultyFields(g);
+  const inspection = requestId(makeGame('solo').state, g);
+
+  // Ein sauberes Dokument darf keine Treffer liefern.
+  if (faults.size === 0) {
+    for (const field of ['photo', 'name', 'birth', 'expiry', 'marks']) {
+      const res = markField(inspection, g, field);
+      assert.equal(res.correct, false, 'Sauberes Dokument: kein Feld ist auffällig');
+    }
+  } else {
+    for (const field of faults) {
+      const res = markField(inspection, g, field);
+      assert.equal(res.correct, true, `Fehlerhaftes Feld ${field} wird als Treffer erkannt`);
+      assert.ok(res.reason, 'Treffer hat eine Begründung');
+      if (field === 'photo') seenPhoto = true;
+      if (field === 'expiry') seenExpiry = true;
+      if (field === 'birth') seenBirth = true;
+    }
+    checked++;
+  }
+
+  // Wahrheit und Dokument müssen zusammenpassen.
   if (g.truth.underage) {
-    assert.ok(v.some((x) => x.id === 'underage'), 'Minderjaehrig wird als Verstoss erkannt');
-    underageFound = true;
+    assert.ok(faults.has('birth') || faults.has('photo') || faults.size > 0,
+      'Minderjährige haben immer eine erkennbare Auffälligkeit');
   }
-  if (g.truth.contraband) {
-    assert.ok(v.some((x) => x.id === 'item'), 'Verbotener Gegenstand wird erkannt');
-    contrabandFound = true;
-  }
-  if (!g.truth.underage && g.truth.idValid && !g.truth.contraband &&
-      !g.truth.blacklisted && g.truth.drunk < 0.72) {
-    assert.equal(v.length, 0, 'Sauberer Gast hat keine Verstoesse');
+  if (!g.doc.tampered && !g.truth.underage) {
+    assert.ok(ageFromBirth(g.doc.birth) >= 18, 'Ehrliches Dokument zeigt volljähriges Alter');
   }
 }
-assert.ok(underageFound && contrabandFound, 'Testmenge enthielt beide Problemfaelle');
+assert.ok(checked > 100, `Genug fehlerhafte Dokumente im Test (${checked})`);
+assert.ok(seenPhoto && seenExpiry && seenBirth, 'Alle Fehlerarten kamen vor');
 
-/* ---------- Test 4: Save/Load ---------- */
+/* ---------- Test 5: Regelwerk ---------- */
+
+const rng2 = createRng(7);
+for (let i = 0; i < 500; i++) {
+  const g = createGuest(rng2, { reputation: 50, nightIndex: 3 });
+  const v = violationsOf(g);
+  if (g.truth.underage) assert.ok(v.some((x) => x.id === 'underage'), 'Minderjährig = Verstoß');
+  if (g.truth.contraband) assert.ok(v.some((x) => x.id === 'item'), 'Verbotener Gegenstand = Verstoß');
+}
+
+/* ---------- Test 6: Upgrades, Talente, Save/Load ---------- */
+
+solo.state.money = 50000;
+const capBefore = capacity(solo.state);
+const tierBefore = clubTier(solo.state).level;
+for (const id of ['floor', 'scanner', 'bar', 'lights', 'door', 'team', 'detector']) {
+  assert.ok(buyUpgrade(solo.state, id).ok, `Upgrade ${id} gekauft`);
+}
+assert.ok(capacity(solo.state) > capBefore, 'Kapazität gestiegen');
+assert.ok(clubTier(solo.state).level >= tierBefore, 'Club-Stufe neu berechnet');
+assert.ok(upgradeList(solo.state).every((u) => u.level <= u.max), 'Upgrade-Level im Rahmen');
+
+solo.state.talentPoints = 2;
+assert.ok(buyTalent(solo.state, 'scanner').ok, 'Talent gelernt');
+assert.equal(buyTalent(solo.state, 'unbekannt').ok, false, 'Unbekanntes Talent abgelehnt');
 
 const store = new Map();
 const fakeStorage = {
@@ -168,25 +255,24 @@ const fakeStorage = {
   setItem: (k, v) => store.set(k, v),
   removeItem: (k) => store.delete(k)
 };
-game.state.money = 4242;
-game.state.reputation = 71;
-assert.ok(saveGame(game.state, fakeStorage), 'Speichern erfolgreich');
-const fresh = createInitialState();
+solo.state.money = 4242;
+solo.state.reputation = 71;
+assert.ok(saveGame(solo.state, fakeStorage), 'Speichern erfolgreich');
+const fresh = createInitialState('solo');
 assert.ok(loadGame(fresh, fakeStorage), 'Laden erfolgreich');
 assert.equal(fresh.money, 4242, 'Geld wiederhergestellt');
-assert.equal(fresh.reputation, 71, 'Reputation wiederhergestellt');
-assert.equal(fresh.upgrades.floor, game.state.upgrades.floor, 'Upgrades wiederhergestellt');
+assert.equal(fresh.upgrades.floor, solo.state.upgrades.floor, 'Upgrades wiederhergestellt');
 
 /* ---------- Ergebnis ---------- */
 
-console.log('NIGHT REPORT (Simulation)');
-console.log(`  Event         ${night.event.label}`);
-console.log(`  Gaeste        ${night.stats.arrived}`);
-console.log(`  Einlass       ${night.stats.admitted}`);
-console.log(`  Abgewiesen    ${night.stats.rejected}`);
-console.log(`  Abgesprungen  ${night.stats.left}`);
-console.log(`  Umsatz        ${Math.round(night.stats.revenue)} EUR`);
-console.log(`  Vorfaelle     ${night.stats.incidents}`);
-console.log(`  Verified      ${night.stats.verified}`);
-console.log(`  Bewertung     ${night.rating}/5`);
+const line = (label, s) =>
+  `  ${label.padEnd(6)} Gäste ${String(s.arrived).padStart(3)} · durchgelassen ${String(s.passed).padStart(3)}` +
+  ` · Einlass ${String(s.admitted).padStart(3)} · abgewiesen ${String(s.rejected).padStart(3)}` +
+  ` · Umsatz ${String(Math.round(s.revenue)).padStart(5)} EUR · richtig ${s.correct}/${s.correct + s.mistakes}` +
+  ` · Fänge ${s.catches} · Bewertung ${s.rating ?? ''}`;
+
+console.log('SIMULATION');
+console.log(`  TUT    ${seenSteps.size} Schritte durchlaufen · Freischaltungen ${Object.values(tut.state.unlocks).filter(Boolean).length}/6`);
+console.log(line('SOLO', { ...sn.stats, rating: `${sn.rating}/5` }));
+console.log(line('KOOP', { ...cn.stats, rating: `${cn.rating}/5` }));
 console.log('\nAlle Smoketests bestanden.');

@@ -41,35 +41,84 @@ export const TUNING = {
   fineUnderage: 320
 };
 
-/** Spieler-Rollen (Koop ist Kern-Feature, nicht Add-on). */
-export const ROLES = {
-  bouncer: {
-    id: 'bouncer',
-    label: 'BOUNCER',
-    accent: '#ff3b3b',
-    station: 'door',
-    keys: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' },
-    actions: [
-      { key: 'Digit1', code: 'id', label: 'ID CHECK' },
-      { key: 'Digit2', code: 'talk', label: 'TALK' },
-      { key: 'Digit3', code: 'admit', label: 'ADMIT' },
-      { key: 'Digit4', code: 'reject', label: 'REJECT' }
-    ]
-  },
-  security: {
-    id: 'security',
-    label: 'SECURITY',
-    accent: '#39d7ff',
-    station: 'search',
-    keys: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' },
-    actions: [
-      { key: 'Digit7', code: 'scan', label: 'SCAN' },
-      { key: 'Digit8', code: 'search', label: 'SEARCH' },
-      { key: 'Digit9', code: 'alcohol', label: 'ALKO' },
-      { key: 'Digit0', code: 'calm', label: 'CALM QUEUE' }
-    ]
-  }
+/**
+ * Spielmodi. Im Solo-Modus uebernimmt der Bouncer alle Aufgaben und es gibt
+ * keinen getrennten Security-Bereich.
+ */
+export const MODES = {
+  solo: { id: 'solo', label: 'SOLO', desc: 'Du machst Tuer und Kontrolle allein. Kein Security-Bereich.' },
+  local: { id: 'local', label: 'LOKALER KOOP', desc: 'Zwei Spieler an einer Tastatur, Splitscreen.' },
+  online: { id: 'online', label: 'ONLINE-KOOP', desc: 'Raum erstellen oder beitreten, jeder an seinem Rechner.' }
 };
+
+/** Bereiche: der Bouncer arbeitet draussen, die Security in der Schleuse. */
+export const AREAS = {
+  outside: { id: 'outside', label: 'EINGANG', sub: 'DRAUSSEN' },
+  airlock: { id: 'airlock', label: 'SICHERHEITSSCHLEUSE', sub: 'INNEN, VOR DEM CLUB' }
+};
+
+const KEYS_P1 = { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' };
+const KEYS_P2 = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+
+/**
+ * Rollen je nach Modus.
+ * `pass` schickt den Gast in die Schleuse (nur Koop),
+ * `admit` laesst endgueltig in den Club.
+ */
+export function rolesFor(mode) {
+  if (mode === 'solo') {
+    return [{
+      id: 'bouncer', label: 'BOUNCER', accent: '#ff3b3b', area: 'outside', solo: true,
+      keys: KEYS_P1,
+      actions: [
+        { key: 'Digit1', code: 'id', label: 'AUSWEIS' },
+        { key: 'Digit2', code: 'talk', label: 'ANSPRECHEN' },
+        { key: 'Digit3', code: 'scan', label: 'SCAN' },
+        { key: 'Digit4', code: 'search', label: 'ABTASTEN' },
+        { key: 'Digit5', code: 'alcohol', label: 'ALKOTEST' },
+        { key: 'Digit6', code: 'calm', label: 'SCHLANGE' },
+        { key: 'KeyE', code: 'admit', label: 'EINLASSEN' },
+        { key: 'KeyX', code: 'reject', label: 'ABWEISEN' }
+      ]
+    }];
+  }
+  return [
+    {
+      id: 'bouncer', label: 'BOUNCER', accent: '#ff3b3b', area: 'outside', solo: false,
+      keys: KEYS_P1,
+      actions: [
+        { key: 'Digit1', code: 'id', label: 'AUSWEIS' },
+        { key: 'Digit2', code: 'talk', label: 'ANSPRECHEN' },
+        { key: 'Digit3', code: 'calm', label: 'SCHLANGE' },
+        { key: 'KeyE', code: 'pass', label: 'DURCHLASSEN' },
+        { key: 'KeyX', code: 'reject', label: 'ABWEISEN' }
+      ]
+    },
+    {
+      id: 'security', label: 'SECURITY', accent: '#39d7ff', area: 'airlock', solo: false,
+      keys: KEYS_P2,
+      actions: [
+        { key: 'Digit7', code: 'scan', label: 'SCAN' },
+        { key: 'Digit8', code: 'search', label: 'ABTASTEN' },
+        { key: 'Digit9', code: 'alcohol', label: 'ALKOTEST' },
+        { key: 'Enter', code: 'admit', label: 'EINLASSEN' },
+        { key: 'Backspace', code: 'reject', label: 'ZURUECKSCHICKEN' }
+      ]
+    }
+  ];
+}
+
+/** Welche Kontrollen gehoeren zu welchem Bereich? */
+export const AREA_CHECKS = {
+  outside: ['id', 'talk'],
+  airlock: ['scan', 'search', 'alcohol']
+};
+
+/** Das Spiel spielt an einem festen fiktiven Datum - Basis fuer Ablauf/Alter. */
+export const GAME_DATE = { year: 2026, month: 3, day: 14 };
+
+/** Wie viele Gaeste passen gleichzeitig in die Schleuse? */
+export const AIRLOCK_CAPACITY = 4;
 
 /** Tasten für die Abtast-Zonen (Spieler 2). */
 export const PATDOWN_KEYS = [
