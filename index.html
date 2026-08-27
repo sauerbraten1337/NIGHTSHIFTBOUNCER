@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NULLWERK — Nightshift Bouncer Co-op</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles/ui.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="scene"></canvas>
+
+  <!-- ============ HUD ============ -->
+  <div id="hud" class="hidden">
+    <header class="hud-top">
+      <div class="hud-block left">
+        <div class="clock" id="hud-clock">00:00</div>
+        <div class="sub" id="hud-phase">OPENING</div>
+      </div>
+
+      <div class="hud-block center">
+        <div class="club-name" id="hud-club">NULLWERK</div>
+        <div class="sub" id="hud-status">NIGHT 01 · NORMAL NIGHT</div>
+        <div class="night-bar"><span id="hud-nightbar"></span></div>
+      </div>
+
+      <div class="hud-block right">
+        <div class="stat"><span class="k">GELD</span><span class="v" id="hud-money">€0</span></div>
+        <div class="stat"><span class="k">RUF</span><span class="v" id="hud-rep">0</span>
+          <div class="meter"><span id="hud-repbar"></span></div>
+        </div>
+        <div class="stat"><span class="k">KAPAZITÄT</span><span class="v" id="hud-cap">0/0</span></div>
+      </div>
+    </header>
+
+    <div class="hud-side left-side">
+      <div class="panel queue-panel">
+        <div class="panel-title">WARTESCHLANGE</div>
+        <div class="big" id="hud-queue">0</div>
+        <div class="meter wide"><span id="hud-moodbar"></span></div>
+        <div class="sub" id="hud-mood">STIMMUNG</div>
+      </div>
+      <div class="panel effects-panel" id="hud-effects"></div>
+      <div class="panel radio-panel">
+        <div class="panel-title">FUNK</div>
+        <ul id="hud-radio"></ul>
+      </div>
+    </div>
+
+    <div class="hud-side right-side">
+      <div class="panel dossier" id="dossier">
+        <div class="panel-title">TÜR — AKTUELLER GAST</div>
+        <div id="dossier-body" class="dossier-empty">Kein Gast an der Tür.</div>
+      </div>
+    </div>
+
+    <div id="toasts"></div>
+
+    <footer class="hud-bottom">
+      <div class="actionbar" id="bar-p1"></div>
+      <div class="coop-status" id="coop-status">TEAM</div>
+      <div class="actionbar" id="bar-p2"></div>
+    </footer>
+  </div>
+
+  <!-- ============ SCREENS ============ -->
+  <div id="screen" class="screen">
+    <div class="screen-inner" id="screen-inner"></div>
+  </div>
+
+  <div id="hint" class="hint hidden">
+    <span><b>P1 BOUNCER</b> WASD · 1 ID · 2 TALK · 3 ADMIT · 4 REJECT</span>
+    <span><b>P2 SECURITY</b> ←↑↓→ · 7 SCAN · 8 SEARCH (J/K/L) · 9 ALKO · 0 CALM</span>
+    <span><b>SYSTEM</b> P PAUSE · M MUTE · H HILFE</span>
+  </div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
