@@ -12,6 +12,11 @@ kein 3D, keine Ego-Kamera, keine Assets.
 
 ![An der Tür](docs/shot-door.png)
 
+Der Ausweis liegt in deiner Hand, die Checkliste hängt als Notizzettel daneben,
+und was aus einer Tasche kommt, landet gross auf dem Kontrolltisch:
+
+![Kontrolle](docs/shot-search.png)
+
 ---
 
 ## Starten
@@ -66,9 +71,9 @@ Was der Bouncer übersieht, kann die Security noch fangen — das gibt einen **g
 
 ## Steuerung
 
-**Solo (WASD-Seite)**
+**Solo**
 `1` Ausweis · `2` Ansprechen · `3` Scan · `4` Abtasten · `5` Alkotest · `6` Schlange ·
-`E` Einlassen · `X` Abweisen
+`E` Einlassen · `X` Abweisen · Zonen `J` `K` `L` · Gegenstand: anklicken oder `1`–`6`, `0` = Zone freigeben
 
 **Koop — Spieler 1 (Bouncer, draussen)**
 `1` Ausweis · `2` Ansprechen · `3` Schlange · `E` Durchlassen · `X` Abweisen
@@ -79,7 +84,11 @@ Was der Bouncer übersieht, kann die Security noch fangen — das gibt einen **g
 
 System: `ESC` Pause · `M` Ton · `H` Hilfe
 
-## Die Ausweiskontrolle
+Einlassen und Abweisen liegen als grosse Buttons unten in der Bildmitte — Maus oder Taste.
+Die Auswahl auf dem Kontrolltisch und die Ausweisfelder laufen über die Maus (im Solo
+zusätzlich über die Zifferntasten).
+
+## Die Kontrolle
 
 Der Ausweis liegt gross und lesbar unten links. **Klick auf ein Feld = beanstanden.**
 Das Spiel verrät nichts von selbst — du musst hinsehen:
@@ -95,6 +104,51 @@ Das Spiel verrät nichts von selbst — du musst hinsehen:
 Ein Fehlgriff kostet Zeit und wird als „nichts zu beanstanden" markiert — genaues Hinsehen
 lohnt sich also. Scanner-Upgrades und das Talent *Street Smarts* geben Hinweise
 („Dokument prüfen", später auch welches Feld), nehmen dir die Prüfung aber nie ab.
+
+### Abtasten und Gegenstände
+
+Beim Abtasten wählst du eine Zone: **J** Jacke, **K** Hosentaschen, **L** Tasche.
+Eine Tasche gibt es nur, wenn der Gast wirklich eine dabei hat — dann siehst du sie an
+seiner Schulter, und er holt sie erst hervor, bevor der Prüfring erscheint.
+
+Der Inhalt kommt gross auf den Kontrolltisch: Kaugummi, Schlüssel, Ladekabel — und
+vielleicht eine Glasflasche, ein Reizgas oder eine Klinge. **Du** zeigst auf das, was
+nicht in den Club darf, oder gibst die Zone frei. Danebengegriffen heisst: der Gegenstand
+war harmlos. Freigegeben, obwohl etwas drin war, steht später im Bericht.
+
+### Alkohol und Zustand
+
+Der Alkoholtest legt ein Gerät auf den Tisch. Es zeigt **nur den Wert** — der Grenzwert
+steht daneben aufs Gehäuse gedruckt. Die Bewertung machst du.
+
+Und ein niedriger Promillewert heisst nicht, dass jemand nüchtern ist: ab der vierten
+Nacht kommen Gäste, die anders auffallen — weite Pupillen, Schweiss auf der Stirn,
+mahlender Kiefer, zittrige Hände, abwesender Blick. Das steht in keiner Anzeige.
+Das siehst du der Person an oder eben nicht.
+
+### Der Notizzettel
+
+Rechts hängt kein HUD-Panel, sondern ein handgeschriebener Zettel: was du geprüft hast
+(durchgestrichen und abgehakt), was noch offen ist, und hingekritzelte Bemerkungen.
+Belegung des Clubs, Ausbaustufe und die alte Übersichtskarte gibt es im Spiel nicht mehr —
+während der Schicht zählt nur, was auf dem Zettel steht.
+
+## Was mit der Zeit dazukommt
+
+Jede Karriere fängt einfach an und wird schrittweise gemeiner. Was neu dazukommt,
+kündigt das Briefing vorher an:
+
+| ab Nacht | Neu | Worauf du achtest |
+|---|---|---|
+| 1 | Ausweis | Foto, Name, Geburtsdatum, Gültigkeit, Hologramm |
+| 2 | Gegenstände | Beim Abtasten kommt alles auf den Tisch |
+| 3 | Alkohol | Das Gerät zeigt den Wert, den Grenzwert liest du ab |
+| 4 | Zustand | Anzeichen für Substanzeinfluss |
+| 6 | Feine Fälschungen | Subtilere Manipulationen |
+| 8 | Hausverbote | Bekannte Gesichter versuchen es erneut |
+| 10 | Mehrfache Mängel | Es kommt oft mehreres zusammen |
+
+Zusätzlich liegen später mehr harmlose Gegenstände zur Ablenkung dabei.
 
 ## Tutorial
 
@@ -113,8 +167,8 @@ Schlange beruhigen → freier Betrieb. Abwählbar im Menü.
 * **Wirtschaft**: Eintritt (skaliert mit Ruf und Ausbaustufe), laufender Bar- und VIP-Umsatz,
   Bussgelder, Zwischenfallkosten, Gagen.
 * **Reputation 0–100** steuert Andrang, Preise, VIP-Anteil und verfügbare Acts.
-* **13 Upgrades** in 5 Bereichen; die Club-Übersicht (Karte unten rechts) zeigt Tanzfläche,
-  zweiten Floor, VIP, Bar und Backstage sichtbar wachsen. 7 Club-Stufen.
+* **13 Upgrades** in 5 Bereichen und 7 Club-Stufen. Der Ausbau zeigt sich dort, wo du stehst:
+  breitere Tür, hellere Neonschrift, Scannerbogen in der Schleuse, Kameras, VIP-Eingang.
 * **Nacht-Events** (Rave, VIP Night, Artist Night, Sold Out, Inspection, Chaos) und
   **Zufallsereignisse** (Stromausfall, Scannerdefekt, Ansturm, viraler Post, falscher Backstage-Pass …).
 * **Acts buchen** — fiktive Künstler; auch der Headliner braucht einen Ausweis.
@@ -138,10 +192,13 @@ src/core/             rng · bus · input · loop · audio
 src/data/             config (Modi, Rollen, Balancing) · dialogue
 src/systems/          state · guests · queue · identity · scanner · security · alcohol
                       decision · economy · reputation · upgrades · artists · randomEvents
-                      nightcycle · progression · tutorial · coop · save
+                      nightcycle · progression · difficulty · tutorial · coop · save
 src/render/           layout · palette · sprites · figure (grosse Frontfiguren)
-                      scene (Tür-/Schleusenansicht) · overview (Clubkarte) · effects · renderer
-src/ui/               hud · panels · idcard (grosser, klickbarer Ausweis) · report · shop · screens
+                      items (gezeichnete Gegenstände) · scene (Tür-/Schleusenansicht,
+                      Abtast-Ringe, Alkoholtestgerät) · effects · renderer
+src/ui/               hud (inkl. Entscheidungs-Buttons) · notepad (Notizzettel)
+                      idcard (Ausweis in der Hand) · itemtray (Kontrolltisch)
+                      report · shop · screens
 src/net/net.js        Räume, Schnappschüsse, Aktionen
 server/index.js       Statischer Server + WebSocket-Raumvermittlung
 tests/                smoke.mjs (headless) · browser-check.mjs (Chromium, alle drei Modi)
@@ -157,7 +214,9 @@ Die versteckte Wahrheit über Gäste bleibt beim Host und wird nie mitgeschickt.
 Fast alles Spürbare steht in `src/data/config.js`: `TUNING` (Nachtlänge, Aktionsdauern, Geduld,
 Preise, Mindestalter), `rolesFor(mode)` (Tastenbelegung und Bereiche), `GAME_DATE` (das Datum,
 gegen das geprüft wird), `ARCHETYPES`, `ITEMS`, `NIGHT_EVENTS`, `UPGRADES`, `ARTISTS`,
-`RANKS`, `TALENTS`. Der Clubname ist eine Konstante (`CLUB_NAME`).
+`RANKS`, `TALENTS`, `ITEMS` (was Gäste dabeihaben), `ZONES` (Abtast-Zonen),
+`DIFFICULTY_STEPS` (wann welche Auffälligkeit dazukommt), `IMPAIRMENT_SIGNS` und
+`ALCOHOL_LIMIT_PROMILLE`. Der Clubname ist eine Konstante (`CLUB_NAME`).
 
 ## Nächste Schritte
 

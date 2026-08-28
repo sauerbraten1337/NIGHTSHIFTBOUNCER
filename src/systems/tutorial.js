@@ -9,7 +9,7 @@
 import { createGuest } from './guests.js';
 import { insertGuest } from './queue.js';
 import { addToast, addRadio, isSolo } from './state.js';
-import { ITEMS } from '../data/config.js';
+import { ITEMS, ZONES, itemById } from '../data/config.js';
 
 /** Baut einen Gast mit genau den Eigenschaften, die der Schritt zeigen soll. */
 function scripted(game, spec = {}) {
@@ -29,6 +29,16 @@ function scripted(game, spec = {}) {
   guest.truth.blacklisted = false;
   guest.truth.contraband = null;
   guest.truth.contrabandZone = null;
+  guest.truth.impaired = 0;
+  guest.truth.impairmentSigns = [];
+  // Saubere, überschaubare Taschen: nur harmlose Sachen.
+  guest.truth.hasBag = !!spec.bag;
+  guest.truth.zoneIds = ZONES.filter((z) => !z.needsBag || spec.bag).map((z) => z.id);
+  guest.truth.carried = {
+    jacket: [itemById('phone'), itemById('lighter')].filter(Boolean),
+    pockets: [itemById('keys'), itemById('gum')].filter(Boolean),
+    ...(spec.bag ? { bag: [itemById('bottle'), itemById('charger')].filter(Boolean) } : {})
+  };
   guest.doc.name = guest.name;
   guest.doc.tampered = false;
   guest.doc.marksOk = true;
@@ -177,18 +187,23 @@ const STEPS = [
     title: (game) => isSolo(game.state) ? 'KONTROLLE' : 'DIE SCHLEUSE',
     body: (game) => isSolo(game.state)
       ? 'Ein sauberer Ausweis heisst nicht, dass alles sauber ist. Scanne den Gast (3) und ' +
-        'taste ihn ab (4, dann J/K/L für die Zonen). Der Alkoholtest liegt auf 5.'
+        'taste ihn ab (4). Dann Zone wählen: J Jacke, K Hosentaschen, L Tasche - ' +
+        'er holt sie hervor und leert sie aus. Klick auf das, was nicht reindarf. ' +
+        'Der Alkotest (5) zeigt nur den Wert; den Grenzwert liest du am Gerät ab.'
       : 'Alles, was du durchlässt, landet in der Schleuse - innen, aber noch nicht im Club. ' +
         'Dort scannt die Security (7), tastet ab (8, Zonen J/K/L) und testet auf Alkohol (9). ' +
-        'Erst sie entscheidet mit ENTER über den Einlass.',
+        'Was aus einer Zone kommt, liegt gross auf dem Tisch: anklicken, was nicht reindarf. ' +
+        'Erst die Security entscheidet mit ENTER über den Einlass.',
     unlock: ['scan', 'search', 'alcohol'],
     setup(game) {
       insertGuest(game, scripted(game, {
-        id: 'contraband', personality: 'nervous',
+        id: 'contraband', personality: 'nervous', bag: true,
         build: (g) => {
-          g.truth.contraband = ITEMS.find((i) => i.id === 'spray');
-          g.truth.contrabandZone = 'jacket';
-          g.truth.items = [g.truth.contraband];
+          const spray = ITEMS.find((i) => i.id === 'spray');
+          g.truth.contraband = spray;
+          g.truth.contrabandZone = 'bag';
+          g.truth.carried.bag = [itemById('bottle'), spray, itemById('mints')].filter(Boolean);
+          g.truth.items = Object.values(g.truth.carried).flat();
           g.truth.risk = 0.6;
         }
       }));

@@ -14,7 +14,7 @@ import { rolesFor, PATDOWN_KEYS, TUNING, AREA_CHECKS } from '../data/config.js';
 import { actionSpeed, addToast, addRadio, isSolo } from './state.js';
 import { requestId, markField, inspectionVerdict, idSummary } from './identity.js';
 import { scanGuest } from './scanner.js';
-import { startPatdown, patZone, patdownResult } from './security.js';
+import { startPatdown, openZone, pickItem, patdownResult, pendingZones } from './security.js';
 import { talkTo, alcoholTest } from './alcohol.js';
 import { admitGuest, rejectGuest, passGuest, coopVerification, soloVerification } from './decision.js';
 import { calmQueue, airlockFull } from './queue.js';
@@ -75,13 +75,26 @@ export function updatePlayers(game, dt, input) {
     for (const action of player.role.actions) {
       if (input.justPressed(action.key)) tryAction(game, player, action.code);
     }
-    // Abtast-Zonen: nur an der Station, an der abgetastet wird.
+    // Abtast-Zonen: nur Zonen, die dieser Gast überhaupt hat.
     const station = stationOf(game, player);
-    if (station?.patdown && !station.patdown.complete && canDo(game, player, 'search')) {
+    const pat = station?.patdown;
+    if (pat && !pat.complete && canDo(game, player, 'search')) {
       for (const zoneKey of PATDOWN_KEYS) {
+        if (!pat.zones[zoneKey.zone]) continue;
         if (input.justPressed(zoneKey.key)) {
           tryAction(game, player, 'zone', { zone: zoneKey.zone, label: zoneKey.label });
         }
+      }
+      // Solo: Ziffern greifen direkt in die offene Zone (kein Konflikt, weil
+      // gerade nichts anderes ansteht). Im Koop läuft die Auswahl per Maus.
+      const open = pat.active ? pat.zones[pat.active] : null;
+      if (open && isSolo(game.state)) {
+        if (input.justPressed('Digit0')) tryAction(game, player, 'pick', { zone: open.id, itemId: null });
+        (open.items ?? []).forEach((item, index) => {
+          if (index < 9 && input.justPressed(`Digit${index + 1}`)) {
+            tryAction(game, player, 'pick', { zone: open.id, itemId: item.id });
+          }
+        });
       }
     }
   }
@@ -202,15 +215,58 @@ export function tryAction(game, player, code, payload = {}) {
         guest.saidTimer = 3;
         game.bus.emit('sfx', 'radio');
         if (station.patdown.autoResolved) finishPatdown(game, player, station);
-        else addToast(night, 'ABTASTEN: J / K / L', 'info', 3);
+        else {
+          const keys = Object.keys(station.patdown.zones)
+            .map((z) => ({ jacket: 'J', pockets: 'K', bag: 'L' }[z])).join(' / ');
+          addToast(night, `ZONE WÄHLEN: ${keys}`, 'info', 3.5);
+        }
       }
       return null;
 
     case 'zone': {
-      if (!station.patdown || station.patdown.complete) return null;
-      if (station.patdown.zones[payload.zone] !== null) return null;
-      begin(game, player, `ABTASTEN: ${payload.label ?? payload.zone.toUpperCase()}`, 'search',
+      const pat = station.patdown;
+      if (!pat || pat.complete) return null;
+      const zone = pat.zones[payload.zone];
+      if (!zone || zone.state === 'done') return null;
+      if (pat.active && pat.active !== payload.zone) {
+        return deny(game, player, 'ERST DEN AKTUELLEN INHALT KLÄREN');
+      }
+      if (zone.state === 'open') return null;
+      const label = payload.zone === 'bag' ? 'TASCHE HERVORHOLEN' : `ABTASTEN: ${zone.label}`;
+      begin(game, player, label, payload.zone === 'bag' ? 'bag' : 'search',
         { zone: payload.zone, guestId: guest.id });
+      game.bus.emit('sfx', 'radio');
+      return null;
+    }
+
+    case 'pick': {
+      const pat = station.patdown;
+      const zone = pat?.zones[payload.zone ?? pat?.active];
+      if (!pat || !zone || zone.state !== 'open') return null;
+      const res = pickItem(pat, guest, zone.id, payload.itemId ?? null);
+      if (!res) return null;
+
+      if (res.item && res.correct) {
+        setResult(player, 'bad', `GEFUNDEN: ${res.item.label}`);
+        addToast(night, `VERBOTEN: ${res.item.label.toUpperCase()}`, 'bad', 4);
+        addRadio(night, 'SECURITY', `${res.item.label} sichergestellt.`);
+        game.bus.emit('sfx', 'alarm');
+      } else if (res.item && !res.correct) {
+        setResult(player, 'deny', `${res.item.label}: völlig harmlos`);
+        addToast(night, `${res.item.label.toUpperCase()} IST ERLAUBT`, 'warn', 3);
+        player.flash = 0.4;
+        game.bus.emit('sfx', 'beep');
+      } else if (res.missed) {
+        setResult(player, 'deny', 'ZONE FREIGEGEBEN - DA WAR ETWAS');
+        game.bus.emit('sfx', 'beep');
+      } else {
+        setResult(player, 'ok', `${zone.label}: sauber`);
+        game.bus.emit('sfx', 'ok');
+      }
+
+      station.checks.search = patdownResult(pat);
+      if (pat.complete) updateVerification(game, guest, station);
+      game.bus.emit('itemPicked', res);
       return null;
     }
 
@@ -289,24 +345,19 @@ function completeAction(game, player, pending) {
       bus.emit('sfx', result.overLimit ? 'deny' : 'ok');
       break;
     }
+    case 'bag':
     case 'search': {
       if (!station.patdown) break;
-      patZone(station.patdown, guest, pending.zone);
-      const res = patdownResult(station.patdown);
-      checks.search = res;
-      if (station.patdown.found) {
-        setResult(player, 'bad', res.text);
-        addRadio(night, 'SECURITY', res.text);
-        addToast(night, res.text, 'bad', 4);
-        bus.emit('sfx', 'alarm');
-      } else if (station.patdown.complete) {
-        setResult(player, 'ok', 'KEINE AUFFÄLLIGKEITEN');
-        bus.emit('sfx', 'ok');
-      } else {
-        setResult(player, 'info', res.text);
-        bus.emit('sfx', 'beep');
+      const zone = openZone(station.patdown, guest, pending.zone);
+      if (!zone) break;
+      checks.search = patdownResult(station.patdown);
+      setResult(player, 'info', `${zone.label}: ${zone.items.length} GEGENSTÄNDE`);
+      if (!station.patdown.hintShown) {
+        station.patdown.hintShown = true;
+        addToast(night, 'WAS DAVON DARF NICHT REIN?', 'info', 3);
       }
-      updateVerification(game, guest, station);
+      bus.emit('sfx', 'beep');
+      bus.emit('zoneOpened', { zone: zone.id, items: zone.items });
       break;
     }
     case 'admit': {

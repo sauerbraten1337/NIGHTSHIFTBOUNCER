@@ -443,12 +443,20 @@ function drawGuestAtStation(ctx, game, opts) {
     drunk: guest.truth.drunk,
     holdingId: holding,
     vip: guest.truth.vip,
+    bag: !!guest.truth.hasBag,
+    bagOut: !!station.patdown?.bagOut,
+    signs: guest.truth.impairmentSigns ?? [],
     accent: guest.isArtist ? PAL.amber : guest.truth.vip ? PAL.purple : null
   });
 
   // Abtast-Zonen einblenden
   if (station.patdown && !station.patdown.complete) {
     drawPatdownOverlay(ctx, station, w, h, baseY, t, figureH);
+  }
+
+  // Alkoholtestgerät liegt auf dem Tisch, sobald gemessen wurde
+  if (station.checks.alcohol) {
+    drawBreathalyzer(ctx, w, h, t, station.checks.alcohol);
   }
 
   // Sprechblase
@@ -468,42 +476,178 @@ function drawGuestAtStation(ctx, game, opts) {
   }
 }
 
-const ZONE_POS = {
-  jacket: { dy: 0.42, label: 'JACKE', key: 'J' },
-  pockets: { dy: 0.26, label: 'TASCHEN', key: 'K' },
-  bag: { dy: 0.16, label: 'BEUTEL', key: 'L' }
-};
-
 /** Höhe der Figur: nie breiter als die (im Splitscreen halbe) Ansicht. */
 function guestHeight(w, h) {
   return Math.min(h * 0.56, w * 0.62);
 }
 
+const ZONE_POS = {
+  bag: { dy: 0.78, label: 'TASCHE', key: 'L' },        // hochgehalten, neben der Schulter
+  jacket: { dy: 0.60, label: 'JACKE', key: 'J' },      // Brusthöhe
+  pockets: { dy: 0.40, label: 'HOSENTASCHEN', key: 'K' } // Hüfte
+};
+
+/**
+ * Abtast-Zonen: ruhiger Ring, ein umlaufender Scan-Bogen für die offene Zone,
+ * Häkchen für erledigt, Ausrufezeichen für Fund.
+ */
 function drawPatdownOverlay(ctx, station, w, h, baseY, t, figureH) {
-  for (const [zone, cfg] of Object.entries(ZONE_POS)) {
-    const y = baseY - figureH * cfg.dy;
-    const status = station.patdown.zones[zone];
-    const hinted = station.patdown.hint === zone;
-    const pulse = 0.5 + Math.sin(t * 6) * 0.5;
-    const color = status === 'hit' ? PAL.red
-      : status === 'clear' ? PAL.green
-        : hinted ? PAL.amber : PAL.cyan;
+  const pat = station.patdown;
+  const radiusX = figureH * 0.145;
+  const radiusY = figureH * 0.062;
+
+  for (const zone of Object.values(pat.zones)) {
+    const cfg = ZONE_POS[zone.id];
+    if (!cfg) continue;
+    const cy = baseY - figureH * cfg.dy;
+    const cx = w / 2;
+    const hinted = pat.hint === zone.id && zone.state !== 'done';
+    const open = zone.state === 'open';
+    const done = zone.state === 'done';
+    const hit = done && zone.picked && zone.correct;
+    const color = hit ? PAL.red : done ? (zone.missed ? PAL.amber : PAL.green)
+      : hinted ? PAL.amber : PAL.cyan;
+    const pulse = 0.5 + Math.sin(t * (open ? 5 : 2.2) + cfg.dy * 9) * 0.5;
+
     ctx.save();
-    ctx.strokeStyle = withAlpha(color, status ? 0.9 : 0.35 + pulse * 0.35);
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash(status ? [] : [4, 4]);
+
+    // weicher Lichtfleck für die aktive Zone
+    if (open || hinted) glow(ctx, cx, cy, radiusX * 2.2, color, (0.1 + pulse * 0.12));
+
+    // Grundring
+    ctx.strokeStyle = withAlpha(color, done ? 0.85 : 0.4 + pulse * 0.3);
+    ctx.lineWidth = done ? 2.5 : 2;
     ctx.beginPath();
-    ctx.ellipse(w / 2, y, figureH * 0.14, figureH * 0.075, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, radiusX, radiusY, 0, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.font = '10px "IBM Plex Mono", monospace';
+
+    // Innerer feiner Ring
+    ctx.strokeStyle = withAlpha(color, 0.18);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, radiusX * 0.72, radiusY * 0.72, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Fadenkreuz-Marken
+    ctx.strokeStyle = withAlpha(color, 0.55);
+    ctx.lineWidth = 1.5;
+    for (const a of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      const sx = cx + Math.cos(a) * radiusX;
+      const sy = cy + Math.sin(a) * radiusY;
+      ctx.beginPath();
+      ctx.moveTo(sx + Math.cos(a) * 3, sy + Math.sin(a) * 3);
+      ctx.lineTo(sx + Math.cos(a) * 9, sy + Math.sin(a) * 9);
+      ctx.stroke();
+    }
+
+    // Laufender Scanbogen, solange die Zone offen ist
+    if (open) {
+      const start = (t * 2.4) % (Math.PI * 2);
+      ctx.strokeStyle = withAlpha(color, 0.95);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, radiusX, radiusY, 0, start, start + Math.PI * 0.55);
+      ctx.stroke();
+    }
+
+    // Statuszeichen in der Mitte
+    if (done) {
+      ctx.font = `${Math.round(radiusY * 1.5)}px "IBM Plex Mono", monospace`;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(hit ? '!' : zone.missed ? '?' : '✓', cx, cy);
+    }
+
+    // Beschriftung neben dem Ring
+    ctx.font = '11px "IBM Plex Mono", monospace';
     ctx.fillStyle = withAlpha(color, 0.95);
-    ctx.textAlign = 'left';
     ctx.textAlign = 'right';
-    ctx.fillText(`[${cfg.key}] ${cfg.label}${status === 'hit' ? ' — TREFFER' : status === 'clear' ? ' — FREI' : ''}`,
-      w / 2 - figureH * 0.17, y + 4);
+    ctx.textBaseline = 'middle';
+    const note = done
+      ? (hit ? zone.picked.label.toUpperCase() : zone.missed ? 'FREIGEGEBEN' : 'SAUBER')
+      : open ? 'AUSGELEERT' : hinted ? 'DETEKTOR PIEPT' : `[${cfg.key}]`;
+    ctx.fillText(`${cfg.label} · ${note}`, cx - radiusX - 12, cy);
     ctx.restore();
   }
+}
+
+/**
+ * Alkoholtestgerät auf dem Tisch: zeigt nur den Wert und den aufgedruckten
+ * Grenzwert. Die Bewertung macht der Spieler.
+ */
+function drawBreathalyzer(ctx, w, h, t, result) {
+  const dw = Math.min(230, w * 0.26);
+  const dh = dw * 0.5;
+  const x = w * 0.5 - dw / 2;
+  const y = h * 0.9 - dh - 6;
+
+  ctx.save();
+  // Gehäuse
+  ctx.fillStyle = '#232a35';
+  roundRect(ctx, x, y, dw, dh, 8);
+  ctx.fill();
+  ctx.strokeStyle = '#39414f';
+  ctx.lineWidth = 2;
+  roundRect(ctx, x, y, dw, dh, 8);
+  ctx.stroke();
+
+  // Mundstück
+  ctx.fillStyle = '#c9d2df';
+  roundRect(ctx, x + dw * 0.42, y - dh * 0.22, dw * 0.16, dh * 0.24, 3);
+  ctx.fill();
+
+  // Display
+  const over = result.promille >= result.limit;
+  const dx = x + dw * 0.08;
+  const dy = y + dh * 0.2;
+  const dwi = dw * 0.56;
+  const dhi = dh * 0.6;
+  ctx.fillStyle = '#0b1410';
+  roundRect(ctx, dx, dy, dwi, dhi, 4);
+  ctx.fill();
+  ctx.strokeStyle = '#101c16';
+  ctx.stroke();
+
+  ctx.font = `${Math.round(dhi * 0.62)}px "Archivo Black", "Arial Black", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = over ? '#ff6b6b' : '#7dffb0';
+  ctx.shadowColor = over ? PAL.red : PAL.green;
+  ctx.shadowBlur = 12;
+  ctx.fillText(result.promille.toFixed(1), dx + dwi * 0.46, dy + dhi * 0.52);
+  ctx.shadowBlur = 0;
+  ctx.font = `${Math.round(dhi * 0.26)}px "IBM Plex Mono", monospace`;
+  ctx.fillStyle = withAlpha('#7dffb0', 0.7);
+  ctx.fillText('‰', dx + dwi * 0.86, dy + dhi * 0.62);
+
+  // Aufgedruckter Grenzwert + Statuslampe
+  ctx.textAlign = 'left';
+  ctx.font = '9px "IBM Plex Mono", monospace';
+  ctx.fillStyle = PAL.grey;
+  ctx.fillText('GRENZWERT', x + dw * 0.68, y + dh * 0.3);
+  ctx.font = '13px "IBM Plex Mono", monospace';
+  ctx.fillStyle = PAL.amber;
+  ctx.fillText(`${result.limit.toFixed(1)} ‰`, x + dw * 0.68, y + dh * 0.5);
+
+  const blink = Math.sin(t * 6) > 0;
+  ctx.fillStyle = over
+    ? withAlpha(PAL.red, blink ? 1 : 0.35)
+    : withAlpha(PAL.green, 0.9);
+  ctx.beginPath();
+  ctx.arc(x + dw * 0.73, y + dh * 0.74, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = '8px "IBM Plex Mono", monospace';
+  ctx.fillStyle = PAL.grey;
+  ctx.fillText('ALCO-CHECK 4', x + dw * 0.8, y + dh * 0.77);
+
+  if (result.deviceNote) {
+    ctx.textAlign = 'center';
+    ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.fillStyle = PAL.amber;
+    ctx.fillText(result.deviceNote, w * 0.5, y - dh * 0.34);
+  }
+  ctx.restore();
 }
 
 /* ---------------------------------------------------------------- */

@@ -21,7 +21,9 @@ export const TUNING = {
     id: 1.6,
     talk: 1.2,
     scan: 1.4,
-    search: 0.9, // pro Zone
+    search: 0.9,   // eine Zone ausleeren
+    bag: 1.5,      // Tasche erst hervorholen, dann ausleeren
+    pick: 0.35,    // einen Gegenstand herausgreifen
     alcohol: 1.3,
     calm: 1.0,
     admit: 0.6,
@@ -123,9 +125,12 @@ export const AIRLOCK_CAPACITY = 4;
 /** Tasten für die Abtast-Zonen (Spieler 2). */
 export const PATDOWN_KEYS = [
   { key: 'KeyJ', zone: 'jacket', label: 'JACKE' },
-  { key: 'KeyK', zone: 'pockets', label: 'TASCHEN' },
-  { key: 'KeyL', zone: 'bag', label: 'BEUTEL' }
+  { key: 'KeyK', zone: 'pockets', label: 'HOSENTASCHEN' },
+  { key: 'KeyL', zone: 'bag', label: 'TASCHE' }
 ];
+
+/** Grenzwert, der auf dem Alkoholtestgerät aufgedruckt ist. */
+export const ALCOHOL_LIMIT_PROMILLE = 1.7;
 
 /** Gast-Archetypen. weight = relative Häufigkeit. */
 export const ARCHETYPES = [
@@ -173,16 +178,92 @@ export const ARCHETYPES = [
   }
 ];
 
-/** Verbotene / auffällige Gegenstaende (abstrakte Gameplay-Kategorien). */
+/**
+ * Gegenstände, die beim Abtasten zum Vorschein kommen.
+ * Die meisten sind völlig harmlos - genau darum muss man hinsehen.
+ * `zones` sagt, wo ein Gegenstand plausibel steckt.
+ */
 export const ITEMS = [
-  { id: 'phone', label: 'Handy', severity: 0, forbidden: false },
-  { id: 'lighter', label: 'Feuerzeug', severity: 0, forbidden: false },
-  { id: 'keys', label: 'Schlüssel', severity: 0, forbidden: false },
-  { id: 'camera', label: 'Kamera', severity: 1, forbidden: true },
-  { id: 'glass', label: 'Glasflasche', severity: 1, forbidden: true },
-  { id: 'substance', label: 'Verdächtiges Päckchen', severity: 2, forbidden: true },
-  { id: 'spray', label: 'Reizgas', severity: 2, forbidden: true },
-  { id: 'blade', label: 'Klinge', severity: 3, forbidden: true }
+  // --- harmlos ---
+  { id: 'gum', label: 'Kaugummi', forbidden: false, severity: 0, zones: ['pockets', 'bag'] },
+  { id: 'phone', label: 'Handy', forbidden: false, severity: 0, zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'keys', label: 'Schlüsselbund', forbidden: false, severity: 0, zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'lighter', label: 'Feuerzeug', forbidden: false, severity: 0, zones: ['jacket', 'pockets'] },
+  { id: 'smokes', label: 'Zigaretten', forbidden: false, severity: 0, zones: ['jacket', 'bag'] },
+  { id: 'wallet', label: 'Portemonnaie', forbidden: false, severity: 0, zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'earbuds', label: 'Kopfhörer', forbidden: false, severity: 0, zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'coins', label: 'Kleingeld', forbidden: false, severity: 0, zones: ['pockets'] },
+  { id: 'tissues', label: 'Taschentücher', forbidden: false, severity: 0, zones: ['jacket', 'bag'] },
+  { id: 'balm', label: 'Lippenpflege', forbidden: false, severity: 0, zones: ['pockets', 'bag'] },
+  { id: 'mints', label: 'Pfefferminz', forbidden: false, severity: 0, zones: ['pockets', 'bag'] },
+  { id: 'charger', label: 'Ladekabel', forbidden: false, severity: 0, zones: ['bag'] },
+  { id: 'bottle', label: 'Wasserflasche', forbidden: false, severity: 0, zones: ['bag'] },
+  { id: 'book', label: 'Notizbuch', forbidden: false, severity: 0, zones: ['bag'] },
+
+  // --- verboten ---
+  { id: 'camera', label: 'Profikamera', forbidden: true, severity: 1, zones: ['bag'] },
+  { id: 'glass', label: 'Glasflasche', forbidden: true, severity: 1, zones: ['bag', 'jacket'] },
+  { id: 'laser', label: 'Laserpointer', forbidden: true, severity: 1, zones: ['jacket', 'pockets'] },
+  { id: 'substance', label: 'Verdächtiges Päckchen', forbidden: true, severity: 2, zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'spray', label: 'Reizgas', forbidden: true, severity: 2, zones: ['jacket', 'bag'] },
+  { id: 'tool', label: 'Multitool', forbidden: true, severity: 2, zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'baton', label: 'Teleskopstock', forbidden: true, severity: 3, zones: ['jacket', 'bag'] },
+  { id: 'blade', label: 'Klinge', forbidden: true, severity: 3, zones: ['jacket', 'pockets'] }
+];
+
+export function itemById(id) {
+  return ITEMS.find((i) => i.id === id) ?? null;
+}
+
+/** Abtast-Zonen. 'bag' gibt es nur, wenn der Gast wirklich eine Tasche dabei hat. */
+export const ZONES = [
+  { id: 'jacket', label: 'JACKE', key: 'KeyJ', needsBag: false, capacity: [1, 3] },
+  { id: 'pockets', label: 'HOSENTASCHEN', key: 'KeyK', needsBag: false, capacity: [1, 3] },
+  { id: 'bag', label: 'TASCHE', key: 'KeyL', needsBag: true, capacity: [2, 4] }
+];
+
+/**
+ * Was der Spieler im Lauf der Karriere zusätzlich beachten muss.
+ * Jede Stufe schaltet eine neue Auffälligkeit frei und wird im Briefing angekündigt.
+ */
+export const DIFFICULTY_STEPS = [
+  {
+    night: 1, id: 'basics', label: 'AUSWEIS',
+    desc: 'Foto, Name, Geburtsdatum, Gültigkeit, Hologramm.'
+  },
+  {
+    night: 2, id: 'items', label: 'GEGENSTÄNDE',
+    desc: 'Beim Abtasten kommt alles auf den Tisch. Such heraus, was nicht reindarf.'
+  },
+  {
+    night: 3, id: 'alcohol', label: 'ALKOHOL',
+    desc: 'Das Testgerät zeigt den Wert - den Grenzwert musst du selbst lesen.'
+  },
+  {
+    night: 4, id: 'impaired', label: 'ZUSTAND',
+    desc: 'Nicht jeder Rausch riecht nach Alkohol: weite Pupillen, Schwitzen, Zittern, mahlender Kiefer.'
+  },
+  {
+    night: 6, id: 'subtleId', label: 'FEINE FÄLSCHUNGEN',
+    desc: 'Hologramme sind nur noch teilweise matt, Manipulationen kleiner.'
+  },
+  {
+    night: 8, id: 'blacklist', label: 'HAUSVERBOTE',
+    desc: 'Bekannte Gesichter mit Hausverbot versuchen es erneut. Der Scanner kennt sie.'
+  },
+  {
+    night: 10, id: 'multi', label: 'MEHRFACHE MÄNGEL',
+    desc: 'Ein sauberer Ausweis heisst gar nichts mehr - es kommt oft mehreres zusammen.'
+  }
+];
+
+/** Sichtbare Anzeichen für Substanzeinfluss (abstrakt, ohne Konsumdetails). */
+export const IMPAIRMENT_SIGNS = [
+  { id: 'pupils', label: 'weite Pupillen', min: 0.35 },
+  { id: 'sweat', label: 'schwitzt stark', min: 0.5 },
+  { id: 'jaw', label: 'mahlender Kiefer', min: 0.6 },
+  { id: 'shake', label: 'zitternde Hände', min: 0.7 },
+  { id: 'absent', label: 'wirkt abwesend', min: 0.45 }
 ];
 
 export const ID_ISSUES = [

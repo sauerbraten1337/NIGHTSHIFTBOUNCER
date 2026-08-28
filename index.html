@@ -6,7 +6,7 @@
 <title>NULLWERK — Nightshift Bouncer Co-op</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600&family=Caveat:wght@500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="styles/ui.css" />
 </head>
 <body>
@@ -44,14 +44,28 @@
       <div class="tut-hint hidden" id="tut-hint"></div>
     </div>
 
-    <!-- Ausweis, gross und anklickbar -->
-    <div id="idcard" class="idcard hidden"></div>
+    <!-- Notizzettel: was geprüft ist und was noch fehlt -->
+    <div id="notepad" class="notepad hidden"></div>
 
-    <!-- Befunde der eigenen Station -->
-    <div id="dossier" class="panel dossier">
-      <div class="panel-title" id="dossier-title">BEFUNDE</div>
-      <div id="dossier-body" class="dossier-empty">Niemand vor dir.</div>
+    <!-- Ausweis, in der Hand gehalten -->
+    <div id="idhand" class="idhand hidden">
+      <div id="idcard" class="idcard"></div>
+      <!-- Die Karte steckt zwischen Daumen (vorn) und Fingern (dahinter) -->
+      <svg class="hand hand-back" viewBox="0 0 260 180" aria-hidden="true">
+        <path class="palm" d="M4 180 C0 132 18 96 58 84 C96 72 150 74 186 88 C214 99 232 132 228 180 Z" />
+        <path class="finger" d="M74 92 C70 66 88 52 106 58 C122 63 126 82 120 98 Z" />
+        <path class="finger" d="M124 86 C120 60 138 46 156 52 C172 57 176 76 170 92 Z" />
+        <path class="finger" d="M174 92 C170 70 186 58 202 64 C216 69 220 86 214 102 Z" />
+      </svg>
+      <svg class="hand hand-front" viewBox="0 0 160 220" aria-hidden="true">
+        <path class="thumb" d="M52 220 C30 190 26 148 46 116 C60 94 84 82 104 92 C124 102 130 128 118 150 C106 172 84 190 74 220 Z" />
+        <path class="crease" d="M60 200 C58 176 62 152 74 136" />
+        <path class="nail" d="M96 100 C110 96 120 106 117 120 C114 133 100 138 90 130 C82 123 84 105 96 100 Z" />
+      </svg>
     </div>
+
+    <!-- Kontrolltisch: gefundene Gegenstände -->
+    <div id="itemtray" class="itemtray hidden"></div>
 
     <!-- Funk -->
     <div id="radio-panel" class="panel radio-panel hidden">
@@ -63,9 +77,11 @@
     <div id="toasts"></div>
     <div id="netstatus" class="netstatus hidden"></div>
 
+    <!-- Entscheidung: gross, mittig, unten -->
+    <div id="decisions" class="decisions"></div>
+
     <footer class="hud-bottom">
       <div class="actionbar" id="bar-p1"></div>
-      <div class="coop-status" id="coop-status">TEAM</div>
       <div class="actionbar p2" id="bar-p2"></div>
     </footer>
   </div>

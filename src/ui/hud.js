@@ -1,10 +1,17 @@
-/** HUD: Uhr, Club-Status, Geld/Ruf/Schlange, Aktionsleisten, Funk, Tutorial, Toasts. */
+/**
+ * HUD: Uhr, Geld/Ruf/Schlange, Aktionsleisten, die grossen Entscheidungs-Buttons
+ * unten in der Mitte, Funk, Tutorial, Toasts.
+ *
+ * Bewusst NICHT mehr im HUD: Belegung des Clubs, Ausbaustufe und die alte
+ * Übersichtskarte - das steht jetzt alles auf dem Notizzettel bzw. gar nicht.
+ */
 
 import { CLUB_NAME, TUNING, AREAS } from '../data/config.js';
-import { clubTier, isSolo } from '../systems/state.js';
 import { clockString, currentPhase } from '../systems/nightcycle.js';
 import { repBand } from '../systems/reputation.js';
-import { renderDossier } from './panels.js';
+import { createNotepad } from './notepad.js';
+
+const DECISION_CODES = new Set(['admit', 'reject', 'pass']);
 
 export function createHud(game) {
   const el = {
@@ -21,12 +28,10 @@ export function createHud(game) {
     effects: document.getElementById('hud-effects'),
     radio: document.getElementById('hud-radio'),
     radioPanel: document.getElementById('radio-panel'),
-    dossier: document.getElementById('dossier-body'),
-    dossierTitle: document.getElementById('dossier-title'),
     toasts: document.getElementById('toasts'),
     bar1: document.getElementById('bar-p1'),
     bar2: document.getElementById('bar-p2'),
-    coop: document.getElementById('coop-status'),
+    decisions: document.getElementById('decisions'),
     tutorial: document.getElementById('tutorial'),
     tutStep: document.getElementById('tut-step'),
     tutTitle: document.getElementById('tut-title'),
@@ -37,11 +42,18 @@ export function createHud(game) {
   };
 
   el.club.textContent = CLUB_NAME;
+  const notepad = createNotepad(game);
 
   let builtFor = '';
   let lastRadioKey = '';
   let lastToastKey = '';
   let lastTutorial = '';
+
+  el.decisions.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-code]');
+    if (!btn) return;
+    game.act(btn.dataset.role, btn.dataset.code);
+  });
 
   function buildBars() {
     const key = `${game.state.mode}|${game.localRole ?? ''}`;
@@ -49,11 +61,13 @@ export function createHud(game) {
     builtFor = key;
     el.bar1.innerHTML = '';
     el.bar2.innerHTML = '';
+    el.decisions.innerHTML = '';
 
     for (const player of game.players) {
       const own = game.controls(player.id);
       const container = player.area === 'airlock' ? el.bar2 : el.bar1;
       const cls = player.area === 'airlock' ? 'p2' : 'p1';
+
       const tag = document.createElement('div');
       tag.className = `role-tag ${cls}`;
       tag.innerHTML = `${player.role.label}<small>${areaLabel(player.area)}${own ? '' : ' · PARTNER'}</small>`;
@@ -61,6 +75,7 @@ export function createHud(game) {
       if (!own) continue;
 
       for (const action of player.role.actions) {
+        if (DECISION_CODES.has(action.code)) continue;
         const div = document.createElement('div');
         div.className = `act ${cls}`;
         div.dataset.code = action.code;
@@ -68,6 +83,27 @@ export function createHud(game) {
         div.innerHTML = `<span class="key">${keyLabel(action.key)}</span><span class="name">${action.label}</span>`;
         container.appendChild(div);
       }
+
+      // Entscheidungen wandern in die Mitte - gross und anklickbar.
+      const group = document.createElement('div');
+      group.className = `dec-group ${cls}`;
+      if (game.players.filter((p) => game.controls(p.id)).length > 1) {
+        group.innerHTML = `<span class="dec-role">${player.role.label}</span>`;
+      }
+      for (const action of player.role.actions) {
+        if (!DECISION_CODES.has(action.code)) continue;
+        const kind = action.code === 'reject' ? 'no' : 'yes';
+        const btn = document.createElement('button');
+        btn.className = `dec ${kind}`;
+        btn.dataset.code = action.code;
+        btn.dataset.role = player.id;
+        btn.innerHTML = `
+          <span class="dec-icon">${kind === 'yes' ? '▲' : '✕'}</span>
+          <span class="dec-label">${action.label}</span>
+          <span class="dec-key">${keyLabel(action.key)}</span>`;
+        group.appendChild(btn);
+      }
+      el.decisions.appendChild(group);
     }
     el.hint.innerHTML = hintLine(game);
   }
@@ -89,7 +125,7 @@ export function createHud(game) {
     const phase = currentPhase(night.clock);
     el.phase.textContent = `${phase.label} · ${repBand(state.reputation)}`;
     el.status.textContent =
-      `NIGHT ${String(state.nightIndex).padStart(2, '0')} · ${night.event?.label ?? ''} · ${clubTier(state).label}`;
+      `NIGHT ${String(state.nightIndex).padStart(2, '0')} · ${night.event?.label ?? ''}`;
     el.nightbar.style.width = `${(night.clock / TUNING.nightEndMinute) * 100}%`;
     el.queue.textContent = `${night.queueLength ?? night.queue.length}`;
 
@@ -113,9 +149,9 @@ export function createHud(game) {
     }
 
     updateTutorialPanel(game, el, () => lastTutorial, (v) => { lastTutorial = v; });
-    renderDossier(el.dossier, el.dossierTitle, game);
+    notepad.update();
     updateActionBars(game, el);
-    updateCoop(game, el);
+    updateDecisions(game, el);
   }
 
   function show() { el.root.classList.remove('hidden'); el.hint.classList.remove('hidden'); }
@@ -158,15 +194,13 @@ function updateTutorialPanel(game, el, getLast, setLast) {
 }
 
 function updateActionBars(game, el) {
-  const night = game.state.night;
-  if (!night) return;
+  if (!game.state.night) return;
 
   for (const node of el.root.querySelectorAll('.act')) {
     const code = node.dataset.code;
-    const roleId = node.dataset.role;
-    const player = game.players.find((p) => p.id === roleId);
+    const player = game.players.find((p) => p.id === node.dataset.role);
     if (!player) continue;
-    const station = game.stationFor(roleId);
+    const station = game.stationFor(node.dataset.role);
     const checks = station?.checks;
     const hasGuest = !!station?.guest;
 
@@ -180,37 +214,24 @@ function updateActionBars(game, el) {
     node.classList.toggle('locked', !!locked);
     node.classList.toggle('done', !!done);
     node.classList.toggle('ready', hasGuest && !done && !locked);
-    node.classList.toggle('active', player.busy > 0 && player.busyLabel && isFor(player, code));
+    node.classList.toggle('active', player.busy > 0 && isFor(player, code));
+  }
+}
+
+function updateDecisions(game, el) {
+  for (const btn of el.decisions.querySelectorAll('.dec')) {
+    const station = game.stationFor(btn.dataset.role);
+    const guest = station?.guest;
+    const open = !!station?.patdown?.active;
+    btn.classList.toggle('disabled', !guest || open);
   }
 }
 
 function isFor(player, code) {
   const key = player.pending?.key;
-  if (!key) return player.busyLabel?.toLowerCase().includes(code);
-  if (code === 'pass') return key === 'admit';
-  if (code === 'search') return key === 'search';
+  if (!key) return false;
+  if (code === 'search') return key === 'search' || key === 'bag';
   return key === code;
-}
-
-function updateCoop(game, el) {
-  const night = game.state.night;
-  if (!night) return;
-  const station = game.stationFor(game.dossierRole ?? game.players[0].id);
-  const checks = station?.checks;
-  el.coop.classList.remove('verified', 'conflict');
-
-  if (checks?.verified) {
-    el.coop.textContent = 'SECURITY VERIFIED';
-    el.coop.classList.add('verified');
-  } else if (checks?.conflict) {
-    el.coop.textContent = 'CHECK AGAIN';
-    el.coop.classList.add('conflict');
-  } else if (isSolo(game.state)) {
-    el.coop.textContent = station?.guest ? 'AUSWEIS + SCAN = VERIFIED' : 'TÜR FREI';
-  } else {
-    const waiting = night.airlockQueue?.length ?? 0;
-    el.coop.textContent = `SCHLEUSE: ${waiting} WARTEN`;
-  }
 }
 
 function hintLine(game) {
@@ -220,6 +241,7 @@ function hintLine(game) {
     const keys = player.role.actions.map((a) => `${keyLabel(a.key)} ${a.label}`).join(' · ');
     parts.push(`<span><b>${player.role.label}</b> ${keys}</span>`);
   }
+  parts.push('<span><b>ZONEN</b> J K L · Gegenstand anklicken</span>');
   parts.push('<span><b>SYSTEM</b> ESC PAUSE · M TON · H HILFE</span>');
   return parts.join('');
 }

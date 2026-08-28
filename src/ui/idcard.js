@@ -14,6 +14,7 @@ import { TUNING } from '../data/config.js';
 
 export function createIdCard(game, { root, roleId = 'bouncer' } = {}) {
   const el = root ?? document.getElementById('idcard');
+  const wrap = document.getElementById('idhand') ?? el;
   let renderedFor = null;
   let renderedMarks = '';
   const api = { el, roleId };
@@ -32,7 +33,7 @@ export function createIdCard(game, { root, roleId = 'bouncer' } = {}) {
 
     if (!night || !inspection || !guest) {
       if (renderedFor !== null) {
-        el.classList.add('hidden');
+        wrap.classList.add('hidden');
         el.innerHTML = '';
         renderedFor = null;
       }
@@ -44,7 +45,7 @@ export function createIdCard(game, { root, roleId = 'bouncer' } = {}) {
     renderedFor = guest.id;
     renderedMarks = markKey;
 
-    el.classList.remove('hidden');
+    wrap.classList.remove('hidden');
     el.innerHTML = template(game, guest, inspection, station);
     paintPhoto(el, guest);
   }

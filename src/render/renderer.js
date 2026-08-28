@@ -10,14 +10,12 @@
 import { WORLD } from './layout.js';
 import { PAL } from './palette.js';
 import { drawStationView } from './scene.js';
-import { drawOverview } from './overview.js';
 import {
   createEffects, updateEffects, drawFog, drawDust, drawSparks, scanlines, vignette
 } from './effects.js';
 import { currentPhase } from '../systems/nightcycle.js';
 import { isSolo } from '../systems/state.js';
 import { AREAS } from '../data/config.js';
-import { clockString } from '../systems/nightcycle.js';
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
@@ -90,9 +88,6 @@ export function createRenderer(canvas) {
       ctx.fillRect(views[0].rect.w - 1, 0, 4, WORLD.height);
     }
 
-    // Club-Übersicht
-    drawOverview(ctx, game, { x: WORLD.width - 236, y: WORLD.height - 268, w: 220, h: 150 }, beat, pulse);
-
     drawFog(ctx, fx, 0.45 + phase.intensity * 0.4);
     drawDust(ctx, fx);
     drawSparks(ctx, fx);
@@ -113,7 +108,6 @@ export function createRenderer(canvas) {
       station: night.stations.door,
       queue: night.queue,
       label: `${AREAS.outside.label} · ${AREAS.outside.sub}`,
-      sub: `${clockString(night.clock)} · SCHLANGE ${night.queue.length}`,
       accent: PAL.red
     };
     const airlockView = {
@@ -122,7 +116,6 @@ export function createRenderer(canvas) {
       station: night.stations.airlock,
       queue: night.airlockQueue,
       label: `${AREAS.airlock.label} · ${AREAS.airlock.sub}`,
-      sub: `WARTEN ${night.airlockQueue.length}`,
       accent: PAL.cyan
     };
 

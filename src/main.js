@@ -25,6 +25,7 @@ import { createRenderer } from './render/renderer.js';
 import { createHud } from './ui/hud.js';
 import { createScreens } from './ui/screens.js';
 import { createIdCard } from './ui/idcard.js';
+import { createItemTray } from './ui/itemtray.js';
 import { createNet, serializeState, applySnapshot } from './net/net.js';
 
 const canvas = document.getElementById('scene');
@@ -92,6 +93,7 @@ const renderer = createRenderer(canvas);
 const hud = createHud(game);
 const screens = createScreens(game);
 const idcard = createIdCard(game, { roleId: 'bouncer' });
+const itemTray = createItemTray(game, { roleId: 'security' });
 game.net = createNet(game.bus);
 
 let pendingEvent = null;
@@ -106,6 +108,8 @@ function applyMode(mode) {
   game.localRole = game.netRole === 'guest' ? 'security' : 'bouncer';
   for (const p of game.players) p.remote = !game.controls(p.id);
   idcard.roleId = game.localRole;
+  // Der Kontrolltisch gehört zu der Station, an der abgetastet wird.
+  itemTray.roleId = isSolo(game.state) ? 'bouncer' : 'security';
   hud.rebuild();
 }
 
@@ -319,6 +323,7 @@ const loop = createLoop({
     if (game.state.phase === 'night') {
       hud.update();
       idcard.update();
+      itemTray.update();
     }
   }
 });

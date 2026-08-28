@@ -18,7 +18,8 @@ import { buyTalent } from '../src/systems/progression.js';
 import { violationsOf, createGuest } from '../src/systems/guests.js';
 import { faultyFields, ageFromBirth, requestId, markField } from '../src/systems/identity.js';
 import { saveGame, loadGame } from '../src/systems/save.js';
-import { PATDOWN_KEYS } from '../src/data/config.js';
+import { ITEMS, DIFFICULTY_STEPS } from '../src/data/config.js';
+import { difficultyProfile } from '../src/systems/difficulty.js';
 
 /* ---------- Spiel aufsetzen ---------- */
 
@@ -65,11 +66,18 @@ function driveStation(game, player, input) {
   if (!outside || solo) {
     if (!checks.scan && can('scan')) { tryAction(game, player, 'scan'); return; }
     if (can('search')) {
-      if (!station.patdown) { tryAction(game, player, 'search'); return; }
-      if (!station.patdown.complete) {
-        const zone = PATDOWN_KEYS.find((z) => station.patdown.zones[z.zone] === null);
-        if (zone) tryAction(game, player, 'zone', { zone: zone.zone, label: zone.label });
-        return;
+      const pat = station.patdown;
+      if (!pat) { tryAction(game, player, 'search'); return; }
+      if (!pat.complete) {
+        const open = pat.active ? pat.zones[pat.active] : null;
+        if (open) {
+          // Alles ansehen und das Verbotene herausgreifen - wie ein wacher Spieler.
+          const bad = open.items.find((i) => i.forbidden);
+          tryAction(game, player, 'pick', { zone: open.id, itemId: bad ? bad.id : null });
+          return;
+        }
+        const next = Object.values(pat.zones).find((z) => z.state === 'closed');
+        if (next) { tryAction(game, player, 'zone', { zone: next.id }); return; }
       }
     }
     if (!checks.alcohol && can('alcohol')) { tryAction(game, player, 'alcohol'); return; }
@@ -90,7 +98,8 @@ function decide(station, doorOnly) {
   if (doorOnly) return false;
   if (c.scan && c.scan.ok === false) return true;
   if (c.search && c.search.found) return true;
-  if (c.alcohol && c.alcohol.overLimit) return true;
+  // Das Gerät zeigt nur den Wert - der Grenzwert steht auf dem Gehäuse.
+  if (c.alcohol && c.alcohol.promille >= c.alcohol.limit) return true;
   return false;
 }
 
@@ -223,7 +232,73 @@ for (let i = 0; i < 900; i++) {
 assert.ok(checked > 100, `Genug fehlerhafte Dokumente im Test (${checked})`);
 assert.ok(seenPhoto && seenExpiry && seenBirth, 'Alle Fehlerarten kamen vor');
 
-/* ---------- Test 5: Regelwerk ---------- */
+/* ---------- Test 5: Gegenstände, Zonen, Progression ---------- */
+
+const rngItems = createRng(2024);
+let withBag = 0;
+let bagZoneOnlyWithBag = true;
+let contrabandInRightZone = true;
+let decoysSeen = 0;
+let impairedSeen = 0;
+
+for (let i = 0; i < 600; i++) {
+  const night = 1 + (i % 12);
+  const g = createGuest(rngItems, { reputation: 50, nightIndex: night });
+  const zones = Object.keys(g.truth.carried);
+
+  if (g.truth.hasBag) withBag++;
+  else if (zones.includes('bag')) bagZoneOnlyWithBag = false;
+
+  // In jeder Zone liegt etwas, und alles Getragene ist ein echtes Item.
+  for (const [zone, items] of Object.entries(g.truth.carried)) {
+    assert.ok(items.length > 0, `Zone ${zone} ist nicht leer`);
+    for (const item of items) {
+      assert.ok(ITEMS.some((it) => it.id === item.id), 'Nur bekannte Gegenstände');
+      assert.ok(item.zones.includes(zone), `${item.label} passt in ${zone}`);
+    }
+    if (items.filter((i) => !i.forbidden).length >= 2) decoysSeen++;
+  }
+
+  // Höchstens ein verbotener Gegenstand, und der liegt in der gemeldeten Zone.
+  const forbidden = Object.values(g.truth.carried).flat().filter((i) => i.forbidden);
+  assert.ok(forbidden.length <= 1, 'Höchstens ein verbotener Gegenstand pro Gast');
+  if (g.truth.contraband) {
+    assert.equal(forbidden.length, 1, 'Verbotener Gegenstand liegt wirklich dabei');
+    if (!g.truth.carried[g.truth.contrabandZone]?.some((i) => i.id === g.truth.contraband.id)) {
+      contrabandInRightZone = false;
+    }
+  } else {
+    assert.equal(forbidden.length, 0, 'Ohne Contraband liegt nichts Verbotenes dabei');
+  }
+
+  if (g.truth.impaired > 0) {
+    impairedSeen++;
+    assert.ok(night >= 4, 'Substanzeinfluss erst ab der vierten Nacht');
+  }
+  if (g.truth.impaired >= 0.6) {
+    assert.ok(violationsOf(g).some((v) => v.id === 'impaired'), 'Deutlicher Einfluss ist ein Verstoß');
+  }
+}
+
+assert.ok(withBag > 100, `Manche Gäste haben eine Tasche dabei (${withBag}/600)`);
+assert.ok(bagZoneOnlyWithBag, 'Ohne Tasche gibt es auch keine Taschen-Zone');
+assert.ok(contrabandInRightZone, 'Verbotenes liegt in der Zone, die die Wahrheit nennt');
+assert.ok(decoysSeen > 200, 'Harmlose Gegenstände lenken ab');
+assert.ok(impairedSeen > 5, `Substanzeinfluss kommt vor (${impairedSeen})`);
+
+// Progression: jede Stufe schaltet zur angekündigten Nacht frei.
+for (const step of DIFFICULTY_STEPS) {
+  const before = difficultyProfile(step.night - 1);
+  const after = difficultyProfile(step.night);
+  if (step.id in after) {
+    assert.equal(after[step.id], true, `${step.label} gilt ab Nacht ${step.night}`);
+    if (step.night > 1) assert.equal(before[step.id], false, `${step.label} gilt vorher nicht`);
+  }
+}
+assert.ok(difficultyProfile(12).decoyBonus > difficultyProfile(2).decoyBonus,
+  'Später liegen mehr harmlose Sachen zur Ablenkung dabei');
+
+/* ---------- Test 6: Regelwerk ---------- */
 
 const rng2 = createRng(7);
 for (let i = 0; i < 500; i++) {
@@ -233,7 +308,7 @@ for (let i = 0; i < 500; i++) {
   if (g.truth.contraband) assert.ok(v.some((x) => x.id === 'item'), 'Verbotener Gegenstand = Verstoß');
 }
 
-/* ---------- Test 6: Upgrades, Talente, Save/Load ---------- */
+/* ---------- Test 7: Upgrades, Talente, Save/Load ---------- */
 
 solo.state.money = 50000;
 const capBefore = capacity(solo.state);

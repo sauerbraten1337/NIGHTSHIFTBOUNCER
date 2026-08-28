@@ -7,6 +7,7 @@ import { CLUB_NAME, MODES, rolesFor } from '../data/config.js';
 import { clubTier, capacity, rank } from '../systems/state.js';
 import { hasSave, clearSave } from '../systems/save.js';
 import { repBand } from '../systems/reputation.js';
+import { difficultyBriefing } from '../systems/difficulty.js';
 
 export function createScreens(game) {
   const root = document.getElementById('screen');
@@ -183,6 +184,8 @@ export function createScreens(game) {
       ${state.bookedArtist ? `<p style="margin-top:14px;font-size:12px;color:var(--amber)">
         ${escapeHtml(state.bookedArtist.name)} kommt im Lauf der Nacht. Auch der Act muss durch die Kontrolle.</p>` : ''}
 
+      ${difficultyBlock(state.nightIndex + 1)}
+
       <h2 class="sec">EURE POSTEN</h2>
       <div class="keys-help">
         ${roles.map((role) => `
@@ -225,6 +228,18 @@ export function createScreens(game) {
   }
 
   return { show, hide, menu, lobby, briefing, report, shop, pause, waiting, root };
+}
+
+/** Was ab heute zusätzlich auffällig sein kann. */
+function difficultyBlock(nightNumber) {
+  const { active, fresh } = difficultyBriefing(nightNumber);
+  return `
+    ${fresh ? `<div class="tier-banner">NEU AB HEUTE — ${escapeHtml(fresh.label)}: ${escapeHtml(fresh.desc)}</div>` : ''}
+    <h2 class="sec">WORAUF DU ACHTEST</h2>
+    <ul class="watchlist">
+      ${active.map((step) => `<li class="${fresh && step.id === fresh.id ? 'fresh' : ''}">
+        <b>${escapeHtml(step.label)}</b> ${escapeHtml(step.desc)}</li>`).join('')}
+    </ul>`;
 }
 
 function keyName(code) {

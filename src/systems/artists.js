@@ -51,6 +51,11 @@ export function arriveArtist(game) {
   guest.truth.spend = 0;
   guest.truth.contraband = null;
   guest.truth.contrabandZone = null;
+  guest.truth.impaired = 0;
+  guest.truth.impairmentSigns = [];
+  for (const zone of Object.keys(guest.truth.carried ?? {})) {
+    guest.truth.carried[zone] = guest.truth.carried[zone].filter((i) => !i.forbidden);
+  }
   guest.truth.underage = false;
   guest.truth.age = Math.max(24, guest.truth.age);
   guest.truth.idIssues = [];

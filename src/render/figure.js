@@ -6,6 +6,7 @@
 
 import { SKIN, OUTFIT, HAIR, PAL, withAlpha } from './palette.js';
 import { roundRect } from './sprites.js';
+import { drawShoulderBag } from './items.js';
 
 const MOOD_FACE = {
   polite: { brow: 0, mouth: 0.35, eye: 1 },
@@ -24,7 +25,8 @@ const MOOD_FACE = {
 export function drawFigure(ctx, opts) {
   const {
     x, y, h = 300, look = {}, personality = 'polite', t = 0,
-    drunk = 0, holdingId = false, accent = null, dim = 0, vip = false
+    drunk = 0, holdingId = false, accent = null, dim = 0, vip = false,
+    bag = false, bagOut = false, signs = []
   } = opts;
 
   const skin = SKIN[(look.skin ?? 0) % SKIN.length];
@@ -32,7 +34,8 @@ export function drawFigure(ctx, opts) {
   const hair = HAIR[(look.hair ?? 0) % HAIR.length];
   const bulk = look.bulk ?? 1;
 
-  const sway = Math.sin(t * (0.9 + drunk * 2.2)) * (1.5 + drunk * 9);
+  const shaky = signs.includes('shake') ? Math.sin(t * 22) * 1.6 : 0;
+  const sway = Math.sin(t * (0.9 + drunk * 2.2)) * (1.5 + drunk * 9) + shaky;
   const breath = Math.sin(t * 1.6) * 0.006 * h;
 
   const headR = h * 0.095 * bulk;
@@ -145,12 +148,24 @@ export function drawFigure(ctx, opts) {
 
   if (holdingId) drawHeldCard(ctx, shoulderW * 0.55, torsoTop + h * 0.145, h);
 
+  // Umhängetasche: normal an der Hüfte, beim Abtasten hochgehalten
+  if (bag) {
+    const bw = h * 0.21;
+    const bh = h * 0.15;
+    if (bagOut) {
+      const lift = Math.min(1, Math.max(0, (Math.sin(t * 2.2) + 1) * 0.5)) * h * 0.01;
+      drawShoulderBag(ctx, -shoulderW * 1.6 - bw * 0.1, torsoTop + h * 0.02 - lift, bw, bh, '#3a4557');
+    } else {
+      drawShoulderBag(ctx, shoulderW * 0.72, hipY - h * 0.05, bw, bh, '#3a4557');
+    }
+  }
+
   // Hals
   ctx.fillStyle = shade(skin, -0.2);
   ctx.fillRect(-headR * 0.35, headY + headR * 0.6, headR * 0.7, headR * 0.9);
 
   // Kopf
-  drawHead(ctx, 0, headY - breath, headR, skin, hair, look, personality, drunk, t);
+  drawHead(ctx, 0, headY - breath, headR, skin, hair, look, personality, drunk, t, signs);
 
   if (dim > 0) {
     ctx.fillStyle = `rgba(4,6,10,${dim})`;
@@ -159,7 +174,7 @@ export function drawFigure(ctx, opts) {
   ctx.restore();
 }
 
-function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t) {
+function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t, signs = []) {
   const face = MOOD_FACE[personality] ?? MOOD_FACE.polite;
 
   // Kopfform
@@ -175,7 +190,9 @@ function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t) {
 
   // Augen (blinzeln, bei Betrunkenen halb geschlossen)
   const blink = (Math.sin(t * 0.7) > 0.985 || Math.sin(t * 1.9 + 2) > 0.99) ? 0.12 : 1;
-  const open = Math.max(0.12, face.eye * (1 - drunk * 0.55)) * blink;
+  const wide = signs.includes('pupils');
+  const absent = signs.includes('absent');
+  const open = Math.max(0.12, face.eye * (1 - drunk * 0.55) * (wide ? 1.25 : 1)) * blink;
   const eyeY = y - r * 0.05;
   const eyeDx = r * 0.34;
   for (const side of [-1, 1]) {
@@ -185,7 +202,10 @@ function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t) {
     ctx.fill();
     ctx.fillStyle = '#151a22';
     ctx.beginPath();
-    ctx.arc(x + side * eyeDx + Math.sin(t * 0.5) * r * 0.025, eyeY, r * 0.062 * Math.max(0.4, open), 0, Math.PI * 2);
+    // Weite Pupillen sind das deutlichste sichtbare Anzeichen.
+    const pupil = r * (wide ? 0.105 : 0.062) * Math.max(0.4, open);
+    const drift = absent ? Math.sin(t * 0.35) * r * 0.05 : Math.sin(t * 0.5) * r * 0.025;
+    ctx.arc(x + side * eyeDx + drift, eyeY, pupil, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -214,10 +234,22 @@ function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t) {
   ctx.strokeStyle = shade(skin, -0.55);
   ctx.lineWidth = Math.max(1, r * 0.07);
   ctx.beginPath();
-  const mouthY = y + r * 0.5;
+  const jaw = signs.includes('jaw') ? Math.abs(Math.sin(t * 7)) * r * 0.12 : 0;
+  const mouthY = y + r * 0.5 + jaw;
   ctx.moveTo(x - r * 0.2, mouthY);
   ctx.quadraticCurveTo(x, mouthY + face.mouth * r * 0.18, x + r * 0.2, mouthY);
   ctx.stroke();
+
+  // Schweiss auf der Stirn
+  if (signs.includes('sweat')) {
+    ctx.fillStyle = withAlpha('#bfe6ff', 0.75);
+    for (let i = 0; i < 3; i++) {
+      const dropY = y - r * 0.55 + ((t * 22 + i * 30) % 40) * r * 0.012;
+      ctx.beginPath();
+      ctx.ellipse(x + (i - 1) * r * 0.42, dropY, r * 0.045, r * 0.075, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
   // Haare
   ctx.fillStyle = hair;

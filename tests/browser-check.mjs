@@ -106,9 +106,44 @@ for (let i = 0; i < 30; i++) {
       await solo.click(`[data-field="${field}"]`).catch(() => {});
       await solo.waitForTimeout(120);
     }
-    await solo.keyboard.press(faults.length ? 'KeyX' : 'KeyE');
+
+    // Abtasten: Zone öffnen, Inhalt ansehen, das Verbotene anklicken
+    // (im Tutorial erst freigeschaltet, wenn der Schritt erreicht ist)
+    await solo.evaluate(() => {
+      if (window.NULLWERK.state.unlocks.search) window.NULLWERK.act('bouncer', 'search');
+    });
+    await solo.waitForTimeout(250);
+    for (let z = 0; z < 3; z++) {
+      const zone = await solo.evaluate(() => {
+        const pat = window.NULLWERK.state.night.stations.door.patdown;
+        if (!pat || pat.complete) return null;
+        const next = Object.values(pat.zones).find((s2) => s2.state === 'closed');
+        if (!next) return null;
+        window.NULLWERK.act('bouncer', 'zone', { zone: next.id });
+        return next.id;
+      });
+      if (!zone) break;
+      await solo.waitForSelector('#itemtray .tray-item', { timeout: 4000 }).catch(() => {});
+      results.trayShown = true;
+      const bad = await solo.evaluate(() => {
+        const pat = window.NULLWERK.state.night.stations.door.patdown;
+        const open = pat?.active ? pat.zones[pat.active] : null;
+        return open?.items.find((i) => i.forbidden)?.id ?? null;
+      });
+      if (bad) {
+        results.contrabandFound = true;
+        await solo.click(`.tray-item[data-item="${bad}"]`).catch(() => {});
+      } else {
+        await solo.click('.tray-clear').catch(() => {});
+      }
+      await solo.waitForTimeout(320);
+    }
+
+    // Entscheidung über die grossen Buttons unten in der Mitte
+    const btn = faults.length ? '.dec.no' : '.dec.yes';
+    await solo.click(btn).catch(() => {});
   }
-  await solo.waitForTimeout(700);
+  await solo.waitForTimeout(600);
 }
 
 results.solo = await solo.evaluate(() => {
@@ -149,12 +184,62 @@ for (let i = 0; i < 24; i++) {
     if (air.guest && !air.checks.scan) g.act('security', 'scan');
     else if (air.guest && !air.patdown) g.act('security', 'search');
     else if (air.guest && !air.patdown.complete) {
-      const zone = ['jacket', 'pockets', 'bag'].find((z) => air.patdown.zones[z] === null);
-      if (zone) g.act('security', 'zone', { zone });
+      const pat = air.patdown;
+      const open = pat.active ? pat.zones[pat.active] : null;
+      if (open) {
+        const bad = open.items.find((i) => i.forbidden);
+        g.act('security', 'pick', { zone: open.id, itemId: bad ? bad.id : null });
+      } else {
+        const next = Object.values(pat.zones).find((z) => z.state === 'closed');
+        if (next) g.act('security', 'zone', { zone: next.id });
+      }
     } else if (air.guest) g.act('security', 'admit');
   });
-  await coop.waitForTimeout(650);
+  await coop.waitForTimeout(400);
+
+  // Sobald eine Zone offen ist: liegt der Inhalt sichtbar auf dem Tisch?
+  const tray = await coop.evaluate(() => {
+    const items = [...document.querySelectorAll('#itemtray .tray-item')];
+    if (!items.length) return null;
+    const bad = window.NULLWERK.state.night.stations.airlock.patdown;
+    const open = bad?.active ? bad.zones[bad.active] : null;
+    return {
+      count: items.length,
+      labels: items.map((el) => el.querySelector('.tray-label')?.textContent.trim()),
+      forbidden: open?.items.find((i) => i.forbidden)?.id ?? null,
+      painted: items.every((el) => el.querySelector('canvas')?.width > 0)
+    };
+  });
+  if (tray) {
+    results.trayShown = true;
+    results.trayCount = Math.max(results.trayCount ?? 0, tray.count);
+    results.trayPainted = tray.painted;
+    // Auswahl per echtem Mausklick auf die Karte
+    if (tray.forbidden) {
+      await coop.click(`.tray-item[data-item="${tray.forbidden}"]`).catch(() => {});
+      results.contrabandFound = true;
+    } else {
+      await coop.click('.tray-clear').catch(() => {});
+      results.clearedByClick = true;
+    }
+    await coop.waitForTimeout(300);
+  }
+  await coop.waitForTimeout(250);
 }
+
+results.ui = await coop.evaluate(() => {
+  const has = (sel) => !!document.querySelector(sel);
+  const notepad = document.getElementById('notepad');
+  return {
+    notepad: !!notepad && !notepad.classList.contains('hidden'),
+    notepadHand: notepad ? getComputedStyle(notepad).fontFamily.toLowerCase() : '',
+    decisions: document.querySelectorAll('#decisions .dec').length,
+    hand: has('#idhand .hand'),
+    // Diese Anzeigen sollen aus dem Spiel-HUD verschwunden sein
+    // (im Briefing/Shop bleibt die Kapazität als Management-Info stehen).
+    hudText: document.getElementById('hud').textContent
+  };
+});
 
 results.coop = await coop.evaluate(() => {
   const s = window.NULLWERK.state;
@@ -239,6 +324,11 @@ console.log(`  Solo   Einlass ${results.solo.stats.admitted} · abgewiesen ${res
   ` · richtig ${results.solo.stats.correct}/${results.solo.stats.correct + results.solo.stats.mistakes}`);
 console.log(`  Solo   Freischaltungen ${Object.entries(results.solo.unlocks).filter(([, v]) => v).map(([k]) => k).join(',')}`);
 console.log(`  Report/Shop           ${results.report}`);
+console.log(`  Kontrolltisch         ${results.trayShown === true} · max. ${results.trayCount ?? 0} Gegenstände` +
+  ` · Icons gezeichnet ${results.trayPainted === true}`);
+console.log(`  Auswahl per Klick     verboten ${results.contrabandFound === true} · freigegeben ${results.clearedByClick === true}`);
+console.log(`  Notizzettel           ${results.ui.notepad} (${results.ui.notepadHand.split(',')[0]})`);
+console.log(`  Entscheidungs-Buttons ${results.ui.decisions} · Hand am Ausweis ${results.ui.hand}`);
 console.log(`  Koop   Posten ${results.coop.players.join(' | ')}`);
 console.log(`  Koop   durchgelassen ${results.coop.stats.passed} · eingelassen ${results.coop.stats.admitted}` +
   ` · in der Schleuse ${results.coop.airlockQueue}`);
@@ -258,6 +348,15 @@ if (results.coop.stats.passed < 1) fail('Koop: niemand wurde in die Schleuse dur
 if (results.coop.stats.admitted < 1) fail('Koop: Security hat niemanden eingelassen');
 if (results.online.hostRole !== 'host' || results.online.guestRole !== 'guest') fail('Online: Rollen falsch');
 if (!results.online.guestSeesNight) fail('Online: der Gast bekommt keine Schnappschüsse');
+if (!results.trayShown) fail('Kontrolltisch mit Gegenständen wurde nie gezeigt');
+if (!results.ui.notepad) fail('Notizzettel fehlt');
+if (!results.ui.notepadHand.includes('caveat') && !results.ui.notepadHand.includes('cursive')) {
+  fail('Notizzettel ist nicht in Handschrift gesetzt');
+}
+if (results.ui.decisions < 2) fail('Entscheidungs-Buttons fehlen');
+if (!results.ui.hand) fail('Der Ausweis wird nicht von einer Hand gehalten');
+if (/KAPAZITÄT/i.test(results.ui.hudText)) fail('Kapazitätsanzeige ist noch im HUD');
+if (/KELLERCLUB|STUFE \d/i.test(results.ui.hudText)) fail('Club-Stufe ist noch im HUD');
 if (results.online.passed < 1) fail('Online: Host konnte niemanden durchlassen');
 
 if (failed) process.exit(1);
