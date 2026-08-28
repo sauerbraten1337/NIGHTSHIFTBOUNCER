@@ -7,6 +7,7 @@ import { CLUB_NAME, MODES, rolesFor, DEFENSE_KEYS, ITEMS, ITEM_CATEGORIES, ZONES
 import { drawItemIcon } from '../render/items.js';
 import { clubTier, capacity, rank } from '../systems/state.js';
 import { hasSave, clearSave } from '../systems/save.js';
+import { cheats, unlockAdmin, lockAdmin, setCheat, ADMIN_MAX_NIGHT } from '../systems/admin.js';
 import { repBand } from '../systems/reputation.js';
 import { difficultyBriefing } from '../systems/difficulty.js';
 
@@ -324,7 +325,7 @@ export function createScreens(game) {
    * Pause. Hier - und nur hier - steht die komplette Tastenbelegung, damit
    * das laufende Spiel frei von Steuerungstexten bleibt.
    */
-  function pause(onResume, onQuit) {
+  function pause(onResume, onQuit, admin = null) {
     const roles = rolesFor(game.state.mode);
     const el = document.createElement('div');
     el.className = 'pause';
@@ -336,6 +337,7 @@ export function createScreens(game) {
           <button class="btn primary" id="pause-resume">WEITER</button>
           <button class="btn ghost" id="pause-quit">SCHICHT ABBRECHEN</button>
         </div>
+        <div class="admin" id="pause-admin"></div>
       </div>
       <aside class="pause-controls">
         <h2 class="sec" style="margin-top:0">STEUERUNG</h2>
@@ -373,7 +375,129 @@ export function createScreens(game) {
       </aside>`;
     el.querySelector('#pause-resume').addEventListener('click', onResume);
     el.querySelector('#pause-quit').addEventListener('click', onQuit);
+    if (admin) adminBox(el.querySelector('#pause-admin'), admin);
     show(el);
+  }
+
+  /* ---------- Admin: Testhilfen hinter einem Code ---------- */
+
+  /**
+   * Erst der Code, dann die Werkzeuge. Alles hier greift sofort - die
+   * Nachtwahl verwirft die laufende Schicht und geht ins Briefing.
+   */
+  function adminBox(box, admin) {
+    render();
+
+    function render() {
+      box.innerHTML = cheats.unlocked ? unlockedHtml() : lockedHtml();
+      wire();
+    }
+
+    function lockedHtml() {
+      return `
+        <div class="admin-head">ADMIN</div>
+        <p class="admin-note">Testzugang: Nacht frei wählen und Cheats schalten.</p>
+        <div class="admin-login">
+          <input type="password" class="admin-input" id="admin-code"
+                 placeholder="ADMIN-CODE" autocomplete="off" />
+          <button class="btn ghost" id="admin-unlock">FREISCHALTEN</button>
+        </div>
+        <div class="admin-msg" id="admin-msg"></div>`;
+    }
+
+    function unlockedHtml() {
+      const night = game.state.nightIndex;
+      return `
+        <div class="admin-head open">ADMIN — FREIGESCHALTET</div>
+
+        <div class="admin-group">
+          <label class="admin-label" for="admin-night">NACHT WÄHLEN</label>
+          <div class="admin-login">
+            <input type="number" class="admin-input" id="admin-night" min="1"
+                   max="${ADMIN_MAX_NIGHT}" value="${Math.max(1, night)}" />
+            <button class="btn" id="admin-go">STARTEN</button>
+          </div>
+          <p class="admin-note">Bricht die laufende Schicht ab und geht ins Briefing
+            der gewählten Nacht. Aktuell: NACHT ${String(night).padStart(2, '0')}.</p>
+        </div>
+
+        <div class="admin-group">
+          <div class="admin-label">CHEATS</div>
+          ${toggleHtml('noAggro', 'KEINE ÜBERGRIFFE')}
+          ${toggleHtml('fastActions', 'KONTROLLEN SOFORT FERTIG')}
+          ${toggleHtml('reveal', 'RÖNTGENBLICK (WAHRHEIT ANZEIGEN)')}
+        </div>
+
+        <div class="admin-group admin-actions">
+          <button class="btn ghost" data-admin="money">+5000 €</button>
+          <button class="btn ghost" data-admin="rep">RUF AUF 100</button>
+          <button class="btn ghost" data-admin="unlockAll">ALLES FREISCHALTEN</button>
+          <button class="btn ghost" data-admin="shorten">NOCH 3 GÄSTE</button>
+          <button class="btn ghost" data-admin="attack">ÜBERGRIFF AUSLÖSEN</button>
+          <button class="btn ghost" data-admin="endShift">SCHICHT BEENDEN</button>
+        </div>
+
+        <div class="admin-msg" id="admin-msg"></div>
+        <button class="btn ghost admin-lock" id="admin-lock">ADMIN SPERREN</button>`;
+    }
+
+    function toggleHtml(id, label) {
+      return `
+        <label class="menu-toggle admin-toggle">
+          <input type="checkbox" data-cheat="${id}" ${cheats[id] ? 'checked' : ''} />
+          <span>${escapeHtml(label)}</span>
+        </label>`;
+    }
+
+    function say(text, kind = '') {
+      const node = box.querySelector('#admin-msg');
+      if (!node) return;
+      node.textContent = text;
+      node.className = `admin-msg ${kind}`;
+    }
+
+    function wire() {
+      const code = box.querySelector('#admin-code');
+      code?.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') tryUnlock();
+      });
+      box.querySelector('#admin-unlock')?.addEventListener('click', tryUnlock);
+
+      box.querySelector('#admin-lock')?.addEventListener('click', () => { lockAdmin(); render(); });
+
+      box.querySelector('#admin-night')?.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') go();
+      });
+      box.querySelector('#admin-go')?.addEventListener('click', go);
+
+      for (const input of box.querySelectorAll('[data-cheat]')) {
+        input.addEventListener('change', (e) => {
+          setCheat(e.target.dataset.cheat, e.target.checked);
+        });
+      }
+
+      for (const btn of box.querySelectorAll('[data-admin]')) {
+        btn.addEventListener('click', () => {
+          const result = admin[btn.dataset.admin]?.();
+          const text = typeof result === 'string' ? result : 'Erledigt.';
+          // Nichts zu tun ist kein Erfolg - das soll man am Ton sehen.
+          say(text, /^(Keine|Niemand)/.test(text) ? 'bad' : 'ok');
+        });
+      }
+    }
+
+    function tryUnlock() {
+      const value = box.querySelector('#admin-code')?.value ?? '';
+      if (unlockAdmin(value)) render();
+      else say('Falscher Code.', 'bad');
+    }
+
+    function go() {
+      const value = Number(box.querySelector('#admin-night')?.value ?? 1);
+      admin.night(value);
+    }
   }
 
   function waiting(text) {

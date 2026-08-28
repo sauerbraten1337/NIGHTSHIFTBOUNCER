@@ -295,6 +295,30 @@ Schlange beruhigen → freier Betrieb. Abwählbar im Menü.
 
 ---
 
+## Admin-Bereich (zum Testen)
+
+Im Pausenmenü (<kbd>ESC</kbd> während der Schicht) steht unten der Kasten **ADMIN**. Nach
+Eingabe des Codes `cig1337` lässt sich das Spiel abkürzen, ohne jede Nacht durchspielen zu
+müssen. Die Freischaltung gilt für die laufende Browser-Sitzung (`sessionStorage`) und
+lässt sich mit **ADMIN SPERREN** wieder aufheben — dabei gehen alle Schalter zurück auf Aus.
+
+* **NACHT WÄHLEN** — Nummer eintragen, `STARTEN`: die laufende Schicht wird verworfen und
+  das Briefing der gewählten Nacht kommt. So erreicht man Übergriffe (ab Nacht 5) oder die
+  späten Schwierigkeitsstufen sofort.
+* **KEINE ÜBERGRIFFE** — niemand rastet mehr von selbst aus.
+* **KONTROLLEN SOFORT FERTIG** — Ausweis, Abtasten und Alkotest laufen ohne Wartezeit durch.
+* **RÖNTGENBLICK** — blendet rechts die versteckte Wahrheit des Gastes ein: echtes Alter,
+  Ausweismängel, Promille, Substanz, verbotener Gegenstand samt Zone, Sperre, VIP, Ausrastrisiko.
+* **+5000 €**, **RUF AUF 100**, **ALLES FREISCHALTEN** (alle Kontrollen, Tutorial übersprungen).
+* **NOCH 3 GÄSTE** — kürzt die Gästeliste der laufenden Nacht.
+* **ÜBERGRIFF AUSLÖSEN** — startet die Tastenabwehr sofort beim Gast an der Kontrolle.
+* **SCHICHT BEENDEN** — direkt in den Night Report.
+
+Code und Schalter stehen in `src/systems/admin.js`; nichts davon wandert in den Spielstand
+oder über das Netz.
+
+---
+
 ## Architektur
 
 Spiellogik ist DOM-frei und damit headless testbar — und läuft im Online-Modus
@@ -312,6 +336,7 @@ src/systems/          state · guests · queue · identity · security · alcoho
                       decision · economy · reputation · upgrades · artists · randomEvents
                       nightcycle · progression · difficulty · tutorial · coop · save
                       aggression (Übergriffe und Tastenabwehr)
+                      admin (Testzugang: Nachtwahl und Cheats hinter einem Code)
 src/render/           layout · palette · sprites · figure (grosse Frontfiguren)
                       items (gezeichnete Gegenstände) · scene (Tür-/Schleusenansicht,
                       Abtast-Ringe, Alkoholtestgerät) · title (Titelbildschirm)
@@ -320,6 +345,7 @@ src/ui/               hud (inkl. Entscheidungs-Buttons) · notepad (Block mit zw
                       screens: Menü, Gegenstands-Katalog, Lobby, Briefing, Pause
                       idcard (Ausweis in der Hand) · itemtray (Kontrolltisch)
                       rulebook (ausfahrende Hausordnung am linken Rand)
+                      adminhud (Röntgenblick auf die Wahrheit des Gastes)
                       report · shop · screens
 src/net/net.js        Räume, Schnappschüsse, Aktionen
 server/index.js       Statischer Server + WebSocket-Raumvermittlung

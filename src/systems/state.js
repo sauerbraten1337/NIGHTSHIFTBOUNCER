@@ -7,6 +7,7 @@
 import { TUNING, UPGRADES, CLUB_TIERS, RANKS, rolesFor, AIRLOCK_CAPACITY } from '../data/config.js';
 import { clamp } from '../core/rng.js';
 import { emptyNotes } from './notes.js';
+import { cheats } from './admin.js';
 
 export function createInitialState(mode = 'solo') {
   const upgrades = {};
@@ -179,6 +180,8 @@ export function nextRank(state) {
 
 /** Multiplikator für Aktionsdauer (kleiner = schneller). */
 export function actionSpeed(state) {
+  // Admin-Testhilfe: Kontrollen laufen praktisch ohne Wartezeit durch.
+  if (cheats.unlocked && cheats.fastActions) return 0.05;
   const talent = state.talents.scanner * 0.12;
   const scanner = upgradeLevel(state, 'scanner') >= 2 ? 0.18 : 0;
   const door = upgradeLevel(state, 'door') >= 1 ? 0.08 : 0;

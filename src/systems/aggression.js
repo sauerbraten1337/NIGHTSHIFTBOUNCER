@@ -18,6 +18,7 @@ import { fine, earn } from './economy.js';
 import { difficultyProfile } from './difficulty.js';
 import { rejectGuest } from './decision.js';
 import { chance, randInt, pick, clamp } from '../core/rng.js';
+import { cheats } from './admin.js';
 
 /** Läuft an dieser Station gerade ein Angriff? */
 export function aggressionActive(station) {
@@ -28,6 +29,8 @@ export function aggressionActive(station) {
 /** Kann in dieser Nacht überhaupt jemand ausrasten? */
 export function aggressionPossible(state) {
   if (!FEATURES.aggression) return false;
+  // Admin-Testhilfe: niemand rastet mehr von selbst aus.
+  if (cheats.unlocked && cheats.noAggro) return false;
   const night = state.night;
   if (!night || night.tutorial) return false;
   return state.nightIndex >= AGGRESSION.minNight
