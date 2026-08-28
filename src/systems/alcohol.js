@@ -8,6 +8,8 @@ import { guestLine } from './guests.js';
 
 export function talkTo(rng, state, guest) {
   const line = guestLine(rng, guest, 'talk');
+  // Der Gast nennt seinen echten Namen - Grundlage fuer den Abgleich mit dem Ausweis.
+  const realName = guest.name;
   const drunk = guest.truth.drunk;
   const hint = drunk > 0.8 ? 'spricht sehr undeutlich'
     : drunk > 0.6 ? 'redet verwaschen'
@@ -15,7 +17,7 @@ export function talkTo(rng, state, guest) {
   const moodHint = guest.personality === 'aggressive' ? 'sehr gereizt'
     : guest.personality === 'arrogant' ? 'fordernd'
       : guest.personality === 'nervous' ? 'nervös' : 'entspannt';
-  return { line, hint, moodHint, drunkGuess: drunk };
+  return { line, realName, hint, moodHint, drunkGuess: drunk };
 }
 
 /** Alkoholtest: liefert einen Zahlenwert, der die Entscheidung eindeutig macht. */

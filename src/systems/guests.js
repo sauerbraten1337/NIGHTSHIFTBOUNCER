@@ -5,7 +5,7 @@
  */
 
 import {
-  ARCHETYPES, ITEMS, ID_ISSUES, TUNING, FIRST_NAMES, LAST_NAMES
+  ARCHETYPES, ITEMS, ID_ISSUES, TUNING, FIRST_NAMES, LAST_NAMES, GAME_DATE
 } from '../data/config.js';
 import { LINES, PERSONALITIES } from '../data/dialogue.js';
 import { randRange, randInt, pick, weightedPick, chance, clamp } from '../core/rng.js';
@@ -64,7 +64,24 @@ export function createGuest(rng, ctx = {}) {
 
   const name = `${pick(rng, FIRST_NAMES)} ${pick(rng, LAST_NAMES)}`;
   const docName = idIssues.includes('name') ? `${pick(rng, FIRST_NAMES)} ${pick(rng, LAST_NAMES)}` : name;
-  const docAge = idIssues.includes('age') ? Math.max(18, realAge + randInt(rng, 2, 5)) : realAge;
+
+  // Geburtsdatum: bei Manipulation zeigt das Dokument ein Alter ueber 18,
+  // die Ziffern sind dann aber sichtbar veraendert (doc.tampered).
+  const tampered = idIssues.includes('age');
+  const shownAge = tampered ? Math.max(TUNING.minAge, realAge + randInt(rng, 2, 6)) : realAge;
+  const birth = birthString(rng, shownAge);
+
+  // Ausweisfoto: bei Foto-Faelschung deutlich anderes Aussehen als der Gast.
+  const look = {
+    skin: randInt(rng, 0, 5),
+    outfit: randInt(rng, 0, 7),
+    hair: randInt(rng, 0, 6),
+    height: randRange(rng, 0.92, 1.1),
+    bulk: randRange(rng, 0.88, 1.14)
+  };
+  const photoLook = idIssues.includes('photo')
+    ? { ...look, skin: (look.skin + 2 + randInt(rng, 0, 2)) % 6, hair: (look.hair + 3) % 7 }
+    : { ...look };
 
   const guest = {
     id: `g${++guestSerial}`,
@@ -77,13 +94,7 @@ export function createGuest(rng, ctx = {}) {
     seed: Math.floor(rng() * 1e9),
 
     // Sichtbare Optik
-    look: {
-      skin: randInt(rng, 0, 5),
-      outfit: randInt(rng, 0, 7),
-      hair: randInt(rng, 0, 6),
-      height: randRange(rng, 0.92, 1.1),
-      bulk: randRange(rng, 0.88, 1.14)
-    },
+    look,
 
     // Versteckte Wahrheit
     truth: {
@@ -102,17 +113,20 @@ export function createGuest(rng, ctx = {}) {
       repValue: archetype.rep
     },
 
-    // Das vorgezeigte Dokument
+    // Das vorgezeigte Dokument - genau das, was der Spieler zu sehen bekommt
     doc: {
       name: docName,
-      age: docAge,
-      birth: birthString(rng, docAge),
+      birth,
       expiry: idIssues.includes('expired')
-        ? `${randInt(rng, 2019, 2024)}-${pad(randInt(rng, 1, 12))}-${pad(randInt(rng, 1, 28))}`
+        ? `${randInt(rng, 2021, 2025)}-${pad(randInt(rng, 1, 12))}-${pad(randInt(rng, 1, 28))}`
         : `${randInt(rng, 2027, 2033)}-${pad(randInt(rng, 1, 12))}-${pad(randInt(rng, 1, 28))}`,
-      photoMatch: !idIssues.includes('photo'),
-      marks: !idIssues.includes('marks'),
-      number: `${String.fromCharCode(65 + randInt(rng, 0, 25))}${randInt(rng, 10000000, 99999999)}`
+      marksOk: !idIssues.includes('marks'),
+      tampered,
+      photoLook,
+      number: `${String.fromCharCode(65 + randInt(rng, 0, 25))}${randInt(rng, 10000000, 99999999)}`,
+      issuer: pick(rng, ['BUNDESREPUBLIK', 'REPUBLIK', 'KANTON', 'STAAT']),
+      /** Nur intern: das Alter, das das Dokument behauptet. */
+      shownAge
     },
 
     // Zustand in der Warteschlange
@@ -135,9 +149,16 @@ function pad(n) {
   return String(n).padStart(2, '0');
 }
 
+/**
+ * Erzeugt ein Geburtsdatum, das am Spieldatum exakt das gewünschte Alter ergibt.
+ * (Wer dieses Jahr noch nicht Geburtstag hatte, ist ein Jahr früher geboren.)
+ */
 function birthString(rng, age) {
-  const year = 2026 - age;
-  return `${year}-${pad(randInt(rng, 1, 12))}-${pad(randInt(rng, 1, 28))}`;
+  const month = randInt(rng, 1, 12);
+  const day = randInt(rng, 1, 28);
+  const hadBirthday = month < GAME_DATE.month || (month === GAME_DATE.month && day <= GAME_DATE.day);
+  const year = GAME_DATE.year - age - (hadBirthday ? 0 : 1);
+  return `${year}-${pad(month)}-${pad(day)}`;
 }
 
 function underageChance(archetype, event) {

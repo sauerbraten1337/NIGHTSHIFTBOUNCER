@@ -1,14 +1,19 @@
 {
   "name": "nullwerk-nightshift-bouncer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "NULLWERK - NIGHTSHIFT: BOUNCER CO-OP. 2D-Top-Down-Koop-Simulation an der Tuer eines Underground-Clubs.",
+  "description": "NULLWERK - NIGHTSHIFT: BOUNCER CO-OP. 2D-Simulation aus Sicht des Türstehers: Ausweise selbst prüfen, Solo oder zu zweit (lokal oder online), Tür draussen und Sicherheitsschleuse innen.",
   "type": "module",
   "scripts": {
-    "start": "node tools/serve.mjs 8080",
+    "start": "node server/index.js 8080",
+    "serve:static": "node tools/serve.mjs 8080",
     "test": "node tests/smoke.mjs",
     "test:browser": "node tests/browser-check.mjs",
+    "test:all": "node tests/smoke.mjs && node tests/browser-check.mjs",
     "shots": "node tests/browser-check.mjs --shots"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "playwright": "^1.52.0"

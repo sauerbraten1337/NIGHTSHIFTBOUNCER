@@ -10,6 +10,7 @@ import { updateRandomEvents } from './randomEvents.js';
 import { nightRating, changeReputation } from './reputation.js';
 import { weightedPick, clamp } from '../core/rng.js';
 import { resetGuestSerial } from './guests.js';
+import { startTutorial, updateTutorial } from './tutorial.js';
 
 export const PHASES = [
   { at: 0, label: 'OPENING', intensity: 0.25 },
@@ -29,17 +30,18 @@ export function pickNightEvent(rng, state) {
   return weightedPick(rng, pool, (e) => (e.id === 'normal' ? 5 : 3));
 }
 
-export function startNight(game, event, artist) {
+export function startNight(game, event, artist, opts = {}) {
   const { state, rng } = game;
   resetGuestSerial();
   state.nightIndex++;
-  state.night = createNightState(event, artist, rng.seed);
+  state.night = createNightState(event, artist, rng.seed, state.mode);
   state.night.repDelta = 0;
   state.phase = 'night';
   if (artist) {
     state.night.stats.artistFee = artist.fee;
     state.money -= artist.fee;
   }
+  if (opts.tutorial) startTutorial(game);
   pushLog(state, `NIGHT ${String(state.nightIndex).padStart(2, '0')} - ${event.label}`, 'info');
   addRadio(state.night, 'TÜR', 'Wir sind offen.');
   game.bus.emit('nightStart', state.night);
@@ -67,8 +69,9 @@ export function updateNight(game, dt) {
   const minutes = dt * TUNING.minutesPerSecond;
   night.clock += minutes;
 
+  updateTutorial(game, dt);
   updateQueue(game, dt, minutes);
-  updateRandomEvents(game, dt, minutes);
+  if (!night.tutorial) updateRandomEvents(game, dt, minutes);
   tickInsideRevenue(state, minutes);
   updateInside(game, dt, minutes);
   updateEffects(night, dt);

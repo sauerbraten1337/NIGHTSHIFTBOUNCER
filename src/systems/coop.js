@@ -1,259 +1,335 @@
 /**
- * Koop-System: zwei Spieler, zwei Rollen, gemeinsame Tür.
- * Bewegung, Aktions-Timer und die Team-Verifikation laufen hier zusammen.
+ * Koop-System: wer darf was, wo.
+ *
+ * Jeder Spieler steht an seiner eigenen Station:
+ *   BOUNCER  - draussen an der Tür (Ausweis, Gespräch, Schlange)
+ *   SECURITY - drinnen in der Schleuse (Scan, Abtasten, Alkoholtest)
+ * Im Solo-Modus gibt es nur die Tür, und der Bouncer macht alles.
+ *
+ * Alle Aktionen laufen über `tryAction`, damit lokale Eingaben und
+ * Netzwerk-Kommandos denselben Weg nehmen.
  */
 
-import { ROLES, PATDOWN_KEYS, TUNING } from '../data/config.js';
-import { LAYOUT, WORLD, stationFor, inStation, nearQueue } from '../render/layout.js';
-import { actionSpeed, addToast, addRadio } from './state.js';
-import { checkId, idSummary } from './identity.js';
+import { rolesFor, PATDOWN_KEYS, TUNING, AREA_CHECKS } from '../data/config.js';
+import { actionSpeed, addToast, addRadio, isSolo } from './state.js';
+import { requestId, markField, inspectionVerdict, idSummary } from './identity.js';
 import { scanGuest } from './scanner.js';
 import { startPatdown, patZone, patdownResult } from './security.js';
 import { talkTo, alcoholTest } from './alcohol.js';
-import { admitGuest, rejectGuest, coopVerification } from './decision.js';
-import { calmQueue } from './queue.js';
-import { resolveArtistDecision } from './artists.js';
+import { admitGuest, rejectGuest, passGuest, coopVerification, soloVerification } from './decision.js';
+import { calmQueue, airlockFull } from './queue.js';
 import { guestLine } from './guests.js';
-import { clamp } from '../core/rng.js';
+import { resolveArtistDecision } from './artists.js';
 
-const SPEED = 190;
-
-export function createPlayers() {
-  return [makePlayer(ROLES.bouncer, 592, 452), makePlayer(ROLES.security, 726, 452)];
+export function createPlayers(mode = 'solo') {
+  return rolesFor(mode).map((role, index) => ({
+    index,
+    id: role.id,
+    role,
+    area: role.area,
+    busy: 0,
+    busyTotal: 0,
+    busyLabel: '',
+    pending: null,
+    flash: 0,
+    idlePhase: index * 1.7,
+    lastResult: null,
+    lastResultTime: 0
+  }));
 }
 
-function makePlayer(role, x, y) {
-  return {
-    id: role.id, role, x, y, vx: 0, vy: 0, facing: 1, walkPhase: 0,
-    busy: 0, busyTotal: 0, busyLabel: '', pending: null, flash: 0, lastResult: null
-  };
+/** Die Station, an der dieser Spieler arbeitet. */
+export function stationOf(game, player) {
+  const night = game.state.night;
+  if (!night) return null;
+  if (isSolo(game.state)) return night.stations.door;
+  return player.area === 'airlock' ? night.stations.airlock : night.stations.door;
+}
+
+export function playerByRole(game, roleId) {
+  return game.players.find((p) => p.id === roleId) ?? game.players[0];
 }
 
 export function updatePlayers(game, dt, input) {
-  const { state } = game;
-  const night = state.night;
+  const night = game.state.night;
   if (!night) return;
 
-  for (const p of game.players) {
-    // --- Bewegung ---
-    const k = p.role.keys;
-    let dx = (input.isDown(k.right) ? 1 : 0) - (input.isDown(k.left) ? 1 : 0);
-    let dy = (input.isDown(k.down) ? 1 : 0) - (input.isDown(k.up) ? 1 : 0);
-    if (p.busy > 0) { dx = 0; dy = 0; }
-    const len = Math.hypot(dx, dy) || 1;
-    p.vx = (dx / len) * SPEED;
-    p.vy = (dy / len) * SPEED;
-    p.x = clamp(p.x + p.vx * dt, 40, WORLD.width - 40);
-    p.y = clamp(p.y + p.vy * dt, LAYOUT.street.y + 20, WORLD.height - 30);
-    if (dx !== 0) p.facing = dx > 0 ? 1 : -1;
-    p.walkPhase += (Math.abs(dx) + Math.abs(dy) > 0 ? dt * 10 : dt * 1.4);
-    if (p.flash > 0) p.flash -= dt;
+  for (const player of game.players) {
+    player.idlePhase += dt;
+    if (player.flash > 0) player.flash -= dt;
 
-    // --- Laufende Aktion ---
-    if (p.busy > 0) {
-      p.busy -= dt;
-      if (p.busy <= 0) {
-        p.busy = 0;
-        const pending = p.pending;
-        p.pending = null;
-        p.busyLabel = '';
-        if (pending) completeAction(game, p, pending);
+    if (player.busy > 0) {
+      player.busy -= dt;
+      if (player.busy <= 0) {
+        player.busy = 0;
+        const pending = player.pending;
+        player.pending = null;
+        player.busyLabel = '';
+        if (pending) completeAction(game, player, pending);
       }
       continue;
     }
 
-    // --- Eingaben ---
-    for (const action of p.role.actions) {
-      if (input.justPressed(action.key)) tryAction(game, p, action.code);
+    if (!input || player.remote) continue;
+
+    for (const action of player.role.actions) {
+      if (input.justPressed(action.key)) tryAction(game, player, action.code);
     }
-    if (p.role.id === 'security' && night.patdown && !night.patdown.complete) {
+    // Abtast-Zonen: nur an der Station, an der abgetastet wird.
+    const station = stationOf(game, player);
+    if (station?.patdown && !station.patdown.complete && canDo(game, player, 'search')) {
       for (const zoneKey of PATDOWN_KEYS) {
-        if (input.justPressed(zoneKey.key)) startZone(game, p, zoneKey.zone, zoneKey.label);
+        if (input.justPressed(zoneKey.key)) {
+          tryAction(game, player, 'zone', { zone: zoneKey.zone, label: zoneKey.label });
+        }
       }
     }
   }
 }
 
-function duration(state, key) {
-  return TUNING.actionTime[key] * actionSpeed(state);
+/** Darf dieser Spieler diese Kontrolle überhaupt ausführen? */
+export function canDo(game, player, code) {
+  if (isSolo(game.state)) return true;
+  const area = player.area;
+  if (code === 'id' || code === 'talk' || code === 'calm' || code === 'pass') return area === 'outside';
+  if (AREA_CHECKS.airlock.includes(code) || code === 'admit') return area === 'airlock';
+  return true; // reject dürfen beide
 }
 
-function begin(state, player, label, key, payload) {
-  const t = duration(state, key);
+function duration(state, key) {
+  return (TUNING.actionTime[key] ?? 1) * actionSpeed(state);
+}
+
+function begin(game, player, label, key, payload = {}) {
+  const t = duration(game.state, key);
   player.busy = t;
   player.busyTotal = t;
   player.busyLabel = label;
   player.pending = { key, ...payload };
 }
 
-/** Versucht eine Aktion. Gibt einen Fehlergrund zurück, wenn sie nicht geht. */
-export function tryAction(game, player, code) {
-  const { state, bus } = game;
+function deny(game, player, reason) {
+  player.flash = 0.5;
+  setResult(player, 'deny', reason);
+  addToast(game.state.night, reason, 'warn', 2.2);
+  game.bus.emit('sfx', 'beep');
+  return reason;
+}
+
+function setResult(player, kind, text) {
+  player.lastResult = { kind, text };
+  player.lastResultTime = 0;
+}
+
+/**
+ * Führt eine Aktion aus (oder lehnt sie mit Begründung ab).
+ * payload: { zone } für 'zone', { field } für 'mark'.
+ */
+export function tryAction(game, player, code, payload = {}) {
+  const { state } = game;
   const night = state.night;
-  const guest = night.door;
+  if (!night || !night.running) return 'KEINE SCHICHT';
+  if (player.busy > 0) return 'BESCHÄFTIGT';
+
+  const station = stationOf(game, player);
+  const guest = station?.guest;
 
   if (code === 'calm') {
-    if (!nearQueue(player)) return deny(game, player, 'ZU WEIT VON DER SCHLANGE');
-    begin(state, player, 'BERUHIGEN', 'calm', {});
+    if (!canDo(game, player, 'calm')) return deny(game, player, 'NUR DER BOUNCER KANN DIE SCHLANGE BERUHIGEN');
+    if (!state.unlocks.calm) return deny(game, player, 'NOCH NICHT FREIGESCHALTET');
+    begin(game, player, 'SCHLANGE BERUHIGEN', 'calm');
     return null;
   }
 
-  if (!inStation(player)) return deny(game, player, `NICHT AN POSITION (${stationFor(player.role.id).label})`);
-  if (!guest) return deny(game, player, 'KEIN GAST AN DER TÜR');
+  if (!canDo(game, player, code)) {
+    return deny(game, player, code === 'admit'
+      ? 'NUR DIE SECURITY LÄSST IN DEN CLUB'
+      : 'NICHT DEIN BEREICH');
+  }
+  if (!guest) return deny(game, player, 'NIEMAND VOR DIR');
+  if (state.unlocks[code] === false) return deny(game, player, 'NOCH NICHT FREIGESCHALTET');
 
-  const checks = night.doorChecks;
+  const checks = station.checks;
+
   switch (code) {
     case 'id':
-      if (checks.id) return deny(game, player, 'AUSWEIS BEREITS GEPRUEFT');
+      if (checks.id) return deny(game, player, 'AUSWEIS LIEGT SCHON VOR');
       guest.said = guestLine(game.rng, guest, 'idAsk');
-      guest.saidTimer = 3;
-      begin(state, player, 'AUSWEIS PRÜFEN', 'id', { guestId: guest.id });
-      bus.emit('sfx', 'beep');
+      guest.saidTimer = 3.2;
+      begin(game, player, 'AUSWEIS VERLANGEN', 'id', { guestId: guest.id });
+      game.bus.emit('sfx', 'beep');
       return null;
+
+    case 'mark': {
+      if (!checks.id) return deny(game, player, 'ERST DEN AUSWEIS VERLANGEN');
+      if (checks.id.guestId !== guest.id) return deny(game, player, 'ANDERER GAST');
+      const res = markField(checks.id, guest, payload.field);
+      if (res.already) return null;
+      if (res.correct) {
+        setResult(player, 'ok', `GEFUNDEN: ${res.reason}`);
+        addToast(night, `AUFFÄLLIGKEIT: ${res.reason}`, 'good', 3);
+        game.bus.emit('sfx', 'ok');
+      } else {
+        setResult(player, 'deny', `${res.label}: NICHTS ZU BEANSTANDEN`);
+        player.flash = 0.4;
+        game.bus.emit('sfx', 'beep');
+      }
+      game.bus.emit('idMark', { field: payload.field, correct: res.correct });
+      return null;
+    }
+
     case 'talk':
-      begin(state, player, 'GESPRÄCH', 'talk', { guestId: guest.id });
+      begin(game, player, 'ANSPRECHEN', 'talk', { guestId: guest.id });
       return null;
-    case 'admit':
-      begin(state, player, 'EINLASSEN', 'admit', { guestId: guest.id });
-      return null;
-    case 'reject':
-      begin(state, player, 'ABWEISEN', 'reject', { guestId: guest.id });
-      return null;
+
     case 'scan':
       if (checks.scan) return deny(game, player, 'BEREITS GESCANNT');
-      begin(state, player, 'SCAN', 'scan', { guestId: guest.id });
-      bus.emit('sfx', 'scan');
+      begin(game, player, 'SCAN', 'scan', { guestId: guest.id });
+      game.bus.emit('sfx', 'scan');
       return null;
+
     case 'alcohol':
       if (checks.alcohol) return deny(game, player, 'TEST BEREITS GEMACHT');
-      begin(state, player, 'ALKOHOLTEST', 'alcohol', { guestId: guest.id });
-      bus.emit('sfx', 'beep');
+      begin(game, player, 'ALKOHOLTEST', 'alcohol', { guestId: guest.id });
+      game.bus.emit('sfx', 'beep');
       return null;
+
     case 'search':
-      if (night.patdown && night.patdown.complete) return deny(game, player, 'KONTROLLE ABGESCHLOSSEN');
-      if (!night.patdown) {
-        night.patdown = startPatdown(state, guest);
+      if (station.patdown?.complete) return deny(game, player, 'KONTROLLE ABGESCHLOSSEN');
+      if (!station.patdown) {
+        station.patdown = startPatdown(state, guest);
         guest.said = guestLine(game.rng, guest, 'search');
         guest.saidTimer = 3;
-        bus.emit('sfx', 'radio');
-        if (night.patdown.autoResolved) finishPatdown(game, player);
+        game.bus.emit('sfx', 'radio');
+        if (station.patdown.autoResolved) finishPatdown(game, player, station);
         else addToast(night, 'ABTASTEN: J / K / L', 'info', 3);
       }
       return null;
+
+    case 'zone': {
+      if (!station.patdown || station.patdown.complete) return null;
+      if (station.patdown.zones[payload.zone] !== null) return null;
+      begin(game, player, `ABTASTEN: ${payload.label ?? payload.zone.toUpperCase()}`, 'search',
+        { zone: payload.zone, guestId: guest.id });
+      return null;
+    }
+
+    case 'pass':
+      if (isSolo(state)) return deny(game, player, 'IM SOLO GIBT ES KEINE SCHLEUSE');
+      if (airlockFull(state)) return deny(game, player, 'SCHLEUSE IST VOLL');
+      begin(game, player, 'DURCHLASSEN', 'admit', { guestId: guest.id, pass: true });
+      return null;
+
+    case 'admit':
+      begin(game, player, 'EINLASSEN', 'admit', { guestId: guest.id });
+      return null;
+
+    case 'reject':
+      begin(game, player, 'ABWEISEN', 'reject', { guestId: guest.id });
+      return null;
+
     default:
       return deny(game, player, 'UNBEKANNTE AKTION');
   }
 }
 
-function startZone(game, player, zone, label) {
-  const { state } = game;
-  const night = state.night;
-  if (!inStation(player)) return deny(game, player, 'NICHT AN POSITION');
-  if (!night.door || !night.patdown) return null;
-  if (night.patdown.zones[zone] !== null) return null;
-  begin(state, player, `ABTASTEN: ${label}`, 'search', { zone, guestId: night.door.id });
-  return null;
-}
-
-function deny(game, player, reason) {
-  player.flash = 0.5;
-  player.lastResult = { kind: 'deny', text: reason };
-  addToast(game.state.night, reason, 'warn', 2);
-  game.bus.emit('sfx', 'beep');
-  return reason;
-}
-
 function completeAction(game, player, pending) {
   const { state, rng, bus } = game;
   const night = state.night;
-  const guest = night.door;
+  const station = stationOf(game, player);
 
   if (pending.key === 'calm') {
     const n = calmQueue(state);
-    player.lastResult = { kind: 'ok', text: `${n} GÄSTE BERUHIGT` };
+    setResult(player, 'ok', `${n} GÄSTE BERUHIGT`);
     addToast(night, `SCHLANGE BERUHIGT (${n})`, 'good', 2.5);
     bus.emit('sfx', 'radio');
     return;
   }
 
-  // Gast ist inzwischen weg? Aktion verfaellt.
+  const guest = station?.guest;
   if (!guest || guest.id !== pending.guestId) {
-    player.lastResult = { kind: 'deny', text: 'GAST NICHT MEHR DA' };
+    setResult(player, 'deny', 'GAST NICHT MEHR DA');
     return;
   }
+  const checks = station.checks;
 
-  const checks = night.doorChecks;
   switch (pending.key) {
     case 'id': {
-      const result = checkId(state, guest);
-      checks.id = result;
-      player.lastResult = { kind: result.ok ? 'ok' : 'bad', text: idSummary(result) };
-      addRadio(night, 'BOUNCER', idSummary(result));
-      bus.emit('sfx', result.ok ? 'ok' : 'deny');
-      checkVerification(game);
-      break;
-    }
-    case 'scan': {
-      const result = scanGuest(state, guest);
-      checks.scan = result;
-      player.lastResult = { kind: result.ok === false ? 'bad' : 'ok', text: result.text };
-      addRadio(night, 'SECURITY', result.text);
-      bus.emit('sfx', result.offline ? 'deny' : 'scan');
-      checkVerification(game);
+      checks.id = requestId(state, guest);
+      setResult(player, 'info', 'AUSWEIS LIEGT VOR - SELBST PRÜFEN');
+      if (checks.id.hint === 'any') addToast(night, 'GERÄT MELDET: DOKUMENT PRÜFEN', 'warn', 3);
+      else if (checks.id.hint) {
+        addToast(night, `GERÄT MARKIERT: ${checks.id.hint.toUpperCase()}`, 'warn', 3);
+      }
+      bus.emit('sfx', 'beep');
       break;
     }
     case 'talk': {
       const result = talkTo(rng, state, guest);
       checks.talk = result;
       guest.said = result.line;
-      guest.saidTimer = 3.4;
-      player.lastResult = { kind: 'info', text: result.hint.toUpperCase() };
+      guest.saidTimer = 3.6;
+      setResult(player, 'info', `SAGT: "${result.realName}" - ${result.hint}`);
+      break;
+    }
+    case 'scan': {
+      const result = scanGuest(state, guest);
+      checks.scan = result;
+      setResult(player, result.ok === false ? 'bad' : 'ok', result.text);
+      addRadio(night, 'SECURITY', result.text);
+      bus.emit('sfx', result.offline ? 'deny' : 'scan');
+      updateVerification(game, guest, station);
       break;
     }
     case 'alcohol': {
       const result = alcoholTest(state, guest);
       checks.alcohol = result;
-      player.lastResult = { kind: result.overLimit ? 'bad' : 'ok', text: `${result.promille} - ${result.text}` };
-      addRadio(night, 'SECURITY', `Alkoholtest: ${result.promille}`);
+      setResult(player, result.overLimit ? 'bad' : 'ok', `${result.promille} ‰ — ${result.text}`);
+      addRadio(night, 'SECURITY', `Alkoholtest: ${result.promille} ‰`);
       bus.emit('sfx', result.overLimit ? 'deny' : 'ok');
       break;
     }
     case 'search': {
-      if (!night.patdown) break;
-      patZone(night.patdown, guest, pending.zone);
-      const res = patdownResult(night.patdown);
+      if (!station.patdown) break;
+      patZone(station.patdown, guest, pending.zone);
+      const res = patdownResult(station.patdown);
       checks.search = res;
-      if (night.patdown.found) {
-        player.lastResult = { kind: 'bad', text: res.text };
+      if (station.patdown.found) {
+        setResult(player, 'bad', res.text);
         addRadio(night, 'SECURITY', res.text);
         addToast(night, res.text, 'bad', 4);
         bus.emit('sfx', 'alarm');
-      } else if (night.patdown.complete) {
-        player.lastResult = { kind: 'ok', text: 'KEINE AUFFÄLLIGKEITEN' };
-        addRadio(night, 'SECURITY', 'Abtasten sauber.');
+      } else if (station.patdown.complete) {
+        setResult(player, 'ok', 'KEINE AUFFÄLLIGKEITEN');
         bus.emit('sfx', 'ok');
       } else {
-        player.lastResult = { kind: 'info', text: res.text };
+        setResult(player, 'info', res.text);
         bus.emit('sfx', 'beep');
       }
+      updateVerification(game, guest, station);
       break;
     }
     case 'admit': {
-      const isArtist = guest.isArtist;
-      admitGuest(game, guest);
-      if (isArtist) resolveArtistDecision(game, guest, true);
-      guest.said = guestLine(rng, guest, 'admit');
-      guest.saidTimer = 2;
-      player.lastResult = { kind: 'ok', text: 'EINGELASSEN' };
+      if (pending.pass) {
+        passGuest(game, guest, station);
+        setResult(player, 'ok', 'DURCHGELASSEN');
+        guest.said = guestLine(rng, guest, 'admit');
+        guest.saidTimer = 2;
+      } else {
+        const isArtist = guest.isArtist;
+        admitGuest(game, guest, station);
+        if (isArtist) resolveArtistDecision(game, guest, true);
+        setResult(player, 'ok', 'EINGELASSEN');
+      }
+      bus.emit('decision', { outcome: pending.pass ? 'pass' : 'admit', guest });
       break;
     }
     case 'reject': {
       const isArtist = guest.isArtist;
-      rejectGuest(game, guest);
+      rejectGuest(game, guest, station);
       if (isArtist) resolveArtistDecision(game, guest, false);
-      guest.said = guestLine(rng, guest, 'reject');
-      guest.saidTimer = 2;
-      player.lastResult = { kind: 'bad', text: 'ABGEWIESEN' };
+      setResult(player, 'bad', 'ABGEWIESEN');
+      bus.emit('decision', { outcome: 'reject', guest });
       break;
     }
     default:
@@ -261,30 +337,32 @@ function completeAction(game, player, pending) {
   }
 }
 
-function finishPatdown(game, player) {
-  const night = game.state.night;
-  const res = patdownResult(night.patdown);
-  night.doorChecks.search = res;
-  player.lastResult = { kind: res.found ? 'bad' : 'ok', text: res.text };
-  addToast(night, `METALLDETEKTOR: ${res.text}`, res.found ? 'bad' : 'good', 4);
+function finishPatdown(game, player, station) {
+  const res = patdownResult(station.patdown);
+  station.checks.search = res;
+  setResult(player, res.found ? 'bad' : 'ok', res.text);
+  addToast(game.state.night, `METALLDETEKTOR: ${res.text}`, res.found ? 'bad' : 'good', 4);
   game.bus.emit('sfx', res.found ? 'alarm' : 'ok');
 }
 
-/** Koop-Spezialsystem: ID-Check + Scan gleichzeitig = SECURITY VERIFIED. */
-function checkVerification(game) {
+/** SECURITY VERIFIED / CHECK AGAIN auswerten. */
+function updateVerification(game, guest, station) {
   const night = game.state.night;
-  const checks = night.doorChecks;
-  if (checks.verifiedPair) return;
-  const verify = coopVerification(checks);
-  if (verify.state === 'verified') {
-    checks.verifiedPair = true;
+  const checks = station.checks;
+  const verify = isSolo(game.state)
+    ? soloVerification(checks)
+    : coopVerification(guest, checks);
+
+  if (verify.state === 'verified' && !checks.verified) {
+    checks.verified = true;
     addToast(night, 'SECURITY VERIFIED', 'good', 3);
     game.bus.emit('sfx', 'ok');
-  } else if (verify.state === 'conflict') {
-    checks.verifiedPair = false;
+  } else if (verify.state === 'conflict' && !checks.conflict) {
     checks.conflict = true;
-    addToast(night, 'CHECK AGAIN - ERGEBNISSE WIDERSPRECHEN SICH', 'warn', 4);
+    addToast(night, 'CHECK AGAIN — BEFUNDE WIDERSPRECHEN SICH', 'warn', 4);
     addRadio(night, 'FUNK', 'Das passt nicht zusammen. Nochmal prüfen.');
     game.bus.emit('sfx', 'alarm');
   }
 }
+
+export { idSummary, inspectionVerdict };

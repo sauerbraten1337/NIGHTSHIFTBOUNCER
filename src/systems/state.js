@@ -1,18 +1,20 @@
 /**
  * Zentraler Spielzustand + abgeleitete Werte.
- * DOM-frei, damit die Spiellogik testbar bleibt.
+ * DOM-frei, damit die Spiellogik testbar bleibt (und auf dem Host im
+ * Online-Modus autoritativ laufen kann).
  */
 
-import { TUNING, UPGRADES, CLUB_TIERS, RANKS, ROLES } from '../data/config.js';
+import { TUNING, UPGRADES, CLUB_TIERS, RANKS, rolesFor, AIRLOCK_CAPACITY } from '../data/config.js';
 import { clamp } from '../core/rng.js';
 
-export function createInitialState() {
+export function createInitialState(mode = 'solo') {
   const upgrades = {};
   for (const u of UPGRADES) upgrades[u.id] = 0;
 
   return {
-    version: 1,
-    phase: 'menu', // menu | briefing | night | report | shop
+    version: 2,
+    mode,                    // solo | local | online
+    phase: 'menu',           // menu | briefing | night | report | shop
     money: TUNING.moneyStart,
     reputation: TUNING.reputationStart,
     xp: 0,
@@ -23,6 +25,9 @@ export function createInitialState() {
     clubsOwned: 1,
     expandUnlocked: false,
     bookedArtist: null,
+    tutorialDone: false,
+    /** Freischaltungen: das Tutorial gibt Mechaniken nacheinander frei. */
+    unlocks: { id: true, talk: false, scan: false, search: false, alcohol: false, calm: false },
     lifetime: { guests: 0, admitted: 0, rejected: 0, revenue: 0, incidents: 0, nights: 0 },
     night: null,
     log: []
@@ -30,9 +35,10 @@ export function createInitialState() {
 }
 
 /** Zustand einer laufenden Nacht. */
-export function createNightState(event, artist, seed) {
+export function createNightState(event, artist, seed, mode = 'solo') {
   return {
     seed,
+    mode,
     event,
     artist,
     artistArrived: false,
@@ -40,33 +46,64 @@ export function createNightState(event, artist, seed) {
     artistDelayed: false,
     clock: TUNING.nightStartMinute,
     running: true,
-    queue: [],
+    tutorial: null,
+
+    queue: [],          // Warteschlange draussen
+    airlockQueue: [],   // durchgelassene Gaeste, warten in der Schleuse
     inside: [],
-    door: null,
-    doorChecks: emptyChecks(),
-    patdown: null,
+    leaving: [],
+
+    stations: {
+      door: newStation('door'),
+      airlock: newStation('airlock')
+    },
+
     spawnCooldown: 0.25,
     randomEventCooldown: 40,
-    activeEffects: [], // { id, label, remaining }
+    activeEffects: [],
     stats: {
-      arrived: 0, admitted: 0, rejected: 0, left: 0,
+      arrived: 0, admitted: 0, rejected: 0, left: 0, passed: 0,
       revenue: 0, entry: 0, bar: 0, incidents: 0, vips: 0,
-      correct: 0, mistakes: 0, verified: 0, fines: 0, artistFee: 0
+      correct: 0, mistakes: 0, verified: 0, catches: 0, fines: 0, artistFee: 0
     },
+    repDelta: 0,
     toasts: [],
     radio: []
   };
 }
 
+export function newStation(id) {
+  return { id, guest: null, checks: emptyChecks(), patdown: null };
+}
+
 export function emptyChecks() {
   return {
-    id: null,        // { ok, issues:[], age, name, expiry }
-    scan: null,      // { ok, risk, blacklisted, vipVerified, idFlag }
-    search: null,    // { done, zones:[], found: item|null }
-    talk: null,      // { line, mood, drunkHint }
-    alcohol: null,   // { value, overLimit }
-    verifiedPair: false
+    id: null,        // Inspection-Objekt (siehe identity.js)
+    talk: null,      // { line, realName, hint, moodHint }
+    scan: null,      // { ok, risk, blacklisted, ... }
+    search: null,    // { done, found, text }
+    alcohol: null,   // { value, promille, overLimit }
+    verified: false,
+    conflict: false
   };
+}
+
+/** Solo: alles laeuft an der Tuer. Koop: Tuer draussen, Schleuse innen. */
+export function isSolo(state) {
+  return state.mode === 'solo';
+}
+
+export function stationFor(state, areaOrRole) {
+  const night = state.night;
+  if (!night) return null;
+  if (isSolo(state)) return night.stations.door;
+  return areaOrRole === 'airlock' || areaOrRole === 'security'
+    ? night.stations.airlock
+    : night.stations.door;
+}
+
+export function airlockCapacity(state) {
+  return AIRLOCK_CAPACITY + (upgradeLevel(state, 'door') >= 2 ? 2 : 0);
 }
 
 /* ---------- Abgeleitete Werte ---------- */
@@ -148,22 +185,8 @@ export function entryFee(state) {
   return Math.round(TUNING.baseEntryFee + rep * 0.12 + tier * 2.5);
 }
 
-export function playerStart(index) {
-  const role = index === 0 ? ROLES.bouncer : ROLES.security;
-  return {
-    id: role.id,
-    role,
-    x: index === 0 ? 460 : 560,
-    y: 430,
-    vx: 0,
-    vy: 0,
-    facing: 1,
-    walkPhase: 0,
-    busy: 0,
-    busyTotal: 0,
-    busyLabel: '',
-    pending: null
-  };
+export function rolesOf(state) {
+  return rolesFor(state.mode);
 }
 
 export function pushLog(state, text, kind = 'info') {
@@ -179,6 +202,6 @@ export function addToast(night, text, kind = 'info', ttl = 3.4) {
 
 export function addRadio(night, speaker, text) {
   if (!night) return;
-  night.radio.unshift({ speaker, text, life: 6 });
+  night.radio.unshift({ speaker, text, life: 7 });
   if (night.radio.length > 5) night.radio.length = 5;
 }
