@@ -6,6 +6,7 @@
 
 import { TUNING, UPGRADES, CLUB_TIERS, RANKS, rolesFor, AIRLOCK_CAPACITY } from '../data/config.js';
 import { clamp } from '../core/rng.js';
+import { emptyNotes } from './notes.js';
 
 export function createInitialState(mode = 'solo') {
   const upgrades = {};
@@ -34,9 +35,25 @@ export function createInitialState(mode = 'solo') {
   };
 }
 
+/**
+ * Wie viele Gaeste muessen in dieser Nacht abgefertigt werden?
+ * Die Schicht endet nicht nach der Uhr, sondern wenn die Liste leer ist.
+ */
+export function guestQuota(state) {
+  const n = Math.max(0, state.nightIndex - 1);
+  return Math.min(
+    TUNING.guestsPerNightMax,
+    TUNING.guestsPerNight + n * TUNING.guestsPerNightGrowth
+  );
+}
+
 /** Zustand einer laufenden Nacht. */
-export function createNightState(event, artist, seed, mode = 'solo') {
+export function createNightState(event, artist, seed, mode = 'solo', quota = TUNING.guestsPerNight) {
   return {
+    /** Schichtplan statt Uhr: so viele Gaeste sind zu pruefen. */
+    quota,
+    processed: 0,
+
     seed,
     mode,
     event,
@@ -64,7 +81,9 @@ export function createNightState(event, artist, seed, mode = 'solo') {
     stats: {
       arrived: 0, admitted: 0, rejected: 0, left: 0, passed: 0,
       revenue: 0, entry: 0, bar: 0, incidents: 0, vips: 0,
-      correct: 0, mistakes: 0, verified: 0, catches: 0, fines: 0, artistFee: 0
+      correct: 0, mistakes: 0, verified: 0, catches: 0, fines: 0, artistFee: 0,
+      /** Selbst gefundene Unregelmaessigkeiten (Ausweis, Sachen, Alkohol). */
+      findings: 0, falseAlarms: 0, overlooked: 0, findingPay: 0
     },
     repDelta: 0,
     toasts: [],
@@ -73,7 +92,7 @@ export function createNightState(event, artist, seed, mode = 'solo') {
 }
 
 export function newStation(id) {
-  return { id, guest: null, checks: emptyChecks(), patdown: null };
+  return { id, guest: null, checks: emptyChecks(), patdown: null, notes: emptyNotes() };
 }
 
 export function emptyChecks() {

@@ -6,11 +6,19 @@
 export const CLUB_NAME = 'NULLWERK';
 
 export const TUNING = {
-  // Nacht laeuft von 00:00 bis 05:00 (300 Spielminuten).
+  // Die Nacht endet NICHT nach Zeit, sondern wenn die Schicht abgearbeitet ist.
+  // Die Uhr laeuft nur noch im Hintergrund fuer Stimmung, Musik und Ereignisse.
   nightStartMinute: 0,
   nightEndMinute: 300,
-  // Spielminuten pro Realsekunde.
   minutesPerSecond: 0.8,
+
+  /** So viele Gaeste muessen pro Nacht abgefertigt werden. */
+  guestsPerNight: 16,
+  guestsPerNightGrowth: 2,     // pro Nacht mehr
+  guestsPerNightMax: 40,
+
+  /** Praemie fuer jede selbst gefundene Unregelmaessigkeit. */
+  findingBonus: 35,
 
   baseEntryFee: 12,
   baseCapacity: 120,
@@ -255,6 +263,27 @@ export const DIFFICULTY_STEPS = [
   }
 ];
 
+/**
+ * Die Punkte, die der Spieler auf seinem Notizzettel selbst beurteilt.
+ * `truth` sagt dem Spiel, ob die Beurteilung am Ende zutraf.
+ */
+export const NOTE_TOPICS = [
+  { id: 'document', label: 'Dokument', area: 'outside', hint: 'Foto, Name, Datum, Merkmale' },
+  { id: 'person', label: 'Zustand der Person', area: 'outside', hint: 'Auftreten, Augen, Hände' },
+  { id: 'items', label: 'Mitgeführte Sachen', area: 'airlock', hint: 'Jacke, Taschen, Beutel' },
+  { id: 'alcohol', label: 'Alkoholwert', area: 'airlock', hint: 'Messwert gegen Grenzwert' }
+];
+
+/** Punkte der Checkliste (Seite 1) - der Spieler hakt selbst ab. */
+export const CHECKLIST = [
+  { id: 'id', label: 'Ausweis verlangt', area: 'outside' },
+  { id: 'fields', label: 'Alle Felder geprüft', area: 'outside' },
+  { id: 'talk', label: 'Person angesprochen', area: 'outside' },
+  { id: 'look', label: 'Person angesehen', area: 'outside' },
+  { id: 'search', label: 'Abgetastet', area: 'airlock' },
+  { id: 'alcohol', label: 'Alkoholtest gemacht', area: 'airlock' }
+];
+
 /** Sichtbare Anzeichen für Substanzeinfluss (abstrakt, ohne Konsumdetails). */
 export const IMPAIRMENT_SIGNS = [
   { id: 'pupils', label: 'weite Pupillen', min: 0.35 },
@@ -321,11 +350,11 @@ export const ARTISTS = [
  */
 export const UPGRADES = [
   {
-    id: 'scanner', label: 'Dokumenten-Prüfgerät', max: 3, tier: 1,
+    id: 'scanner', label: 'Prüfplatz', max: 3, tier: 1,
     group: 'Sicherheit',
-    desc: ['UV-Lampe: meldet, wenn am Dokument etwas nicht stimmt.',
-      'Schnellprüfung: alle Kontrollen laufen zügiger.',
-      'Feinanalyse: markiert das auffällige Feld auf dem Ausweis.'],
+    desc: ['Bessere Lampe am Pult: du arbeitest schneller.',
+      'Ordentlicher Prüftisch: Kontrollen gehen deutlich zügiger.',
+      'Voll ausgestatteter Prüfplatz: schnellstmögliche Abfertigung.'],
     cost: [450, 1200, 2800]
   },
   {
@@ -338,8 +367,8 @@ export const UPGRADES = [
   {
     id: 'cameras', label: 'Sicherheitskameras', max: 2, tier: 1,
     group: 'Sicherheit',
-    desc: ['Crowd-Monitoring: senkt Zwischenfall-Schaden.',
-      'Risiko-Vorwarnung für die Warteschlange.'],
+    desc: ['Crowd-Monitoring: senkt den Schaden bei Zwischenfällen.',
+      'Lückenlose Aufzeichnung: noch weniger Schaden.'],
     cost: [520, 1500]
   },
   {

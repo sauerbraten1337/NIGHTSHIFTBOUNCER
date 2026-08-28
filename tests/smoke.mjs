@@ -10,13 +10,19 @@ import assert from 'node:assert/strict';
 
 import { createRng } from '../src/core/rng.js';
 import { createBus } from '../src/core/bus.js';
-import { createInitialState, capacity, clubTier, isSolo } from '../src/systems/state.js';
+import { createInitialState, capacity, clubTier, isSolo, guestQuota } from '../src/systems/state.js';
 import { createPlayers, updatePlayers, tryAction, stationOf, playerByRole } from '../src/systems/coop.js';
 import { startNight, updateNight, pickNightEvent } from '../src/systems/nightcycle.js';
 import { buyUpgrade, upgradeList } from '../src/systems/upgrades.js';
 import { buyTalent } from '../src/systems/progression.js';
 import { violationsOf, createGuest } from '../src/systems/guests.js';
-import { faultyFields, ageFromBirth, requestId, markField } from '../src/systems/identity.js';
+import {
+  faultyFields, ageFromBirth, requestId, toggleField, claimedFaults, scoreInspection
+} from '../src/systems/identity.js';
+import { startPatdown, openZone, pickItem, closeZone, scorePatdown } from '../src/systems/security.js';
+import {
+  emptyNotes, toggleCheck, toggleTopic, flipPage, reportedProblems, checklistFor, topicsFor
+} from '../src/systems/notes.js';
 import { saveGame, loadGame } from '../src/systems/save.js';
 import { ITEMS, DIFFICULTY_STEPS } from '../src/data/config.js';
 import { difficultyProfile } from '../src/systems/difficulty.js';
@@ -55,10 +61,11 @@ function driveStation(game, player, input) {
   if (outside) {
     if (!checks.id && can('id')) { tryAction(game, player, 'id'); return; }
     if (!checks.talk && can('talk')) { tryAction(game, player, 'talk'); return; }
-    // Ausweisfelder von Hand markieren
+    // Ausweisfelder von Hand als "nicht korrekt" vermerken (ein Klick genuegt,
+    // weil der Zyklus mit "nicht korrekt" beginnt).
     const faults = faultyFields(guest);
     for (const field of faults) {
-      if (!checks.id.marks[field]) { tryAction(game, player, 'mark', { field }); return; }
+      if (checks.id.marks[field] !== 'suspect') { tryAction(game, player, 'mark', { field }); return; }
     }
   }
 
@@ -70,9 +77,10 @@ function driveStation(game, player, input) {
       if (!pat.complete) {
         const open = pat.active ? pat.zones[pat.active] : null;
         if (open) {
-          // Alles ansehen und das Verbotene herausgreifen - wie ein wacher Spieler.
-          const bad = open.items.find((i) => i.forbidden);
-          tryAction(game, player, 'pick', { zone: open.id, itemId: bad ? bad.id : null });
+          // Alles ansehen, das Verbotene beanstanden, dann die Zone abschliessen.
+          const bad = open.items.find((i) => i.forbidden && !open.flagged.includes(i.id));
+          if (bad) tryAction(game, player, 'pick', { zone: open.id, itemId: bad.id });
+          else tryAction(game, player, 'closezone', { zone: open.id });
           return;
         }
         const next = Object.values(pat.zones).find((z) => z.state === 'closed');
@@ -80,6 +88,12 @@ function driveStation(game, player, input) {
       }
     }
     if (!checks.alcohol && can('alcohol')) { tryAction(game, player, 'alcohol'); return; }
+    // Der Befund kommt auf den eigenen Notizzettel - das Spiel traegt nichts ein.
+    if (checks.alcohol && checks.alcohol.promille >= checks.alcohol.limit
+        && !(station.notes?.topics.alcohol === 'bad')) {
+      tryAction(game, player, 'note', { topic: 'alcohol' });
+      return;
+    }
   }
 
   // --- Entscheidung ---
@@ -93,9 +107,9 @@ function driveStation(game, player, input) {
 
 function decide(station, doorOnly) {
   const c = station.checks;
-  if (c.id && c.id.found.length > 0) return true;
+  if (c.id && claimedFaults(c.id).length > 0) return true;
   if (doorOnly) return false;
-  if (c.search && c.search.found) return true;
+  if (c.search && c.search.flagged?.length) return true;
   // Das Gerät zeigt nur den Wert - der Grenzwert steht auf dem Gehäuse.
   if (c.alcohol && c.alcohol.promille >= c.alcohol.limit) return true;
   return false;
@@ -127,7 +141,8 @@ const sn = soloRun.night;
 assert.ok(soloRun.ended, 'Solo: Nacht regulär beendet');
 assert.equal(solo.state.phase, 'report', 'Solo: Report erreicht');
 assert.equal(solo.players.length, 1, 'Solo: nur ein Spieler');
-assert.ok(sn.stats.arrived > 20, `Solo: Gäste erschienen (${sn.stats.arrived})`);
+assert.ok(sn.stats.arrived >= sn.quota, `Solo: Gäste erschienen (${sn.stats.arrived})`);
+assert.equal(sn.processed, sn.quota, `Solo: Schicht endet bei der Quote (${sn.processed}/${sn.quota})`);
 assert.ok(sn.stats.admitted > 0, 'Solo: Gäste eingelassen');
 assert.ok(sn.stats.rejected > 0, 'Solo: Gäste abgewiesen');
 assert.equal(sn.stats.passed, 0, 'Solo: keine Schleuse, also kein Durchlassen');
@@ -191,7 +206,20 @@ assert.ok(Object.values(tut.state.unlocks).every(Boolean), 'Am Ende ist alles fr
 assert.equal('scan' in tut.state.unlocks, false, 'Der Scan ist als Feature entfernt');
 assert.ok(tutEnded, 'Tutorial-Nacht regulär beendet');
 
-/* ---------- Test 4: manuelle Ausweisprüfung ---------- */
+/* ---------- Test 4: manuelle Ausweisprüfung, Selbstbewertung ---------- */
+
+// Der Klick-Zyklus: leer -> nicht korrekt -> in Ordnung -> leer.
+{
+  const g = createGuest(createRng(5), { reputation: 50, nightIndex: 3 });
+  const insp = requestId(makeGame('solo').state, g);
+  assert.equal(insp.marks.photo, undefined, 'Feld startet unbewertet');
+  assert.equal(toggleField(insp, 'photo').state, 'suspect', '1. Klick: nicht korrekt');
+  assert.equal(toggleField(insp, 'photo').state, 'fine', '2. Klick: in Ordnung');
+  assert.equal(toggleField(insp, 'photo').state, null, '3. Klick: wieder leer');
+  assert.equal(insp.hint, undefined, 'Die Prüfung gibt keinen Hinweis mehr');
+  assert.equal(insp.found, undefined, 'Das Spiel führt keine Trefferliste mehr');
+  assert.equal(toggleField(insp, 'quatsch'), null, 'Unbekanntes Feld wird abgelehnt');
+}
 
 const rng = createRng(99);
 let checked = 0;
@@ -201,28 +229,29 @@ for (let i = 0; i < 900; i++) {
   const faults = faultyFields(g);
   const inspection = requestId(makeGame('solo').state, g);
 
-  // Ein sauberes Dokument darf keine Treffer liefern.
-  if (faults.size === 0) {
-    for (const field of ['photo', 'name', 'birth', 'expiry', 'marks']) {
-      const res = markField(inspection, g, field);
-      assert.equal(res.correct, false, 'Sauberes Dokument: kein Feld ist auffällig');
-    }
-  } else {
-    for (const field of faults) {
-      const res = markField(inspection, g, field);
-      assert.equal(res.correct, true, `Fehlerhaftes Feld ${field} wird als Treffer erkannt`);
-      assert.ok(res.reason, 'Treffer hat eine Begründung');
-      if (field === 'photo') seenPhoto = true;
-      if (field === 'expiry') seenExpiry = true;
-      if (field === 'birth') seenBirth = true;
-    }
+  // Der Spieler beanstandet ALLE Felder: die Auswertung muss genau die
+  // wirklich fehlerhaften als Treffer zählen - und erst nachträglich.
+  for (const field of ['photo', 'name', 'birth', 'expiry', 'marks']) toggleField(inspection, field);
+  const score = scoreInspection(inspection, g);
+  assert.equal(score.hits.length, faults.size, 'Treffer entsprechen den echten Fehlern');
+  assert.equal(score.wrong.length, 5 - faults.size, 'Der Rest zählt als Fehlgriff');
+  assert.equal(score.missed.length, 0, 'Wer alles beanstandet, übersieht nichts');
+
+  if (faults.size > 0) {
     checked++;
+    if (faults.has('photo')) seenPhoto = true;
+    if (faults.has('expiry')) seenExpiry = true;
+    if (faults.has('birth')) seenBirth = true;
+  } else {
+    // Sauberes Dokument: nichts zu beanstanden, wer nichts anklickt liegt richtig.
+    const clean = requestId(makeGame('solo').state, g);
+    assert.equal(scoreInspection(clean, g).hits.length, 0, 'Sauberes Dokument: keine Treffer');
+    assert.equal(scoreInspection(clean, g).missed.length, 0, 'Sauberes Dokument: nichts übersehen');
   }
 
   // Wahrheit und Dokument müssen zusammenpassen.
   if (g.truth.underage) {
-    assert.ok(faults.has('birth') || faults.has('photo') || faults.size > 0,
-      'Minderjährige haben immer eine erkennbare Auffälligkeit');
+    assert.ok(faults.size > 0, 'Minderjährige haben immer eine erkennbare Auffälligkeit');
   }
   if (!g.doc.tampered && !g.truth.underage) {
     assert.ok(ageFromBirth(g.doc.birth) >= 18, 'Ehrliches Dokument zeigt volljähriges Alter');
@@ -305,6 +334,67 @@ for (let i = 0; i < 500; i++) {
   const v = violationsOf(g);
   if (g.truth.underage) assert.ok(v.some((x) => x.id === 'underage'), 'Minderjährig = Verstoß');
   if (g.truth.contraband) assert.ok(v.some((x) => x.id === 'item'), 'Verbotener Gegenstand = Verstoß');
+}
+
+/* ---------- Test 6b: Schichtplan, Selbstangaben und Prämie ---------- */
+
+// Die Nacht endet an der Gästezahl, nicht an der Uhr.
+assert.ok(sn.quota >= 16, `Solo: Schichtplan gesetzt (${sn.quota})`);
+assert.equal(sn.processed, sn.quota, 'Solo: genau die geplanten Gäste abgearbeitet');
+assert.equal(cn.processed, cn.quota, 'Koop: genau die geplanten Gäste abgearbeitet');
+assert.ok(sn.clock < 10000, 'Die Uhr ist kein Abbruchkriterium mehr');
+
+// Die Quote wächst mit den Nächten - bis zum Deckel.
+{
+  const st = createInitialState('solo');
+  st.nightIndex = 1;
+  const q1 = guestQuota(st);
+  st.nightIndex = 5;
+  assert.ok(guestQuota(st) > q1, 'Spätere Nächte haben mehr Gäste');
+  st.nightIndex = 999;
+  assert.ok(guestQuota(st) <= 40, 'Die Quote ist gedeckelt');
+}
+
+// Gefundene Unregelmäßigkeiten bringen Geld.
+assert.ok(sn.stats.findings > 0, `Solo: eigene Befunde gezählt (${sn.stats.findings})`);
+assert.equal(sn.stats.findingPay, sn.stats.findings * 35, 'Solo: Prämie je Befund ausgezahlt');
+assert.ok(cn.stats.findings > 0, `Koop: eigene Befunde gezählt (${cn.stats.findings})`);
+assert.equal(sn.stats.falseAlarms, 0, 'Der perfekte Bot beanstandet nichts zu Unrecht');
+
+// Das Abtasten bewertet erst nachträglich - nicht beim Klicken.
+{
+  const g = createGuest(createRng(31), { reputation: 50, nightIndex: 6 });
+  const st = makeGame('solo').state;
+  const pat = startPatdown(st, g);
+  const zoneId = Object.keys(pat.zones)[0];
+  openZone(pat, g, zoneId);
+  const item = pat.zones[zoneId].items[0];
+  const res = pickItem(pat, g, zoneId, item.id);
+  assert.equal(res.flagged, true, 'Erster Klick beanstandet');
+  assert.equal(pat.zones[zoneId].correct, undefined, 'Keine sofortige Bewertung');
+  assert.equal(pickItem(pat, g, zoneId, item.id).flagged, false, 'Zweiter Klick nimmt zurück');
+  closeZone(pat, zoneId);
+  assert.equal(pat.zones[zoneId].state, 'done', 'Zone wird ausdrücklich abgeschlossen');
+  const score = scorePatdown(pat, g);
+  assert.equal(score.hits.length + score.wrong.length, 0, 'Ohne Beanstandung gibt es keine Treffer');
+  assert.equal(score.missed.length, (pat.zones[zoneId].items ?? []).filter((i) => i.forbidden).length,
+    'Übersehenes Verbotenes wird nachträglich gezählt');
+}
+
+// Notizzettel: Haken und Befunde gehören dem Spieler.
+{
+  const notes = emptyNotes();
+  assert.equal(notes.page, 0, 'Der Block liegt auf Seite 1');
+  assert.equal(toggleCheck(notes, 'id').checked, true, 'Haken gesetzt');
+  assert.equal(toggleCheck(notes, 'id').checked, false, 'Haken wieder entfernt');
+  assert.equal(toggleCheck(notes, 'gibtsnicht'), null, 'Unbekannter Punkt wird abgelehnt');
+  assert.equal(toggleTopic(notes, 'alcohol').state, 'ok', 'Befund: entspricht der Norm');
+  assert.equal(toggleTopic(notes, 'alcohol').state, 'bad', 'Befund: entspricht nicht');
+  assert.deepEqual(reportedProblems(notes), ['alcohol'], 'Beanstandete Themen werden gelistet');
+  assert.equal(toggleTopic(notes, 'alcohol').state, null, 'Befund wieder gelöscht');
+  assert.equal(flipPage(notes), 1, 'Auf Seite 2 geblättert');
+  assert.equal(checklistFor('outside').length > 0, true, 'Die Tür hat eigene Checklistenpunkte');
+  assert.equal(topicsFor('airlock').length > 0, true, 'Die Schleuse hat eigene Befundthemen');
 }
 
 /* ---------- Test 7: Upgrades, Talente, Save/Load ---------- */

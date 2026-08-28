@@ -12,8 +12,9 @@
 
 import { rolesFor, PATDOWN_KEYS, TUNING, AREA_CHECKS } from '../data/config.js';
 import { actionSpeed, addToast, addRadio, isSolo } from './state.js';
-import { requestId, markField, inspectionVerdict, idSummary } from './identity.js';
-import { startPatdown, openZone, pickItem, patdownResult, pendingZones } from './security.js';
+import { requestId, toggleField, fieldLabel, inspectionVerdict, idSummary } from './identity.js';
+import { startPatdown, openZone, pickItem, closeZone, patdownResult, pendingZones } from './security.js';
+import { toggleCheck, toggleTopic, flipPage, topicLabel } from './notes.js';
 import { talkTo, alcoholTest } from './alcohol.js';
 import { admitGuest, rejectGuest, passGuest, coopVerification, soloVerification } from './decision.js';
 import { calmQueue, airlockFull } from './queue.js';
@@ -172,23 +173,49 @@ export function tryAction(game, player, code, payload = {}) {
       game.bus.emit('sfx', 'beep');
       return null;
 
+    // Der Spieler schaltet den Status eines Ausweisfeldes um. Das Spiel sagt
+    // ihm NICHT, ob er richtig liegt - er trägt seine eigene Einschätzung ein.
     case 'mark': {
       if (!checks.id) return deny(game, player, 'ERST DEN AUSWEIS VERLANGEN');
       if (checks.id.guestId !== guest.id) return deny(game, player, 'ANDERER GAST');
-      const res = markField(checks.id, guest, payload.field);
-      if (res.already) return null;
-      if (res.correct) {
-        setResult(player, 'bad', `AUFFÄLLIG: ${res.reason}`);
-        addToast(night, `AUFFÄLLIG: ${res.reason}`, 'bad', 3);
-        game.bus.emit('sfx', 'alarm');
-      } else {
-        setResult(player, 'ok', `${res.label}: in Ordnung`);
-        player.flash = 0.4;
-        game.bus.emit('sfx', 'beep');
-      }
-      game.bus.emit('idMark', { field: payload.field, correct: res.correct });
+      const res = toggleField(checks.id, payload.field);
+      if (!res) return null;
+      setResult(player, 'info', res.state === 'suspect'
+        ? `${res.label}: als nicht korrekt notiert`
+        : res.state === 'fine'
+          ? `${res.label}: als in Ordnung notiert`
+          : `${res.label}: Eintrag gelöscht`);
+      game.bus.emit('sfx', 'beep');
+      game.bus.emit('idMark', { field: payload.field, state: res.state });
       return null;
     }
+
+    // Notizzettel Seite 1: Haken setzen/entfernen.
+    case 'check': {
+      const res = toggleCheck(station.notes, payload.item);
+      if (!res) return null;
+      game.bus.emit('sfx', 'beep');
+      game.bus.emit('noteCheck', res);
+      return null;
+    }
+
+    // Notizzettel Seite 2: Befund umschalten (entspricht der Norm / nicht).
+    case 'note': {
+      const res = toggleTopic(station.notes, payload.topic);
+      if (!res) return null;
+      setResult(player, 'info', res.state === 'bad'
+        ? `${topicLabel(res.id)}: entspricht nicht`
+        : res.state === 'ok'
+          ? `${topicLabel(res.id)}: entspricht der Norm`
+          : `${topicLabel(res.id)}: Eintrag gelöscht`);
+      game.bus.emit('sfx', 'beep');
+      game.bus.emit('noteTopic', res);
+      return null;
+    }
+
+    case 'page':
+      flipPage(station.notes, payload.page);
+      return null;
 
     case 'talk':
       begin(game, player, 'ANSPRECHEN', 'talk', { guestId: guest.id });
@@ -207,12 +234,9 @@ export function tryAction(game, player, code, payload = {}) {
         guest.said = guestLine(game.rng, guest, 'search');
         guest.saidTimer = 3;
         game.bus.emit('sfx', 'radio');
-        if (station.patdown.autoResolved) finishPatdown(game, player, station);
-        else {
-          const keys = Object.keys(station.patdown.zones)
-            .map((z) => ({ jacket: 'J', pockets: 'K', bag: 'L' }[z])).join(' / ');
-          addToast(night, `ZONE WÄHLEN: ${keys}`, 'info', 3.5);
-        }
+        const keys = Object.keys(station.patdown.zones)
+          .map((z) => ({ jacket: 'J', pockets: 'K', bag: 'L' }[z])).join(' / ');
+        addToast(night, `ZONE WÄHLEN: ${keys}`, 'info', 3.5);
       }
       return null;
 
@@ -232,34 +256,39 @@ export function tryAction(game, player, code, payload = {}) {
       return null;
     }
 
+    // Gegenstand beanstanden oder Beanstandung zurücknehmen. Ob der
+    // Gegenstand wirklich verboten ist, erfährt der Spieler hier nicht.
     case 'pick': {
       const pat = station.patdown;
       const zone = pat?.zones[payload.zone ?? pat?.active];
       if (!pat || !zone || zone.state !== 'open') return null;
-      const res = pickItem(pat, guest, zone.id, payload.itemId ?? null);
+      if (payload.itemId == null) return tryAction(game, player, 'closezone', { zone: zone.id });
+
+      const res = pickItem(pat, guest, zone.id, payload.itemId);
       if (!res) return null;
+      setResult(player, 'info', res.flagged
+        ? `${res.item.label}: beanstandet`
+        : `${res.item.label}: Beanstandung zurückgenommen`);
+      station.checks.search = patdownResult(pat);
+      game.bus.emit('sfx', 'beep');
+      game.bus.emit('itemPicked', res);
+      return null;
+    }
 
-      if (res.item && res.correct) {
-        setResult(player, 'bad', `GEFUNDEN: ${res.item.label}`);
-        addToast(night, `VERBOTEN: ${res.item.label.toUpperCase()}`, 'bad', 4);
-        addRadio(night, 'SECURITY', `${res.item.label} sichergestellt.`);
-        game.bus.emit('sfx', 'alarm');
-      } else if (res.item && !res.correct) {
-        setResult(player, 'deny', `${res.item.label}: völlig harmlos`);
-        addToast(night, `${res.item.label.toUpperCase()} IST ERLAUBT`, 'warn', 3);
-        player.flash = 0.4;
-        game.bus.emit('sfx', 'beep');
-      } else if (res.missed) {
-        setResult(player, 'deny', 'ZONE FREIGEGEBEN - DA WAR ETWAS');
-        game.bus.emit('sfx', 'beep');
-      } else {
-        setResult(player, 'ok', `${zone.label}: sauber`);
-        game.bus.emit('sfx', 'ok');
-      }
-
+    // Zone abschliessen - mit oder ohne Beanstandung.
+    case 'closezone': {
+      const pat = station.patdown;
+      const zone = pat?.zones[payload.zone ?? pat?.active];
+      if (!pat || !zone || zone.state !== 'open') return null;
+      const res = closeZone(pat, zone.id);
+      if (!res) return null;
+      setResult(player, 'info', res.flaggedIds.length
+        ? `${zone.label}: ${res.flaggedIds.length} beanstandet`
+        : `${zone.label}: abgeschlossen`);
       station.checks.search = patdownResult(pat);
       if (pat.complete) updateVerification(game, guest, station);
-      game.bus.emit('itemPicked', res);
+      game.bus.emit('sfx', 'ok');
+      game.bus.emit('zoneClosed', res);
       return null;
     }
 
@@ -306,10 +335,6 @@ function completeAction(game, player, pending) {
     case 'id': {
       checks.id = requestId(state, guest);
       setResult(player, 'info', 'AUSWEIS LIEGT VOR - SELBST PRÜFEN');
-      if (checks.id.hint === 'any') addToast(night, 'GERÄT MELDET: DOKUMENT PRÜFEN', 'warn', 3);
-      else if (checks.id.hint) {
-        addToast(night, `GERÄT MARKIERT: ${checks.id.hint.toUpperCase()}`, 'warn', 3);
-      }
       bus.emit('sfx', 'beep');
       break;
     }
@@ -339,7 +364,7 @@ function completeAction(game, player, pending) {
       setResult(player, 'info', `${zone.label}: ${zone.items.length} GEGENSTÄNDE`);
       if (!station.patdown.hintShown) {
         station.patdown.hintShown = true;
-        addToast(night, 'WAS DAVON DARF NICHT REIN?', 'info', 3);
+        addToast(night, 'WAS DAVON DARF NICHT REIN? SELBST ENTSCHEIDEN.', 'info', 3);
       }
       bus.emit('sfx', 'beep');
       bus.emit('zoneOpened', { zone: zone.id, items: zone.items });
@@ -371,14 +396,6 @@ function completeAction(game, player, pending) {
     default:
       break;
   }
-}
-
-function finishPatdown(game, player, station) {
-  const res = patdownResult(station.patdown);
-  station.checks.search = res;
-  setResult(player, res.found ? 'bad' : 'ok', res.text);
-  addToast(game.state.night, `METALLDETEKTOR: ${res.text}`, res.found ? 'bad' : 'good', 4);
-  game.bus.emit('sfx', res.found ? 'alarm' : 'ok');
 }
 
 /** SECURITY VERIFIED / CHECK AGAIN auswerten. */

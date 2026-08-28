@@ -20,6 +20,7 @@ export function earn(state, amount, category = 'bar') {
   if (state.night) {
     state.night.stats.revenue += value;
     if (category === 'entry') state.night.stats.entry += value;
+    else if (category === 'finding') { /* wird separat als findingPay gefuehrt */ }
     else state.night.stats.bar += value;
   }
   state.lifetime.revenue += value;

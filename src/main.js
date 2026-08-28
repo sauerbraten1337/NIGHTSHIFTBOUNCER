@@ -16,7 +16,7 @@ import { createAudio } from './core/audio.js';
 
 import { createInitialState, rank, pushLog, isSolo } from './systems/state.js';
 import { createPlayers, updatePlayers, tryAction, stationOf } from './systems/coop.js';
-import { startNight, updateNight, pickNightEvent, currentPhase } from './systems/nightcycle.js';
+import { startNight, updateNight, pickNightEvent, currentPhase, shiftProgress, endNight } from './systems/nightcycle.js';
 import { saveGame, loadGame } from './systems/save.js';
 import { checkRankUp } from './systems/progression.js';
 import { rolesFor } from './data/config.js';
@@ -26,6 +26,7 @@ import { createHud } from './ui/hud.js';
 import { createScreens } from './ui/screens.js';
 import { createIdCard } from './ui/idcard.js';
 import { createItemTray } from './ui/itemtray.js';
+import { createRulebook } from './ui/rulebook.js';
 import { createNet, serializeState, applySnapshot } from './net/net.js';
 
 const canvas = document.getElementById('scene');
@@ -94,6 +95,7 @@ const hud = createHud(game);
 const screens = createScreens(game);
 const idcard = createIdCard(game, { roleId: 'bouncer' });
 const itemTray = createItemTray(game, { roleId: 'security' });
+const rulebook = createRulebook(game);
 game.net = createNet(game.bus);
 
 let pendingEvent = null;
@@ -305,7 +307,7 @@ const loop = createLoop({
     updatePlayers(game, dt, input);
     updateNight(game, dt);
 
-    const phase = currentPhase(game.state.night.clock);
+    const phase = currentPhase(shiftProgress(game.state.night));
     const load = Math.min(1, game.state.night.queue.length / 14);
     audio.setIntensity(phase.intensity * 0.75 + load * 0.25);
 
@@ -356,7 +358,7 @@ function togglePause() {
   if (game.paused) {
     screens.pause(togglePause, () => {
       game.paused = false;
-      game.state.night.clock = 300;
+      endNight(game);
       screens.hide();
     });
   } else {

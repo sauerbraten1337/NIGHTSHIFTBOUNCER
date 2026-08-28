@@ -10,7 +10,11 @@
  *   GÜLTIG BIS  gegen das heutige Datum
  *   MERKMALE    Hologramm vorhanden und sauber?
  *
- * Ein Feld anklicken heisst: "hier stimmt etwas nicht".
+ * Ein Feld anklicken schaltet den Status um, den der Spieler dem Feld gibt:
+ *   unbewertet -> NICHT KORREKT -> IN ORDNUNG -> unbewertet
+ *
+ * Das Spiel sagt zu keinem Zeitpunkt, ob die Einschaetzung stimmt. Erst in der
+ * Auswertung nach der Entscheidung wird verglichen.
  */
 
 import { GAME_DATE, TUNING, ID_ISSUES } from '../data/config.js';
@@ -76,50 +80,59 @@ export function faultyFields(guest) {
 /** Der Gast reicht den Ausweis herüber. */
 export function requestId(state, guest) {
   const offline = toolOffline(state.night);
-  const scanner = offline ? 0 : upgradeLevel(state, 'scanner');
-  const street = state.talents.street;
-  const faults = faultyFields(guest);
-
-  // Ausruestung und Talent geben Hinweise - nehmen die Prüfung aber nicht ab.
-  let hint = null;
-  let hintLevel = 0;
-  if (faults.size > 0) {
-    if (scanner >= 3 || street >= 3) { hint = [...faults][0]; hintLevel = 2; }
-    else if (scanner >= 2 || street >= 2) { hint = [...faults][0]; hintLevel = 1; }
-    else if (scanner >= 1 || street >= 1) { hint = 'any'; hintLevel = 1; }
-  }
-
   return {
     requested: true,
     doc: guest.doc,
     guestId: guest.id,
-    marks: {},          // vom Spieler markierte Felder -> 'hit' | 'miss'
-    found: [],          // korrekt gefundene Verstoesse
-    wrong: 0,           // Fehlgriffe
-    hint,               // null | 'any' | Feld-Id
-    hintLevel,
+    /** Einschaetzung des Spielers je Feld: undefined | 'suspect' | 'fine' */
+    marks: {},
     toolOffline: offline,
     closed: false,
     /** Wahrheit, erst nach der Entscheidung fuer die Auswertung genutzt. */
-    faults: [...faults]
+    faults: [...faultyFields(guest)]
   };
 }
 
+/** Der Reihe nach: unbewertet -> nicht korrekt -> in Ordnung -> unbewertet. */
+export const MARK_CYCLE = [undefined, 'suspect', 'fine'];
+
 /**
- * Der Spieler markiert ein Feld als auffaellig.
- * Gibt zurueck, ob der Verdacht stimmte.
+ * Der Spieler schaltet den Status eines Feldes um.
+ * Es gibt keine Rueckmeldung, ob die Einschaetzung stimmt.
  */
-export function markField(inspection, guest, field) {
-  if (!inspection || inspection.marks[field]) return { already: true };
+export function toggleField(inspection, field) {
+  if (!inspection) return null;
+  if (!ID_FIELDS.some((f) => f.id === field)) return null;
+  const idx = MARK_CYCLE.indexOf(inspection.marks[field] ?? undefined);
+  const next = MARK_CYCLE[(idx + 1) % MARK_CYCLE.length];
+  if (next === undefined) delete inspection.marks[field];
+  else inspection.marks[field] = next;
+  return { field, label: fieldLabel(field), state: next ?? null };
+}
+
+/** Welche Felder hat der Spieler als "nicht korrekt" markiert? */
+export function claimedFaults(inspection) {
+  if (!inspection) return [];
+  return ID_FIELDS.map((f) => f.id).filter((id) => inspection.marks[id] === 'suspect');
+}
+
+/** Welche Felder hat der Spieler ueberhaupt bewertet? */
+export function ratedFields(inspection) {
+  if (!inspection) return [];
+  return ID_FIELDS.map((f) => f.id).filter((id) => inspection.marks[id]);
+}
+
+/**
+ * Auswertung NACH der Entscheidung: was hat der Spieler richtig erkannt,
+ * was hat er zu Unrecht beanstandet, was hat er uebersehen?
+ */
+export function scoreInspection(inspection, guest) {
   const faults = faultyFields(guest);
-  const correct = faults.has(field);
-  inspection.marks[field] = correct ? 'hit' : 'miss';
-  if (correct) {
-    if (!inspection.found.includes(field)) inspection.found.push(field);
-  } else {
-    inspection.wrong++;
-  }
-  return { already: false, correct, field, label: fieldLabel(field), reason: reasonFor(guest, field) };
+  const claimed = claimedFaults(inspection);
+  const hits = claimed.filter((f) => faults.has(f));
+  const wrong = claimed.filter((f) => !faults.has(f));
+  const missed = [...faults].filter((f) => !claimed.includes(f));
+  return { hits, wrong, missed };
 }
 
 export function fieldLabel(field) {
@@ -142,22 +155,26 @@ export function reasonFor(guest, field) {
   }
 }
 
-/** Was weiss der Spieler nach seiner Prüfung? */
+/** Was hat der Spieler selbst angegeben? (Keine Wahrheit, nur seine Angabe.) */
 export function inspectionVerdict(inspection) {
-  if (!inspection) return { checked: false, clean: null, found: [] };
+  if (!inspection) return { checked: false, clean: null, claimed: [], rated: 0 };
+  const claimed = claimedFaults(inspection);
   return {
     checked: true,
-    found: inspection.found,
-    /** "sauber" heisst hier: der Spieler hat nichts gefunden. */
-    clean: inspection.found.length === 0,
-    wrong: inspection.wrong
+    claimed,
+    rated: ratedFields(inspection).length,
+    /** "sauber" heisst hier: der Spieler hat nichts beanstandet. */
+    clean: claimed.length === 0
   };
 }
 
 export function idSummary(inspection) {
   if (!inspection) return 'NICHT GEPRÜFT';
-  if (inspection.found.length === 0) return 'KEINE AUFFÄLLIGKEIT MARKIERT';
-  return inspection.found.map(fieldLabel).join(' / ');
+  const claimed = claimedFaults(inspection);
+  if (claimed.length === 0) {
+    return ratedFields(inspection).length ? 'ALLES IN ORDNUNG (EIGENE ANGABE)' : 'NOCH NICHTS BEWERTET';
+  }
+  return claimed.map(fieldLabel).join(' / ');
 }
 
 /** Bezeichnung des Prüfgeräts (früher der Scanner). */

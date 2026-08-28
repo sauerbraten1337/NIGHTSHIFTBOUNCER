@@ -5,8 +5,9 @@
  *   1. Abtasten starten - die Zonen werden markiert (Jacke, Hosentaschen, Tasche)
  *   2. Eine Zone wählen -> der Gast leert sie aus (bei der Tasche holt er sie
  *      erst hervor), die Sachen kommen gross auf den Tisch
- *   3. Der Spieler sucht heraus, was nicht in den Club darf - oder erklärt die
- *      Zone für sauber. Zwischen Kaugummi und Klinge liegt sein Auge.
+ *   3. Der Spieler markiert selbst, was nicht in den Club darf, und schliesst
+ *      die Zone ab. Das Spiel sagt nicht, ob er richtig lag - zwischen
+ *      Kaugummi und Klinge liegt sein Auge.
  */
 
 import { ZONES } from '../data/config.js';
@@ -19,47 +20,27 @@ export function zonesFor(guest) {
 }
 
 export function startPatdown(state, guest) {
-  const detector = upgradeLevel(state, 'detector');
   const zones = {};
   for (const zone of zonesFor(guest)) {
     zones[zone.id] = {
       id: zone.id,
       label: zone.label,
-      state: 'closed',      // closed | opening | open | done
+      state: 'closed',      // closed | open | done
       openTimer: 0,
       items: null,          // erst beim Öffnen sichtbar
-      picked: null,         // vom Spieler gewählter Gegenstand
-      correct: null,
-      missed: false
+      flagged: [],          // vom Spieler beanstandete Gegenstände (Item-Ids)
+      picked: null          // erster beanstandeter Gegenstand, für die Anzeige
     };
   }
 
-  const patdown = {
+  return {
     guestId: guest.id,
     zones,
     order: Object.keys(zones),
     active: null,           // aktuell geöffnete Zone
-    hint: detector >= 1 && guest.truth.contraband ? guest.truth.contrabandZone : null,
-    found: null,
     complete: false,
-    autoResolved: false,
     bagOut: false           // die Tasche ist hervorgeholt
   };
-
-  // Stufe 2: der Detektor findet gefährliche Gegenstände von selbst.
-  if (detector >= 2 && guest.truth.contraband && guest.truth.contraband.severity >= 2) {
-    const zone = patdown.zones[guest.truth.contrabandZone];
-    if (zone) {
-      zone.state = 'done';
-      zone.items = guest.truth.carried[zone.id] ?? [];
-      zone.picked = guest.truth.contraband;
-      zone.correct = true;
-    }
-    patdown.found = guest.truth.contraband;
-    patdown.complete = true;
-    patdown.autoResolved = true;
-  }
-  return patdown;
 }
 
 /** Zone öffnen: der Gast holt heraus, was drin ist. */
@@ -74,57 +55,83 @@ export function openZone(patdown, guest, zoneId) {
 }
 
 /**
- * Der Spieler zeigt auf einen Gegenstand (oder erklärt die Zone für sauber).
- * itemId = null bedeutet "hier ist nichts Verbotenes".
+ * Der Spieler markiert einen Gegenstand als nicht regelkonform - oder nimmt
+ * die Markierung wieder zurueck. Es gibt keine Rueckmeldung, ob er richtig lag.
+ * itemId = null schliesst die Zone ab (siehe closeZone).
  */
 export function pickItem(patdown, guest, zoneId, itemId) {
   const zone = patdown?.zones[zoneId];
   if (!zone || zone.state !== 'open') return null;
+  if (itemId === null) return closeZone(patdown, zoneId);
 
-  const forbidden = (zone.items ?? []).find((i) => i.forbidden) ?? null;
+  const item = (zone.items ?? []).find((i) => i.id === itemId);
+  if (!item) return null;
 
-  if (itemId === null) {
-    zone.picked = null;
-    zone.correct = !forbidden;
-    zone.missed = !!forbidden;   // etwas übersehen
-    zone.state = 'done';
-  } else {
-    const item = (zone.items ?? []).find((i) => i.id === itemId);
-    if (!item) return null;
-    zone.picked = item;
-    zone.correct = !!item.forbidden;
-    zone.state = 'done';
-    if (item.forbidden) patdown.found = item;
-  }
+  const at = zone.flagged.indexOf(item.id);
+  if (at >= 0) zone.flagged.splice(at, 1);
+  else zone.flagged.push(item.id);
+  zone.picked = zone.flagged.length ? (zone.items ?? []).find((i) => i.id === zone.flagged[0]) : null;
 
-  patdown.active = null;
-  patdown.complete = Object.values(patdown.zones).every((z) => z.state === 'done');
-  return {
-    zone: zoneId,
-    item: zone.picked,
-    correct: zone.correct,
-    missed: zone.missed,
-    forbidden
-  };
+  return { zone: zoneId, item, flagged: at < 0, flaggedIds: [...zone.flagged] };
 }
 
-/** Zusammenfassung für Notizzettel und Auswertung. */
+/** Zone abschliessen - mit oder ohne Beanstandung. */
+export function closeZone(patdown, zoneId) {
+  const zone = patdown?.zones[zoneId];
+  if (!zone || zone.state !== 'open') return null;
+  zone.state = 'done';
+  patdown.active = null;
+  patdown.complete = Object.values(patdown.zones).every((z) => z.state === 'done');
+  return { zone: zoneId, closed: true, flaggedIds: [...zone.flagged] };
+}
+
+/** Alle vom Spieler beanstandeten Gegenstände. */
+export function flaggedItems(patdown) {
+  if (!patdown) return [];
+  const out = [];
+  for (const zone of Object.values(patdown.zones)) {
+    for (const id of zone.flagged) {
+      const item = (zone.items ?? []).find((i) => i.id === id);
+      if (item) out.push({ zone: zone.id, item });
+    }
+  }
+  return out;
+}
+
+/**
+ * Auswertung NACH der Entscheidung: Treffer, Fehlgriffe, Übersehenes.
+ */
+export function scorePatdown(patdown, guest) {
+  const flagged = flaggedItems(patdown);
+  const hits = flagged.filter((f) => f.item.forbidden);
+  const wrong = flagged.filter((f) => !f.item.forbidden);
+  const seenIds = new Set(flagged.map((f) => f.item.id));
+  const missed = [];
+  for (const zone of Object.values(patdown?.zones ?? {})) {
+    if (zone.state !== 'done') continue;
+    for (const item of zone.items ?? []) {
+      if (item.forbidden && !seenIds.has(item.id)) missed.push({ zone: zone.id, item });
+    }
+  }
+  return { hits, wrong, missed };
+}
+
+/** Zusammenfassung für Notizzettel (nur die Angaben des Spielers). */
 export function patdownResult(patdown) {
   if (!patdown) return null;
   const zones = Object.values(patdown.zones);
   const done = zones.filter((z) => z.state === 'done');
-  const missed = zones.filter((z) => z.missed);
+  const flagged = flaggedItems(patdown);
   return {
     done: patdown.complete,
     partial: done.length > 0 && !patdown.complete,
     zonesChecked: done.length,
     zonesTotal: zones.length,
-    found: patdown.found,
-    missed: missed.length > 0,
-    text: patdown.found
-      ? `GEFUNDEN: ${patdown.found.label.toUpperCase()}`
+    flagged,
+    text: flagged.length
+      ? `BEANSTANDET: ${flagged.map((f) => f.item.label.toUpperCase()).join(', ')}`
       : patdown.complete
-        ? (missed.length ? 'DURCHSUCHT, ABER ETWAS ÜBERSEHEN' : 'NICHTS GEFUNDEN')
+        ? 'NICHTS BEANSTANDET'
         : `${done.length}/${zones.length} ZONEN`
   };
 }

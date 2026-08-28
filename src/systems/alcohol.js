@@ -45,10 +45,6 @@ export function alcoholTest(state, guest) {
     promille,
     limit: ALCOHOL_LIMIT_PROMILLE,
     overLimit: value >= TUNING.drunkRejectThreshold,
-    /** Das Gerät misst nur Alkohol - Auffälligkeiten muss man sehen. */
-    deviceNote: impaired > 0.45 && promille < ALCOHOL_LIMIT_PROMILLE
-      ? 'WERT NIEDRIG — VERHALTEN BEACHTEN'
-      : null,
     text: `${promille.toFixed(1)} ‰`
   };
 }

@@ -11,14 +11,22 @@ import { insertGuest } from './queue.js';
 import { weightedPick, chance, randRange } from '../core/rng.js';
 import { arriveArtist } from './artists.js';
 
+/** Anteil der abgearbeiteten Schicht (lokal, um Zirkelimporte zu vermeiden). */
+function shiftProgress(night) {
+  if (!night?.quota) return 0;
+  return Math.min(1, night.processed / night.quota);
+}
+
 export function updateRandomEvents(game, dt, minutes) {
   const { state, rng } = game;
   const night = state.night;
 
-  // Künstler kommt am Hintereingang an.
+  const progress = shiftProgress(night);
+
+  // Künstler kommt am Hintereingang an - abhaengig vom Schichtfortschritt.
   if (night.artist && !night.artistArrived) {
-    const arriveAt = night.artistDelayed ? 190 : 145;
-    if (night.clock >= arriveAt) arriveArtist(game);
+    const arriveAt = night.artistDelayed ? 0.62 : 0.45;
+    if (progress >= arriveAt) arriveArtist(game);
   }
 
   night.randomEventCooldown -= dt;
@@ -26,7 +34,7 @@ export function updateRandomEvents(game, dt, minutes) {
 
   const chaos = night.event?.chaos ? 0.6 : 1;
   night.randomEventCooldown = randRange(rng, 32, 70) * chaos;
-  if (night.clock < 25 || night.clock > 270) return;
+  if (progress < 0.08 || progress > 0.9) return;
   if (!chance(rng, 0.72)) return;
 
   const event = weightedPick(rng, RANDOM_EVENTS);

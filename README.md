@@ -5,6 +5,11 @@ Du siehst die Strasse, die Schlange und den Gast direkt vor dir. Er reicht dir s
 und du prüfst ihn **selbst**: Foto gegen Gesicht, Name gegen Aussage, Geburtsdatum gegen heute,
 Ablaufdatum, Hologramm. Dann entscheidest du.
 
+**Das Spiel zeigt dir nichts an.** Es markiert keine Auffälligkeit, piept nicht und hakt
+nichts für dich ab. Was nicht der Norm entspricht, trägst du selbst ein — auf dem Ausweis,
+auf dem Kontrolltisch und auf deinem Notizblock. Abgerechnet wird erst am Ende der Nacht,
+und jede zutreffende Beanstandung bringt Geld.
+
 Spielbar **allein**, zu zweit **an einer Tastatur** (Splitscreen) oder **online über einen Raumcode**.
 
 **Das Spiel ist 2D.** Frontansicht mit Tiefenstaffelung, alles prozedural auf Canvas gezeichnet —
@@ -16,6 +21,11 @@ Der Ausweis liegt in deiner Hand, die Checkliste hängt als Notizzettel daneben,
 und was aus einer Tasche kommt, landet gross auf dem Kontrolltisch:
 
 ![Kontrolle](docs/shot-search.png)
+
+Am linken Rand fährt die Hausordnung aus — ein amtliches Schreiben mit allem, was
+nicht in den Club darf:
+
+![Hausordnung](docs/shot-rulebook.png)
 
 ---
 
@@ -92,8 +102,9 @@ zusätzlich über die Zifferntasten).
 
 ## Die Kontrolle
 
-Der Ausweis liegt gross und lesbar unten links. **Klick auf ein Feld = beanstanden.**
-Das Spiel verrät nichts von selbst — du musst hinsehen:
+Der Ausweis liegt gross und lesbar unten links. **Jeder Klick auf ein Feld schaltet deinen
+eigenen Vermerk um: *nicht korrekt* → *in Ordnung* → leer.** Das Spiel verrät nichts von
+selbst und sagt dir auch nicht, ob du richtig liegst — du musst hinsehen:
 
 | Feld | Wie du es prüfst |
 |---|---|
@@ -103,10 +114,13 @@ Das Spiel verrät nichts von selbst — du musst hinsehen:
 | **Gültig bis** | Gegen das heutige Datum oben auf der Karte. |
 | **Merkmale** | Drei Hologramm-Marken. Matt oder fehlend = gefälscht. |
 
-Geprüfte Felder färben sich nach ihrem Befund: **grün, wenn sie in Ordnung sind, rot, wenn
-etwas nicht stimmt.** Das Dokumenten-Prüfgerät (Upgrade) und das Talent *Street Smarts* geben
-Hinweise („Dokument prüfen", später auch welches Feld), nehmen dir die Prüfung aber nie ab.
-Fällt der Strom aus, hilft dir gar kein Gerät mehr.
+Die Felder färben sich nach **deiner** Angabe: grün für *in Ordnung*, rot für *nicht korrekt*.
+Ob das stimmt, erfährst du erst nach der Entscheidung — Hinweise, Warntöne oder markierte
+Felder gibt es nicht mehr, auch nicht durch Upgrades. Die Ausrüstung macht dich nur schneller.
+
+**Jede zutreffende Beanstandung ist bares Geld.** Am Ende der Nacht rechnet der Bericht ab,
+was du selbst gefunden hast, was du zu Unrecht beanstandet und was du übersehen hast.
+Wer genau hinsieht, verdient mehr.
 
 ### Abtasten und Gegenstände
 
@@ -115,9 +129,17 @@ Eine Tasche gibt es nur, wenn der Gast wirklich eine dabei hat — dann siehst d
 seiner Schulter, und er holt sie erst hervor, bevor der Prüfring erscheint.
 
 Der Inhalt kommt gross auf den Kontrolltisch: Kaugummi, Schlüssel, Ladekabel — und
-vielleicht eine Glasflasche, ein Reizgas oder eine Klinge. **Du** zeigst auf das, was
-nicht in den Club darf, oder gibst die Zone frei. Danebengegriffen heisst: der Gegenstand
-war harmlos. Freigegeben, obwohl etwas drin war, steht später im Bericht.
+vielleicht eine Glasflasche, ein Reizgas oder eine Klinge. **Du** markierst, was nicht in
+den Club darf (nochmal klicken nimmt die Markierung zurück), und schliesst die Zone dann ab.
+Ob du richtig lagst, sagt dir hier niemand — das steht erst im Bericht.
+
+### Die Hausordnung
+
+Am linken Bildrand klebt ein Pfeil. Fährst du mit der Maus darüber, klappt die Hausordnung
+aus: ein amtliches Schreiben mit Briefkopf, Aktenzeichen und Stempel, das Paragraph für
+Paragraph auflistet, welche Gegenstände nicht in den Club dürfen, welche Stufe sie haben
+und was zu tun ist. Sie sagt, **was** verboten ist — ob der Gast davon etwas dabei hat,
+entscheidest weiterhin du.
 
 ### Alkohol und Zustand
 
@@ -130,12 +152,25 @@ Nacht kommen Gäste, die anders auffallen — weite Pupillen, Schweiss auf der S
 mahlender Kiefer, zittrige Hände, abwesender Blick. Das steht in keiner Anzeige.
 Das siehst du der Person an oder eben nicht.
 
-### Der Notizzettel
+### Der Notizzettel — zwei Seiten, beide deine
 
-Unten rechts hängt kein HUD-Panel, sondern ein handgeschriebener Zettel: was du geprüft hast
-(durchgestrichen und abgehakt), was noch offen ist, und hingekritzelte Bemerkungen.
+Unten rechts hängt kein HUD-Panel, sondern ein handgeschriebener Block mit zwei Reitern:
+
+* **Seite 1 — Checkliste.** Was bei diesem Gast noch zu prüfen ist. Du hakst selbst ab;
+  das Spiel setzt keinen einzigen Haken für dich.
+* **Seite 2 — Befund.** Dokument, Zustand der Person, mitgeführte Sachen, Alkoholwert.
+  Ein Klick auf eine Zeile trägt ein: *entspricht der Norm* → *entspricht nicht* → leer.
+
 Belegung des Clubs, Ausbaustufe und die alte Übersichtskarte gibt es im Spiel nicht mehr —
-während der Schicht zählt nur, was auf dem Zettel steht.
+während der Schicht zählt nur, was auf dem Zettel steht. Und was dort steht, hast du
+selbst geschrieben.
+
+### Die Schicht statt der Uhr
+
+Es gibt keinen Tages-Timer mehr. Oben links steht, **wie viele Gäste heute auf der Liste
+stehen** — 16 in der ersten Nacht, mit jeder weiteren zwei mehr, gedeckelt bei 40. Sind sie
+abgearbeitet, ist Feierabend. Du kannst dir also Zeit lassen: Gründlichkeit kostet dich
+keine Sekunde Schicht, nur die Geduld der Leute in der Schlange.
 
 ## Was mit der Zeit dazukommt
 
@@ -194,14 +229,15 @@ src/main.js           Modi, Spielfluss, Eingaben, Host/Gast-Verdrahtung
 
 src/core/             rng · bus · input · loop · audio
 src/data/             config (Modi, Rollen, Balancing) · dialogue
-src/systems/          state · guests · queue · identity · security · alcohol
+src/systems/          state · guests · queue · identity · security · alcohol · notes
                       decision · economy · reputation · upgrades · artists · randomEvents
                       nightcycle · progression · difficulty · tutorial · coop · save
 src/render/           layout · palette · sprites · figure (grosse Frontfiguren)
                       items (gezeichnete Gegenstände) · scene (Tür-/Schleusenansicht,
                       Abtast-Ringe, Alkoholtestgerät) · effects · renderer
-src/ui/               hud (inkl. Entscheidungs-Buttons) · notepad (Notizzettel)
+src/ui/               hud (inkl. Entscheidungs-Buttons) · notepad (Block mit zwei Seiten)
                       idcard (Ausweis in der Hand) · itemtray (Kontrolltisch)
+                      rulebook (ausfahrende Hausordnung am linken Rand)
                       report · shop · screens
 src/net/net.js        Räume, Schnappschüsse, Aktionen
 server/index.js       Statischer Server + WebSocket-Raumvermittlung

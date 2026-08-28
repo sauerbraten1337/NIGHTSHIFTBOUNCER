@@ -27,12 +27,19 @@ export function renderReport(game, onContinue) {
       ${cell('UMSATZ', `€${Math.round(s.revenue).toLocaleString('de-DE')}`, 'good')}
       ${cell('VORFÄLLE', s.incidents, s.incidents > 0 ? 'bad' : 'good')}
       ${cell('VIPS', s.vips)}
-      ${cell('VERIFIED', s.verified, 'good')}
+      ${cell('GEFUNDEN', s.findings ?? 0, (s.findings ?? 0) > 0 ? 'good' : '')}
     </div>
+
+    <h2 class="sec">EIGENE BEFUNDE</h2>
+    ${kv('Gefundene Unregelmäßigkeiten', s.findings ?? 0, (s.findings ?? 0) > 0 ? 'good' : '')}
+    ${kv('Zu Unrecht beanstandet', s.falseAlarms ?? 0, (s.falseAlarms ?? 0) > 0 ? 'bad' : '')}
+    ${kv('Übersehen', s.overlooked ?? 0, (s.overlooked ?? 0) > 0 ? 'bad' : '')}
 
     <h2 class="sec">BILANZ</h2>
     ${kv('Eintritt', `€${Math.round(s.entry).toLocaleString('de-DE')}`, 'good')}
     ${kv('Bar & VIP', `€${Math.round(s.bar).toLocaleString('de-DE')}`, 'good')}
+    ${kv('Prämie für Befunde', `€${Math.round(s.findingPay ?? 0).toLocaleString('de-DE')}`,
+      (s.findingPay ?? 0) > 0 ? 'good' : '')}
     ${s.fines ? kv('Bußgelder & Schäden', `−€${Math.round(s.fines).toLocaleString('de-DE')}`, 'bad') : ''}
     ${s.artistFee ? kv('Gage', `−€${Math.round(s.artistFee).toLocaleString('de-DE')}`, 'bad') : ''}
     ${kv('Netto', `€${Math.round(netto).toLocaleString('de-DE')}`, netto >= 0 ? 'good' : 'bad')}

@@ -97,9 +97,9 @@ html, body {
 /* ---------- Notizzettel ---------- */
 
 .notepad {
-  position: absolute; bottom: 116px; right: 30px; width: 282px; max-height: 60vh; overflow: hidden;
+  position: absolute; bottom: 116px; right: 30px; width: 296px; max-height: 60vh; overflow-y: auto;
   z-index: 2;
-  padding: 16px 18px 20px;
+  padding: 22px 18px 20px;
   background:
     repeating-linear-gradient(180deg, transparent 0 25px, rgba(70, 90, 120, 0.16) 25px 26px),
     linear-gradient(160deg, #f6f1e2 0%, #efe8d6 55%, #e6ddc8 100%);
@@ -110,7 +110,8 @@ html, body {
   transform: rotate(-1.1deg);
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55), inset 0 0 40px rgba(160, 140, 100, 0.18);
   border: 1px solid #cdbf9e;
-  pointer-events: none;
+  /* Der Zettel wird jetzt vom Spieler selbst gefuehrt - also anklickbar. */
+  pointer-events: auto;
 }
 /* Klebestreifen oben */
 .notepad::before {
@@ -134,6 +135,17 @@ html, body {
 }
 .np-empty { font-size: 21px; color: #5a6472; }
 
+/* Zwei Seiten: Reiter am Kopf des Zettels */
+.np-tabs { display: flex; gap: 6px; margin-bottom: 6px; }
+.np-tab {
+  flex: 1; cursor: pointer; background: rgba(210, 196, 158, 0.5);
+  border: 1px solid rgba(150, 132, 96, 0.6); border-bottom: none;
+  font-family: var(--mono); font-size: 8px; letter-spacing: 2px;
+  color: #7a6a4c; padding: 4px 2px;
+}
+.np-tab.on { background: rgba(255, 250, 235, 0.85); color: #2a3140; font-weight: 700; }
+.np-tab:hover { color: #2a3140; }
+
 .np-list { list-style: none; margin: 0; padding: 0; }
 .np-row {
   display: grid; grid-template-columns: 20px 116px 1fr; align-items: baseline;
@@ -141,6 +153,7 @@ html, body {
 }
 .np-mark { font-size: 21px; font-weight: 700; }
 .np-task { white-space: nowrap; }
+.np-task i { display: block; font-size: 14px; font-style: normal; opacity: 0.6; }
 .np-note { color: #3d4a5c; font-size: 18px; }
 
 .np-row.ok .np-mark { color: #1f7a45; }
@@ -150,13 +163,35 @@ html, body {
 .np-row.part .np-mark, .np-row.part .np-note { color: #a06a12; }
 .np-row.todo { opacity: 0.62; }
 
+/* Seite 1: selbst abzuhakende Kaestchen */
+.np-checklist .np-row, .np-findings .np-row { cursor: pointer; padding: 3px 0; }
+.np-checklist .np-row:hover, .np-findings .np-row:hover { background: rgba(255, 255, 255, 0.35); }
+.np-checklist .np-row { grid-template-columns: 22px 1fr; }
+.np-checklist .np-task { white-space: normal; line-height: 1.15; }
+/* Befund: Thema oben, Urteil darunter - sonst laeuft der Text aus dem Zettel */
+.np-findings .np-row { grid-template-columns: 20px 1fr; row-gap: 0; }
+.np-findings .np-task { white-space: normal; line-height: 1.1; }
+.np-findings .np-note {
+  grid-column: 2; font-size: 16px; padding-bottom: 3px;
+  border-bottom: 1px dotted rgba(60, 80, 110, 0.35);
+}
+.np-box {
+  width: 16px; height: 16px; border: 2px solid #4a5568; display: inline-block;
+  text-align: center; line-height: 13px; font-size: 15px; color: #1f7a45;
+}
+.np-checklist .np-row.ok .np-box { border-color: #1f7a45; }
+.np-foot-note { margin-top: 6px; font-size: 16px; color: #6b7688; }
+
 .np-stamp {
   margin-top: 10px; font-family: var(--mono); font-size: 10px; letter-spacing: 3px;
   text-align: center; padding: 5px; border: 2px solid currentColor; transform: rotate(-3deg);
 }
 .np-stamp.ok { color: #1f7a45; }
 .np-stamp.warn { color: #a06a12; }
-.np-scribble { margin-top: 8px; font-size: 19px; color: #3d4a5c; }
+.np-scribble {
+  margin-top: 8px; font-size: 17px; color: #3d4a5c; line-height: 1.1;
+  overflow: hidden; text-overflow: ellipsis;
+}
 .np-scribble.bad, .np-scribble.deny { color: #b3202a; }
 .np-scribble.ok { color: #1f7a45; }
 
@@ -372,6 +407,80 @@ html, body {
 }
 .tray-item:hover { border-color: var(--amber); background: #1a1f29; transform: translateY(-2px); }
 .tray-item:active { transform: translateY(0); }
+/* Vom Spieler beanstandet - sagt nichts darueber aus, ob er richtig liegt. */
+.tray-item.flagged { border-color: var(--amber); border-width: 2px; background: #221a10; }
+.tray-flag {
+  position: absolute; top: 4px; right: 4px; font-size: 8px; letter-spacing: 1px;
+  color: var(--amber); border: 1px solid var(--amber); padding: 0 3px;
+}
+
+/* ---------- Hausordnung am linken Rand ---------- */
+
+.rulebook {
+  /* Etwas oberhalb der Mitte: der Ausweis liegt unten links. */
+  position: absolute; left: 0; top: 38%; transform: translateY(-50%);
+  display: flex; align-items: center; pointer-events: auto; z-index: 7;
+}
+.rb-tab {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  background: #efe8d4; color: #2b2313; border: 1px solid #b9a87d; border-left: none;
+  font-family: var(--mono); font-size: 8px; letter-spacing: 2px; line-height: 1.5;
+  padding: 14px 6px; cursor: pointer; box-shadow: 3px 4px 14px rgba(0, 0, 0, 0.55);
+}
+.rb-tab:hover { background: #fff9e8; }
+.rb-arrow { font-size: 12px; transition: transform 180ms ease; }
+.rulebook.open .rb-arrow { transform: rotate(180deg); }
+
+.rb-sheet {
+  width: 0; max-width: 0; overflow: hidden;
+  transition: max-width 260ms ease, width 260ms ease;
+}
+.rulebook.open .rb-sheet { width: min(430px, 34vw); max-width: min(430px, 34vw); }
+
+/* Optik eines amtlichen Schreibens */
+.rb-doc {
+  width: min(430px, 34vw); max-height: 62vh; overflow-y: auto;
+  background: linear-gradient(180deg, #fdfaf1 0%, #f4eedd 100%);
+  color: #1d2430; border: 1px solid #b9a87d; border-left: none;
+  padding: 18px 20px 22px;
+  font-family: "IBM Plex Mono", monospace; font-size: 11px; line-height: 1.55;
+  box-shadow: 6px 8px 26px rgba(0, 0, 0, 0.6);
+}
+.rb-letterhead {
+  display: flex; align-items: center; gap: 12px;
+  border-bottom: 3px double #3a4354; padding-bottom: 10px;
+}
+.rb-crest {
+  width: 34px; height: 34px; flex: none; display: grid; place-items: center;
+  border: 2px solid #3a4354; font-size: 20px; font-weight: 700;
+}
+.rb-org { font-size: 12px; letter-spacing: 2px; font-weight: 700; }
+.rb-sub { font-size: 10px; color: #5a6272; letter-spacing: 1px; }
+.rb-meta {
+  display: flex; justify-content: space-between; font-size: 9px;
+  letter-spacing: 1px; color: #6b7383; padding: 6px 0 10px;
+  border-bottom: 1px solid #c9bd9c;
+}
+.rb-para { margin: 10px 0; text-align: justify; }
+.rb-para b { letter-spacing: 1px; }
+
+.rb-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10px; }
+.rb-table th {
+  text-align: left; border-bottom: 1px solid #3a4354; padding: 4px 6px;
+  letter-spacing: 1px; font-size: 9px; text-transform: uppercase;
+}
+.rb-table td { padding: 4px 6px; border-bottom: 1px dotted #c0b492; vertical-align: top; }
+.rb-no { color: #8a8060; }
+.rb-sev { letter-spacing: 2px; font-weight: 700; white-space: nowrap; }
+.rb-sev.s1 { color: #7a6a2a; }
+.rb-sev.s2 { color: #a0561a; }
+.rb-sev.s3 { color: #99202a; }
+
+.rb-stamp {
+  margin-top: 14px; display: inline-block; transform: rotate(-4deg);
+  border: 2px solid #4a5a8a; color: #4a5a8a; padding: 5px 10px;
+  font-size: 9px; letter-spacing: 3px; opacity: 0.85;
+}
 
 .tray-clear {
   display: block; width: 100%; margin-top: 9px; padding: 7px;

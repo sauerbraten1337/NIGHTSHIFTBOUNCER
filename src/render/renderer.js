@@ -13,7 +13,7 @@ import { drawStationView } from './scene.js';
 import {
   createEffects, updateEffects, drawFog, drawDust, drawSparks, scanlines, vignette
 } from './effects.js';
-import { currentPhase } from '../systems/nightcycle.js';
+import { currentPhase, shiftProgress } from '../systems/nightcycle.js';
 import { isSolo } from '../systems/state.js';
 import { AREAS } from '../data/config.js';
 
@@ -42,7 +42,7 @@ export function createRenderer(canvas) {
     updateEffects(fx, dt);
 
     const night = state.night;
-    const phase = night ? currentPhase(night.clock) : { intensity: 0.35, label: 'CLOSED' };
+    const phase = night ? currentPhase(shiftProgress(night)) : { intensity: 0.35, label: 'CLOSED' };
     beatTime += dt * (128 / 60) * (0.8 + phase.intensity * 0.4);
     const beat = beatTime % 1;
     const pulse = Math.pow(1 - beat, 3);

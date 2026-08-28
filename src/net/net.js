@@ -142,6 +142,8 @@ export function serializeState(game) {
     xp: state.xp,
     night: night ? {
       clock: night.clock,
+      quota: night.quota,
+      processed: night.processed,
       running: night.running,
       event: night.event,
       artist: night.artist,
@@ -189,11 +191,14 @@ function viewGuest(guest) {
 }
 
 function viewStation(station) {
+  const checks = station.checks;
   return {
     id: station.id,
     guest: viewGuest(station.guest),
-    checks: station.checks,
-    patdown: station.patdown
+    // Die Wahrheit ueber das Dokument bleibt auf dem Host.
+    checks: checks.id ? { ...checks, id: { ...checks.id, faults: undefined } } : checks,
+    patdown: station.patdown,
+    notes: station.notes
   };
 }
 
@@ -220,6 +225,8 @@ export function applySnapshot(shadow, data) {
   const n = data.night;
   shadow.state.night = {
     clock: n.clock,
+    quota: n.quota,
+    processed: n.processed,
     running: n.running,
     event: n.event,
     artist: n.artist,

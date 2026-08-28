@@ -1,13 +1,14 @@
 /**
- * HUD: Uhr, Geld/Ruf/Schlange, Aktionsleisten, die grossen Entscheidungs-Buttons
- * unten in der Mitte, Funk, Tutorial, Toasts.
+ * HUD: Schichtplan (Gäste), Geld/Ruf/Schlange, Aktionsleisten, die grossen
+ * Entscheidungs-Buttons unten in der Mitte, Funk, Tutorial, Toasts.
  *
- * Bewusst NICHT mehr im HUD: Belegung des Clubs, Ausbaustufe und die alte
+ * Bewusst NICHT mehr im HUD: der Tages-Timer (die Schicht endet, wenn die
+ * Gästeliste abgearbeitet ist), Belegung des Clubs, Ausbaustufe und die alte
  * Übersichtskarte - das steht jetzt alles auf dem Notizzettel bzw. gar nicht.
  */
 
-import { CLUB_NAME, TUNING, AREAS } from '../data/config.js';
-import { clockString, currentPhase } from '../systems/nightcycle.js';
+import { CLUB_NAME, AREAS } from '../data/config.js';
+import { currentPhase } from '../systems/nightcycle.js';
 import { repBand } from '../systems/reputation.js';
 import { createNotepad } from './notepad.js';
 
@@ -121,12 +122,15 @@ export function createHud(game) {
 
     if (!night) return;
 
-    el.clock.textContent = clockString(night.clock);
-    const phase = currentPhase(night.clock);
+    // Kein Timer mehr: die Schicht misst sich in Gästen, nicht in Minuten.
+    const quota = night.quota ?? 0;
+    const done = Math.min(night.processed ?? 0, quota);
+    el.clock.textContent = `${done}/${quota}`;
+    const phase = currentPhase(quota ? done / quota : 0);
     el.phase.textContent = `${phase.label} · ${repBand(state.reputation)}`;
     el.status.textContent =
       `NIGHT ${String(state.nightIndex).padStart(2, '0')} · ${night.event?.label ?? ''}`;
-    el.nightbar.style.width = `${(night.clock / TUNING.nightEndMinute) * 100}%`;
+    el.nightbar.style.width = `${quota ? (done / quota) * 100 : 0}%`;
     el.queue.textContent = `${night.queueLength ?? night.queue.length}`;
 
     el.effects.innerHTML = (night.activeEffects ?? [])

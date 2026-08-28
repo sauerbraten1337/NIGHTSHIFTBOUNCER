@@ -10,17 +10,23 @@ import {
 } from './state.js';
 import { changeReputation, crowdPull } from './reputation.js';
 import { createGuest, guestLine } from './guests.js';
+import { emptyNotes } from './notes.js';
 import { clamp } from '../core/rng.js';
 
-/** Wie viele Gäste pro Spielminute eintreffen (Kurve über die Nacht). */
+/**
+ * Wie viele Gäste pro Spielminute eintreffen.
+ *
+ * Die Kurve haengt am Schichtfortschritt, nicht mehr an der Uhr: erst
+ * ruhig, dann voll, gegen Ende der Liste wieder ruhiger.
+ */
 export function arrivalRate(state) {
   const night = state.night;
-  const t = night.clock;
+  const p = clamp(night.processed / Math.max(1, night.quota), 0, 1);
   let curve;
-  if (t < 30) curve = 0.45 + t / 30 * 0.45;
-  else if (t < 180) curve = 0.5 + (t - 30) / 150 * 0.9;
-  else if (t < 240) curve = 1.4 - (t - 180) / 60 * 0.35;
-  else curve = clamp(1.05 - (t - 240) / 60 * 0.95, 0.05, 1.05);
+  if (p < 0.1) curve = 0.45 + p / 0.1 * 0.45;
+  else if (p < 0.6) curve = 0.9 + (p - 0.1) / 0.5 * 0.5;
+  else if (p < 0.85) curve = 1.4 - (p - 0.6) / 0.25 * 0.35;
+  else curve = clamp(1.05 - (p - 0.85) / 0.15 * 0.6, 0.4, 1.05);
 
   const rush = night.activeEffects.some((e) => e.id === 'rush') ? 2.4 : 0;
   const viral = night.activeEffects.some((e) => e.id === 'influencerPost') ? 0.6 : 0;
@@ -29,6 +35,23 @@ export function arrivalRate(state) {
   const modeScale = isSolo(state) ? 0.55 : 1;
   return ((curve * (night.event?.spawn ?? 1) * crowdPull(state) * 0.55) + rush + viral)
     * tutorial * modeScale;
+}
+
+/**
+ * Wie viele Gaeste des Schichtplans stecken gerade im System?
+ * Abgearbeitete zaehlen mit, weggelaufene nicht - fuer die kommt Ersatz.
+ */
+export function guestsInShift(night) {
+  return night.processed
+    + night.queue.length
+    + night.airlockQueue.length
+    + (night.stations.door.guest ? 1 : 0)
+    + (night.stations.airlock.guest ? 1 : 0);
+}
+
+/** Wie viele Gaeste stehen noch auf der Liste? */
+export function guestsLeft(night) {
+  return Math.max(0, (night?.quota ?? 0) - (night?.processed ?? 0));
 }
 
 export function updateQueue(game, dt, minutes) {
@@ -40,7 +63,8 @@ export function updateQueue(game, dt, minutes) {
     night.spawnCooldown -= minutes * arrivalRate(state) * 0.45;
     while (night.spawnCooldown <= 0) {
       night.spawnCooldown += 1;
-      if (night.clock >= 285) break;
+      // Nur so viele Leute schicken, wie fuer den Schichtplan noch fehlen.
+      if (guestsInShift(night) >= night.quota) break;
       if (night.queue.length < cap) spawnGuest(game);
       else { night.stats.left++; night.stats.arrived++; }
     }
@@ -95,6 +119,7 @@ function advanceStations(game) {
     door.guest = next;
     door.checks = emptyStationChecks();
     door.patdown = null;
+    door.notes = emptyNotes();
     bus.emit('stationGuest', { station: 'door', guest: next });
   }
 
@@ -106,6 +131,7 @@ function advanceStations(game) {
     airlock.guest = next;
     airlock.checks = emptyStationChecks();
     airlock.patdown = null;
+    airlock.notes = emptyNotes();
     bus.emit('stationGuest', { station: 'airlock', guest: next });
   }
 }

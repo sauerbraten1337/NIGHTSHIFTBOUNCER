@@ -4,12 +4,14 @@
  * Das Spiel sagt nicht, was falsch ist. Der Spieler vergleicht selbst:
  * Foto gegen Gesicht, Name gegen Aussage, Geburtsdatum gegen heute,
  * Ablaufdatum gegen heute, Hologramm auf Vollständigkeit.
- * Ein Klick auf ein Feld heisst: "hier stimmt etwas nicht".
+ * Ein Klick auf ein Feld schaltet den Status um, den der Spieler vergibt:
+ *   nichts -> NICHT KORREKT -> IN ORDNUNG -> nichts
+ * Das Spiel bewertet nichts davon, es notiert nur.
  */
 
 import { escapeHtml } from './hud.js';
 import { drawPortrait } from '../render/figure.js';
-import { ID_FIELDS, todayString, ageFromBirth, fieldLabel } from '../systems/identity.js';
+import { ID_FIELDS, todayString, ageFromBirth, claimedFaults } from '../systems/identity.js';
 import { TUNING } from '../data/config.js';
 
 export function createIdCard(game, { root, roleId = 'bouncer' } = {}) {
@@ -58,7 +60,7 @@ function template(game, guest, inspection, station) {
   const doc = guest.doc;
   const age = ageFromBirth(doc.birth);
   const said = station.checks.talk?.realName;
-  const hint = inspection.hint;
+  const claimed = claimedFaults(inspection);
 
   return `
     <div class="idc-head">
@@ -84,7 +86,7 @@ function template(game, guest, inspection, station) {
         <div class="idc-row ${mark(inspection, 'birth')}" data-field="birth" title="Alter berechnen, auf Manipulation achten">
           <span class="k">GEBOREN</span>
           <span class="v ${doc.tampered ? 'tampered' : ''}">${birthMarkup(doc)}</span>
-          <span class="age ${age < TUNING.minAge ? 'bad' : ''}">${age} J.</span>${badge(inspection, 'birth')}
+          <span class="age">${age} J.</span>${badge(inspection, 'birth')}
         </div>
         <div class="idc-row ${mark(inspection, 'expiry')}" data-field="expiry" title="Gegen das heutige Datum prüfen">
           <span class="k">GÜLTIG BIS</span>
@@ -102,11 +104,9 @@ function template(game, guest, inspection, station) {
     <div class="idc-foot">
       ${said ? `<span class="idc-said">GAST SAGT: <b>${escapeHtml(said)}</b></span>`
              : '<span class="idc-said dim">Namen erfragen: ANSPRECHEN</span>'}
-      ${hint === 'any' ? '<span class="idc-hint">GERÄT: DOKUMENT PRÜFEN</span>'
-        : hint ? `<span class="idc-hint">GERÄT: ${escapeHtml(fieldLabel(hint))}</span>` : ''}
-      ${inspection.found.length
-        ? `<span class="idc-found">${inspection.found.length} AUFFÄLLIGKEIT(EN) MARKIERT</span>`
-        : '<span class="idc-said dim">Feld anklicken = beanstanden</span>'}
+      ${claimed.length
+        ? `<span class="idc-found">${claimed.length} FELD(ER) ALS NICHT KORREKT NOTIERT</span>`
+        : '<span class="idc-said dim">Feld anklicken: nicht korrekt · in Ordnung · leer</span>'}
     </div>
   `;
 }
@@ -119,18 +119,18 @@ function birthMarkup(doc) {
 }
 
 /**
- * Die Farbe beschreibt das Feld, nicht den Klick:
- * geprüft und in Ordnung -> grün, geprüft und auffällig -> rot.
+ * Die Farbe zeigt die Einschätzung des SPIELERS:
+ * rot = er hält das Feld für nicht korrekt, grün = er hält es für in Ordnung.
  */
 function mark(inspection, field) {
   const m = inspection.marks[field];
-  return m === 'hit' ? 'suspect' : m === 'miss' ? 'fine' : '';
+  return m === 'suspect' ? 'suspect' : m === 'fine' ? 'fine' : '';
 }
 
 function badge(inspection, field) {
   const m = inspection.marks[field];
-  if (m === 'hit') return '<span class="idc-badge suspect">NICHT KORREKT</span>';
-  if (m === 'miss') return '<span class="idc-badge fine">IN ORDNUNG</span>';
+  if (m === 'suspect') return '<span class="idc-badge suspect">NICHT KORREKT</span>';
+  if (m === 'fine') return '<span class="idc-badge fine">IN ORDNUNG</span>';
   return '';
 }
 

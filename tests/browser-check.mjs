@@ -79,11 +79,20 @@ if (shots) await solo.screenshot({ path: 'docs/shot-door.png' });
 results.tutorialStep = await solo.evaluate(() => window.NULLWERK.state.night.tutorial?.step?.id ?? null);
 results.idCardVisible = true;
 
-// Ausweisfeld anklicken (bewusst ein sauberes Feld -> "nichts zu beanstanden")
+// Ausweisfeld anklicken: der Status muss durch den Zyklus laufen,
+// ohne dass das Spiel eine Bewertung dazu abgibt.
 await solo.click('.idc-row[data-field="expiry"]');
-await solo.waitForTimeout(300);
-results.markedMiss = await solo.evaluate(() =>
+await solo.waitForTimeout(250);
+results.markFirst = await solo.evaluate(() =>
   window.NULLWERK.state.night.stations.door.checks.id.marks.expiry);
+await solo.click('.idc-row[data-field="expiry"]');
+await solo.waitForTimeout(250);
+results.markSecond = await solo.evaluate(() =>
+  window.NULLWERK.state.night.stations.door.checks.id.marks.expiry);
+await solo.click('.idc-row[data-field="expiry"]');
+await solo.waitForTimeout(250);
+results.markThird = await solo.evaluate(() =>
+  window.NULLWERK.state.night.stations.door.checks.id.marks.expiry ?? null);
 
 // Ein paar Gäste abarbeiten: prüfen, markieren wo nötig, entscheiden.
 for (let i = 0; i < 30; i++) {
@@ -133,9 +142,10 @@ for (let i = 0; i < 30; i++) {
       if (bad) {
         results.contrabandFound = true;
         await solo.click(`.tray-item[data-item="${bad}"]`).catch(() => {});
-      } else {
-        await solo.click('.tray-clear').catch(() => {});
+        await solo.waitForTimeout(200);
       }
+      // Zone muss ausdrücklich abgeschlossen werden.
+      await solo.click('.tray-clear').catch(() => {});
       await solo.waitForTimeout(320);
     }
 
@@ -151,13 +161,24 @@ results.solo = await solo.evaluate(() => {
   return {
     mode: s.mode, phase: s.phase, money: Math.round(s.money),
     stats: s.night.stats, unlocks: s.unlocks,
+    quota: s.night.quota, processed: s.night.processed,
     clock: Math.round(s.night.clock)
   };
 });
 if (shots) await solo.screenshot({ path: 'docs/shot-solo.png' });
 
-// Nacht abkürzen -> Report -> Shop
-await solo.evaluate(() => { window.NULLWERK.state.night.clock = 298; });
+// Nacht abkürzen: der Timer ist weg, also wird die Gästeliste als
+// abgearbeitet gesetzt (das Tutorial haelt die Schicht sonst offen).
+await solo.evaluate(() => {
+  const n = window.NULLWERK.state.night;
+  n.tutorial = null;
+  n.processed = n.quota;
+});
+await solo.waitForTimeout(400);
+results.soloEnd = await solo.evaluate(() => {
+  const n = window.NULLWERK.state.night;
+  return { phase: window.NULLWERK.state.phase, processed: n.processed, quota: n.quota };
+});
 results.report = await solo.waitForSelector('#report-next', { timeout: 10000 }).then(() => true).catch(() => false);
 if (shots && results.report) await solo.screenshot({ path: 'docs/shot-report.png' });
 if (results.report) {
@@ -186,8 +207,9 @@ for (let i = 0; i < 24; i++) {
       const pat = air.patdown;
       const open = pat.active ? pat.zones[pat.active] : null;
       if (open) {
-        const bad = open.items.find((i) => i.forbidden);
-        g.act('security', 'pick', { zone: open.id, itemId: bad ? bad.id : null });
+        const bad = open.items.find((i) => i.forbidden && !open.flagged.includes(i.id));
+        if (bad) g.act('security', 'pick', { zone: open.id, itemId: bad.id });
+        else g.act('security', 'closezone', { zone: open.id });
       } else {
         const next = Object.values(pat.zones).find((z) => z.state === 'closed');
         if (next) g.act('security', 'zone', { zone: next.id });
@@ -206,6 +228,7 @@ for (let i = 0; i < 24; i++) {
       count: items.length,
       labels: items.map((el) => el.querySelector('.tray-label')?.textContent.trim()),
       forbidden: open?.items.find((i) => i.forbidden)?.id ?? null,
+      flagged: open?.flagged ?? [],
       painted: items.every((el) => el.querySelector('canvas')?.width > 0)
     };
   });
@@ -214,16 +237,62 @@ for (let i = 0; i < 24; i++) {
     results.trayCount = Math.max(results.trayCount ?? 0, tray.count);
     results.trayPainted = tray.painted;
     // Auswahl per echtem Mausklick auf die Karte
-    if (tray.forbidden) {
+    if (tray.forbidden && !tray.flagged.includes(tray.forbidden)) {
       await coop.click(`.tray-item[data-item="${tray.forbidden}"]`).catch(() => {});
       results.contrabandFound = true;
-    } else {
-      await coop.click('.tray-clear').catch(() => {});
-      results.clearedByClick = true;
+      await coop.waitForTimeout(200);
     }
+    await coop.click('.tray-clear').catch(() => {});
+    results.clearedByClick = true;
     await coop.waitForTimeout(300);
   }
   await coop.waitForTimeout(250);
+}
+
+// Hausordnung: Pfeil am linken Rand, faehrt bei Hover aus.
+await coop.hover('#rulebook .rb-tab').catch(() => {});
+await coop.waitForTimeout(500);
+if (shots) await coop.screenshot({ path: 'docs/shot-rulebook.png' });
+results.rulebook = await coop.evaluate(() => {
+  const rb = document.getElementById('rulebook');
+  const sheet = rb?.querySelector('.rb-sheet');
+  const box = rb?.getBoundingClientRect();
+  return {
+    exists: !!rb,
+    atLeftEdge: !!box && box.left < window.innerWidth * 0.1,
+    open: !!rb?.classList.contains('open'),
+    width: sheet ? Math.round(sheet.getBoundingClientRect().width) : 0,
+    hasArrow: !!rb?.querySelector('.rb-arrow'),
+    // amtliche Optik: Briefkopf, Paragraphen, Stempel
+    official: !!rb?.querySelector('.rb-letterhead') && !!rb?.querySelector('.rb-stamp')
+      && /§/.test(rb.textContent),
+    forbiddenRows: rb ? rb.querySelectorAll('.rb-table tbody tr').length : 0,
+    listsBlade: /Klinge/i.test(rb?.textContent ?? '')
+  };
+});
+
+// Notizzettel: zwei Seiten, beide vom Spieler zu fuehren.
+results.notes = await coop.evaluate(() => ({
+  tabs: document.querySelectorAll('#notepad .np-tab').length,
+  checklist: document.querySelectorAll('#notepad [data-check]').length
+}));
+if (results.notes.checklist > 0) {
+  await coop.click('#notepad [data-check]').catch(() => {});
+  await coop.waitForTimeout(250);
+  results.notes.checkedSelf = await coop.evaluate(() =>
+    Object.keys(window.NULLWERK.stationFor('security').notes.checked).length);
+}
+await coop.click('#notepad .np-tab[data-page="1"]').catch(() => {});
+await coop.waitForTimeout(250);
+results.notes.page2 = await coop.evaluate(() => ({
+  page: window.NULLWERK.stationFor('security').notes.page,
+  topics: document.querySelectorAll('#notepad [data-topic]').length
+}));
+if (results.notes.page2.topics > 0) {
+  await coop.click('#notepad [data-topic]').catch(() => {});
+  await coop.waitForTimeout(250);
+  results.notes.topicSet = await coop.evaluate(() =>
+    Object.values(window.NULLWERK.stationFor('security').notes.topics)[0] ?? null);
 }
 
 results.ui = await coop.evaluate(() => {
@@ -243,6 +312,8 @@ results.ui = await coop.evaluate(() => {
     notepad: !!notepad && !notepad.classList.contains('hidden'),
     notepadHand: notepad ? getComputedStyle(notepad).fontFamily.toLowerCase() : '',
     decisions: document.querySelectorAll('#decisions .dec').length,
+    // Kein Timer mehr, sondern der Schichtplan in Gästen
+    shiftCounter: document.getElementById('hud-clock')?.textContent ?? '',
     hand: has('#idhand .holding-hand'),
     // Diese Anzeigen sollen aus dem Spiel-HUD verschwunden sein
     // (im Briefing/Shop bleibt die Kapazität als Management-Info stehen).
@@ -327,7 +398,15 @@ server.kill();
 console.log('BROWSER-CHECK');
 console.log(`  Tutorial-Schritt      ${results.tutorialStep}`);
 console.log(`  Ausweis sichtbar      ${results.idCardVisible}`);
-console.log(`  Feld markiert als     ${results.markedMiss} (erwartet: miss)`);
+console.log(`  Ausweis-Klickzyklus   ${results.markFirst} -> ${results.markSecond} -> ${results.markThird}`);
+console.log(`  Schichtplan           ${results.ui.shiftCounter} Gäste · Solo endet bei` +
+  ` ${results.soloEnd.processed}/${results.soloEnd.quota} -> ${results.soloEnd.phase}`);
+console.log(`  Hausordnung links     Pfeil ${results.rulebook.hasArrow} · ausgefahren ${results.rulebook.open}` +
+  ` (${results.rulebook.width}px) · amtliche Optik ${results.rulebook.official}` +
+  ` · ${results.rulebook.forbiddenRows} verbotene Sachen`);
+console.log(`  Notizzettel 2 Seiten  Reiter ${results.notes.tabs} · Checkliste ${results.notes.checklist}` +
+  ` · selbst abgehakt ${results.notes.checkedSelf ?? 0} · Seite ${results.notes.page2.page}` +
+  ` · Befunde ${results.notes.page2.topics} (${results.notes.topicSet ?? '—'})`);
 console.log(`  Solo   Einlass ${results.solo.stats.admitted} · abgewiesen ${results.solo.stats.rejected}` +
   ` · richtig ${results.solo.stats.correct}/${results.solo.stats.correct + results.solo.stats.mistakes}`);
 console.log(`  Solo   Freischaltungen ${Object.entries(results.solo.unlocks).filter(([, v]) => v).map(([k]) => k).join(',')}`);
@@ -351,7 +430,27 @@ let failed = false;
 const fail = (msg) => { console.log(`  FEHLER: ${msg}`); failed = true; };
 
 if (errors.length) { errors.slice(0, 8).forEach((e) => console.log(`    ! ${e}`)); failed = true; }
-if (results.markedMiss !== 'miss') fail('Markierung eines sauberen Feldes nicht als Fehlgriff gewertet');
+if (results.markFirst !== 'suspect' || results.markSecond !== 'fine' || results.markThird !== null) {
+  fail('Der Klick auf ein Ausweisfeld schaltet nicht zwischen nicht korrekt / in Ordnung / leer um');
+}
+if (!/^\d+\/\d+$/.test(results.ui.shiftCounter.trim())) fail('Im HUD steht kein Gäste-Schichtplan');
+if (/\d\d:\d\d/.test(results.ui.shiftCounter)) fail('Der Tages-Timer ist noch im HUD');
+if (results.soloEnd.phase !== 'report' || results.soloEnd.processed !== results.soloEnd.quota) {
+  fail('Solo: die Nacht endet nicht, wenn die Gästeliste abgearbeitet ist');
+}
+if (!results.rulebook.exists || !results.rulebook.hasArrow) fail('Der Pfeil für die Hausordnung fehlt');
+if (!results.rulebook.atLeftEdge) fail('Die Hausordnung klebt nicht am linken Rand');
+if (!results.rulebook.open || results.rulebook.width < 100) fail('Die Hausordnung fährt bei Hover nicht aus');
+if (!results.rulebook.official) fail('Die Hausordnung sieht nicht nach amtlichem Dokument aus');
+if (results.rulebook.forbiddenRows < 5 || !results.rulebook.listsBlade) {
+  fail('Die Hausordnung listet die verbotenen Gegenstände nicht auf');
+}
+if (results.notes.tabs !== 2) fail('Der Notizzettel hat keine zwei Seiten');
+if (!results.notes.checklist) fail('Seite 1 hat keine abhakbare Checkliste');
+if (!results.notes.checkedSelf) fail('Der Haken lässt sich nicht selbst setzen');
+if (results.notes.page2.page !== 1) fail('Man kann nicht auf Seite 2 blättern');
+if (!results.notes.page2.topics) fail('Seite 2 hat keine Befund-Zeilen');
+if (results.notes.topicSet !== 'ok') fail('Auf Seite 2 lässt sich kein Befund eintragen');
 if (results.solo.stats.admitted + results.solo.stats.rejected < 3) fail('Solo: zu wenige Entscheidungen');
 if (!results.report) fail('Night Report wurde nicht angezeigt');
 if (results.coop.stats.passed < 1) fail('Koop: niemand wurde in die Schleuse durchgelassen');

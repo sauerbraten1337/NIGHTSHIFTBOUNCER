@@ -63,7 +63,9 @@ const STEPS = [
     id: 'welcome',
     title: 'SCHICHTBEGINN',
     body: 'Du stehst an der Tür des NULLWERK. Vor dir die Strasse, hinter dir der Club. ' +
-      'Was du reinlässt, ist deine Verantwortung. Der erste Gast kommt gleich.',
+      'Was du reinlässt, ist deine Verantwortung. Unten rechts liegt dein Block: ' +
+      'Seite 1 die Checkliste zum selbst Abhaken, Seite 2 dein Befund. ' +
+      'Oben links steht, wie viele Gäste heute auf der Liste stehen - danach ist Schluss.',
     setup(game) {
       addRadio(game.state.night, 'CHEF', 'Erste Schicht. Nimm dir Zeit, heute ist wenig los.');
     },
@@ -85,7 +87,8 @@ const STEPS = [
     title: 'SELBST PRÜFEN',
     body: 'Der Ausweis liegt links unten - gross und lesbar. Prüfe ihn selbst: ' +
       'Passt das Foto zum Gast? Ist er alt genug? Ist das Dokument noch gültig? ' +
-      'Ein Klick auf ein Feld beanstandet es. Hier ist alles in Ordnung.',
+      'Ein Klick auf ein Feld schaltet deinen Vermerk um: nicht korrekt, in Ordnung, leer. ' +
+      'Das Spiel sagt dir nicht, ob du richtig liegst - du entscheidest. Hier ist alles sauber.',
     wait: (game, elapsed) => elapsed > 6
   },
   {
@@ -101,7 +104,8 @@ const STEPS = [
     id: 'expired',
     title: 'ABGELAUFEN',
     body: 'Nächster Gast. Sieh dir "GÜLTIG BIS" genau an und vergleiche es mit dem heutigen Datum ' +
-      'oben auf der Karte. Wenn etwas nicht stimmt: Feld anklicken, dann abweisen.',
+      'oben auf der Karte. Wenn etwas nicht stimmt: Feld als NICHT KORREKT vermerken, dann abweisen. ' +
+      'Jede zutreffende Beanstandung bringt am Ende der Nacht Prämie.',
     hint: ['X', 'ABWEISEN'],
     setup(game) {
       insertGuest(game, scripted(game, {
@@ -115,7 +119,9 @@ const STEPS = [
     id: 'age',
     title: 'ZU JUNG',
     body: 'Rechne beim Geburtsdatum mit. Neben dem Datum steht das errechnete Alter - ' +
-      'aber verlass dich nicht blind darauf, manche Dokumente sind manipuliert.',
+      'aber verlass dich nicht blind darauf, manche Dokumente sind manipuliert. ' +
+      'Das Mindestalter und alles Verbotene stehen links in der Hausordnung: ' +
+      'Maus auf den Pfeil am linken Rand.',
     setup(game) {
       insertGuest(game, scripted(game, {
         id: 'underage', personality: 'nervous',
@@ -188,11 +194,13 @@ const STEPS = [
     body: (game) => isSolo(game.state)
       ? 'Ein sauberer Ausweis heisst nicht, dass alles sauber ist. Taste den Gast ab (3) und ' +
         'wähle eine Zone: J Jacke, K Hosentaschen, L Tasche - er holt sie hervor und leert sie aus. ' +
-        'Klick auf das, was nicht reindarf. Der Alkotest (4) zeigt nur den Wert; ' +
-        'den Grenzwert liest du am Gerät ab.'
+        'Klick auf das, was nicht reindarf, und schliess die Zone dann ab. Der Alkotest (4) ' +
+        'zeigt nur den Wert; den Grenzwert liest du am Gerät ab. Deinen Befund trägst du ' +
+        'selbst auf Seite 2 des Zettels unten rechts ein.'
       : 'Alles, was du durchlässt, landet in der Schleuse - innen, aber noch nicht im Club. ' +
         'Dort tastet die Security ab (7, Zonen J/K/L) und testet auf Alkohol (8). ' +
-        'Was aus einer Zone kommt, liegt gross auf dem Tisch: anklicken, was nicht reindarf. ' +
+        'Was aus einer Zone kommt, liegt gross auf dem Tisch: anklicken, was nicht reindarf, ' +
+        'dann die Zone abschliessen. ' +
         'Erst die Security entscheidet mit ENTER über den Einlass.',
     unlock: ['search', 'alcohol'],
     setup(game) {
@@ -207,7 +215,7 @@ const STEPS = [
           g.truth.risk = 0.6;
         }
       }));
-      addToast(game.state.night, 'NEU: SCAN · ABTASTEN · ALKOTEST', 'good', 5);
+      addToast(game.state.night, 'NEU: ABTASTEN · ALKOTEST', 'good', 5);
     },
     wait: (game) => decisions(game) >= 7
   },

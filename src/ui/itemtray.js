@@ -1,7 +1,8 @@
 /**
  * Der Kontrolltisch: alles, was aus einer Zone kommt, liegt gross vor dir.
- * Kaugummi neben Klinge - du zeigst auf das, was nicht reindarf,
- * oder gibst die Zone frei.
+ * Kaugummi neben Klinge - du markierst selbst, was nicht reindarf (nochmal
+ * klicken nimmt die Markierung zurueck) und schliesst die Zone dann ab.
+ * Ob deine Auswahl stimmt, sagt dir hier niemand.
  */
 
 import { escapeHtml } from './hud.js';
@@ -20,7 +21,7 @@ export function createItemTray(game, { root, roleId = 'security' } = {}) {
     const zoneId = station?.patdown?.active;
     if (!zoneId) return;
     if (card) game.act(api.roleId, 'pick', { zone: zoneId, itemId: card.dataset.item });
-    else if (clear) game.act(api.roleId, 'pick', { zone: zoneId, itemId: null });
+    else if (clear) game.act(api.roleId, 'closezone', { zone: zoneId });
   });
 
   function update() {
@@ -38,7 +39,8 @@ export function createItemTray(game, { root, roleId = 'security' } = {}) {
       return;
     }
 
-    const key = `${station.guest?.id}|${zoneId}|${zone.items.length}`;
+    const flagged = zone.flagged ?? [];
+    const key = `${station.guest?.id}|${zoneId}|${zone.items.length}|${flagged.join(',')}`;
     if (key === renderedKey) return;
     renderedKey = key;
 
@@ -46,13 +48,15 @@ export function createItemTray(game, { root, roleId = 'security' } = {}) {
     el.innerHTML = `
       <div class="tray-head">
         <span class="tray-title">${escapeHtml(zone.label)} — INHALT</span>
-        <span class="tray-hint">Was davon darf nicht in den Club?</span>
+        <span class="tray-hint">Markiere selbst, was nicht in den Club darf.</span>
       </div>
       <div class="tray-items">
-        ${zone.items.map((item, i) => card(item, i, isSolo(game.state))).join('')}
+        ${zone.items.map((item, i) => card(item, i, isSolo(game.state), flagged.includes(item.id))).join('')}
       </div>
       <button class="tray-clear" data-clear="1">
-        ${isSolo(game.state) ? '<kbd>0</kbd> ' : ''}ALLES IN ORDNUNG — ZONE FREIGEBEN
+        ${isSolo(game.state) ? '<kbd>0</kbd> ' : ''}${flagged.length
+          ? `ZONE ABSCHLIESSEN — ${flagged.length} BEANSTANDET`
+          : 'ZONE ABSCHLIESSEN — NICHTS BEANSTANDET'}
       </button>
     `;
     paintIcons(el, zone.items);
@@ -62,11 +66,12 @@ export function createItemTray(game, { root, roleId = 'security' } = {}) {
   return api;
 }
 
-function card(item, index, showKeys) {
+function card(item, index, showKeys, flagged) {
   return `
-    <button class="tray-item" data-item="${escapeHtml(item.id)}" title="${escapeHtml(item.label)}">
+    <button class="tray-item ${flagged ? 'flagged' : ''}" data-item="${escapeHtml(item.id)}" title="${escapeHtml(item.label)}">
       <canvas width="96" height="96"></canvas>
       <span class="tray-label">${escapeHtml(item.label)}</span>
+      ${flagged ? '<span class="tray-flag">BEANSTANDET</span>' : ''}
       ${showKeys && index < 9 ? `<span class="tray-key">${index + 1}</span>` : ''}
     </button>`;
 }

@@ -503,16 +503,15 @@ function drawPatdownOverlay(ctx, station, w, t, anchors) {
     const cy = anchor.y;
     const radiusX = anchor.rx;
     const radiusY = anchor.ry;
-    const hinted = pat.hint === zone.id && zone.state !== 'done';
     const open = zone.state === 'open';
     const done = zone.state === 'done';
-    const hit = done && zone.picked && zone.correct;
-    const color = hit ? PAL.red : done ? (zone.missed ? PAL.amber : PAL.green)
-      : hinted ? PAL.amber : PAL.cyan;
+    // Nur die Angabe des SPIELERS färbt den Ring - nicht die Wahrheit.
+    const flagged = (zone.flagged ?? []).length > 0;
+    const color = done ? (flagged ? PAL.amber : PAL.green) : PAL.cyan;
     const pulse = 0.5 + Math.sin(t * (open ? 5 : 2.2) + radiusY) * 0.5;
 
     ctx.save();
-    if (open || hinted) glow(ctx, cx, cy, radiusX * 2, color, 0.1 + pulse * 0.12);
+    if (open) glow(ctx, cx, cy, radiusX * 2, color, 0.1 + pulse * 0.12);
 
     ctx.strokeStyle = withAlpha(color, done ? 0.85 : 0.4 + pulse * 0.3);
     ctx.lineWidth = done ? 2.5 : 2;
@@ -551,18 +550,20 @@ function drawPatdownOverlay(ctx, station, w, t, anchors) {
       ctx.fillStyle = color;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(hit ? '!' : zone.missed ? '?' : '✓', cx, cy);
+      ctx.fillText(flagged ? '!' : '✓', cx, cy);
     }
 
+    // Die Beschriftung sitzt IMMER rechts vom Ring. Früher wechselte sie die
+    // Seite, sobald sich der Gast (und damit der Ring) bewegte - das flackerte.
     ctx.font = '11px "IBM Plex Mono", monospace';
     ctx.fillStyle = withAlpha(color, 0.95);
-    ctx.textAlign = cx > w * 0.5 ? 'left' : 'right';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     const note = done
-      ? (hit ? zone.picked.label.toUpperCase() : zone.missed ? 'FREIGEGEBEN' : 'SAUBER')
-      : open ? 'AUSGELEERT' : hinted ? 'DETEKTOR PIEPT' : `[${cfg.key}]`;
+      ? (flagged ? `${(zone.flagged ?? []).length} BEANSTANDET` : 'ABGESCHLOSSEN')
+      : open ? 'AUSGELEERT' : `[${cfg.key}]`;
     const text = `${cfg.label} · ${note}`;
-    ctx.fillText(text, cx + (cx > w * 0.5 ? radiusX + 12 : -radiusX - 12), cy);
+    ctx.fillText(text, cx + radiusX + 12, cy);
     ctx.restore();
   }
 }
@@ -656,12 +657,6 @@ function drawBreathalyzer(ctx, w, h, t, result, key) {
   ctx.fillStyle = PAL.grey;
   ctx.fillText(live ? 'MESSUNG …' : 'ALCO-CHECK 4', x + dw * 0.8, y + dh * 0.77);
 
-  if (result.deviceNote && !live) {
-    ctx.textAlign = 'center';
-    ctx.font = '10px "IBM Plex Mono", monospace';
-    ctx.fillStyle = PAL.amber;
-    ctx.fillText(result.deviceNote, x + dw / 2, y - dh * 0.3);
-  }
   ctx.restore();
 }
 
