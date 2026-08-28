@@ -102,6 +102,18 @@ await solo.waitForTimeout(250);
 results.markThird = await solo.evaluate(() =>
   window.NULLWERK.state.night.stations.door.checks.id.marks.expiry ?? null);
 
+// Kontrollen: Icon-Buttons ohne Tastenhinweise, per Maus bedienbar.
+results.actionButtons = await solo.evaluate(() => {
+  const btns = [...document.querySelectorAll('#bar-p1 .act, #bar-p2 .act')];
+  return {
+    count: btns.length,
+    icons: btns.filter((b) => b.querySelector('.act-icon svg')).length,
+    keyBadges: document.querySelectorAll('.act .key, .dec .dec-key').length,
+    roleTags: document.querySelectorAll('.role-tag').length,
+    hintLine: !!document.getElementById('hint')
+  };
+});
+
 // Ein paar Gäste abarbeiten: prüfen, markieren wo nötig, entscheiden.
 for (let i = 0; i < 30; i++) {
   const done = await solo.evaluate(async () => {
@@ -187,6 +199,38 @@ for (let i = 0; i < 30; i++) {
   }
   await solo.waitForTimeout(600);
 }
+
+// ANSPRECHEN per Klick - und der Gast nennt dabei seinen Namen.
+await solo.waitForFunction(
+  () => !!window.NULLWERK.state.night?.stations.door.guest, null, { timeout: 15000 }
+).catch(() => {});
+await solo.click('.act[data-code="talk"]').catch(() => {});
+await solo.waitForFunction(
+  () => !!window.NULLWERK.state.night?.stations.door.checks.talk, null, { timeout: 6000}
+).catch(() => {});
+results.talk = await solo.evaluate(() => {
+  const st = window.NULLWERK.state.night.stations.door;
+  return {
+    done: !!st.checks.talk,
+    saysName: !!st.guest && typeof st.guest.said === 'string' && st.guest.said.includes(st.guest.name)
+  };
+});
+
+// Pausenmenü: liegt über allem und trägt die komplette Steuerung.
+await solo.keyboard.press('Escape');
+await solo.waitForSelector('.pause-controls', { timeout: 4000 });
+results.pause = await solo.evaluate(() => {
+  const box = document.querySelector('.pause-controls').getBoundingClientRect();
+  // Punkt über der Hausordnung am linken Rand - die lag früher VOR dem Menü.
+  const over = document.elementFromPoint(8, window.innerHeight * 0.38);
+  return {
+    rows: document.querySelectorAll('.ctl-row').length,
+    rightSide: box.left > window.innerWidth * 0.45,
+    inFront: !!over && !!over.closest('#screen')
+  };
+});
+await solo.keyboard.press('Escape');
+await solo.waitForTimeout(300);
 
 results.solo = await solo.evaluate(() => {
   const s = window.NULLWERK.state;
@@ -340,7 +384,7 @@ results.ui = await coop.evaluate(() => {
     handIsCircle: !!handStyle && handStyle.borderRadius.startsWith('50%'),
     handBehind: !!handStyle && Number(handStyle.zIndex || 0) <= 0,
     handIsSvg: has('#idhand svg'),
-    scanAction: [...document.querySelectorAll('.act .name')].some((n) => /SCAN/i.test(n.textContent)),
+    scanAction: [...document.querySelectorAll('.act .act-name')].some((n) => /SCAN/i.test(n.textContent)),
     notepad: !!notepad && !notepad.classList.contains('hidden'),
     notepadHand: notepad ? getComputedStyle(notepad).fontFamily.toLowerCase() : '',
     decisions: document.querySelectorAll('#decisions .dec').length,
@@ -442,6 +486,11 @@ console.log(`  Solo   Einlass ${results.solo.stats.admitted} · abgewiesen ${res
 console.log(`  Solo   Freischaltungen ${Object.entries(results.solo.unlocks).filter(([, v]) => v).map(([k]) => k).join(',')}`);
 console.log(`  Report/Shop           ${results.report}`);
 console.log(`  Abtast-Ring per Maus  ${results.zoneByMouse === true}`);
+console.log(`  Aktions-Buttons       ${results.actionButtons.count} · mit Icon ${results.actionButtons.icons}` +
+  ` · Tastenhinweise ${results.actionButtons.keyBadges} · Rollen-Tags ${results.actionButtons.roleTags}`);
+console.log(`  Ansprechen per Klick  ${results.talk.done} · nennt den Namen ${results.talk.saysName}`);
+console.log(`  Pausenmenü            ${results.pause.rows} Zeilen · rechts ${results.pause.rightSide}` +
+  ` · im Vordergrund ${results.pause.inFront}`);
 console.log(`  Kontrolltisch         ${results.trayShown === true} · max. ${results.trayCount ?? 0} Gegenstände` +
   ` · Icons gezeichnet ${results.trayPainted === true}`);
 console.log(`  Auswahl per Klick     verboten ${results.contrabandFound === true} · freigegeben ${results.clearedByClick === true}`);
@@ -490,6 +539,16 @@ if (results.online.hostRole !== 'host' || results.online.guestRole !== 'guest') 
 if (!results.online.guestSeesNight) fail('Online: der Gast bekommt keine Schnappschüsse');
 if (!results.trayShown) fail('Kontrolltisch mit Gegenständen wurde nie gezeigt');
 if (!results.zoneByMouse) fail('Abtast-Ring liess sich nicht mit der Maus anklicken');
+if (results.actionButtons.count < 4 || results.actionButtons.icons !== results.actionButtons.count) {
+  fail('Die Aktions-Buttons haben keine Icons');
+}
+if (results.actionButtons.keyBadges > 0 || results.actionButtons.hintLine || results.actionButtons.roleTags > 0) {
+  fail('Im laufenden Spiel stehen noch Steuerungshinweise oder Rollen-Tags im Bild');
+}
+if (!results.talk.done) fail('ANSPRECHEN liess sich nicht anklicken');
+if (!results.talk.saysName) fail('Der Gast nennt beim Ansprechen nicht seinen Namen');
+if (results.pause.rows < 8 || !results.pause.rightSide) fail('Im Pausenmenü fehlt die Steuerung rechts');
+if (!results.pause.inFront) fail('Das Pausenmenü liegt nicht im Vordergrund');
 if (!results.ui.notepad) fail('Notizzettel fehlt');
 if (!results.ui.notepadHand.includes('caveat') && !results.ui.notepadHand.includes('cursive')) {
   fail('Notizzettel ist nicht in Handschrift gesetzt');

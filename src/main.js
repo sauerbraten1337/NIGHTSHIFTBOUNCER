@@ -375,7 +375,6 @@ window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (e.code === 'Escape' && game.state.phase === 'night' && !game.isGuest) togglePause();
   else if (e.code === 'KeyM') audio.toggleMute();
-  else if (e.code === 'KeyH') document.getElementById('hint').classList.toggle('hidden');
 });
 
 function togglePause() {

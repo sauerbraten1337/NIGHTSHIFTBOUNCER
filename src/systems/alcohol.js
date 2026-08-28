@@ -7,11 +7,13 @@
  */
 
 import { TUNING, ALCOHOL_LIMIT_PROMILLE, IMPAIRMENT_SIGNS } from '../data/config.js';
-import { guestLine } from './guests.js';
+import { guestLine, guestNameLine } from './guests.js';
 
 export function talkTo(rng, state, guest) {
-  const line = guestLine(rng, guest, 'talk');
+  // Der Gast nennt zuerst seinen Namen und redet dann weiter - der Name ist
+  // das, was der Spieler mit dem Ausweis abgleichen muss.
   const realName = guest.name;
+  const line = `${guestNameLine(rng, guest)} ${guestLine(rng, guest, 'talk')}`;
   const drunk = guest.truth.drunk;
   const impaired = guest.truth.impaired ?? 0;
 

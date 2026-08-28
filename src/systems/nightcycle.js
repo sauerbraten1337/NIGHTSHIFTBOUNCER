@@ -2,7 +2,7 @@
  * Night Cycle: Uhr, Phasen, Start und Abschluss einer Nacht.
  */
 
-import { TUNING, NIGHT_EVENTS } from '../data/config.js';
+import { TUNING, NIGHT_EVENTS, FEATURES } from '../data/config.js';
 import { createNightState, capacity, addToast, pushLog, guestQuota } from './state.js';
 import { tickInsideRevenue } from './economy.js';
 import { updateQueue } from './queue.js';
@@ -34,6 +34,7 @@ export function shiftProgress(night) {
 }
 
 export function pickNightEvent(rng, state) {
+  if (!FEATURES.nightEvents) return NIGHT_EVENTS[0];
   const nightNumber = state.nightIndex + 1;
   const pool = NIGHT_EVENTS.filter((e) => nightNumber >= (e.minNight ?? 1));
   if (nightNumber === 1) return NIGHT_EVENTS[0];
@@ -81,7 +82,7 @@ export function updateNight(game, dt) {
 
   updateTutorial(game, dt);
   updateQueue(game, dt, minutes);
-  if (!night.tutorial) updateRandomEvents(game, dt, minutes);
+  if (!night.tutorial && FEATURES.randomEvents) updateRandomEvents(game, dt, minutes);
   tickInsideRevenue(state, minutes);
   updateInside(game, dt, minutes);
   updateEffects(night, dt);

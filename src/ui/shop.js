@@ -5,7 +5,7 @@ import { upgradeList, buyUpgrade } from '../systems/upgrades.js';
 import { talentList, buyTalent } from '../systems/progression.js';
 import { availableArtists, bookArtist, cancelBooking } from '../systems/artists.js';
 import { clubTier, capacity, upgradeLevel, rank } from '../systems/state.js';
-import { CLUB_TIERS } from '../data/config.js';
+import { CLUB_TIERS, FEATURES } from '../data/config.js';
 
 export function renderShop(game, onNext) {
   const wrap = document.createElement('div');
@@ -23,7 +23,7 @@ function shopHtml(game) {
   const nextTier = CLUB_TIERS.find((t) => t.level === tier.level + 1);
   const list = upgradeList(state);
   const talents = talentList(state);
-  const artists = availableArtists(state);
+  const artists = FEATURES.artists ? availableArtists(state) : [];
 
   return `
     <h1 class="title">CLUB AUSBAUEN</h1>
@@ -45,6 +45,7 @@ function shopHtml(game) {
       ${talents.map(talentCard).join('')}
     </div>
 
+    ${FEATURES.artists ? `
     <h2 class="sec">ACT BUCHEN</h2>
     ${upgradeLevel(state, 'backstage') < 1
       ? '<p style="font-size:12px;color:var(--dim)">Ohne Backstage-Bereich lässt sich kein Act buchen.</p>'
@@ -54,7 +55,7 @@ function shopHtml(game) {
     ${state.bookedArtist
       ? `<p style="margin-top:10px;font-size:12px;color:var(--amber)">GEBUCHT: ${escapeHtml(state.bookedArtist.name)}
          (€${state.bookedArtist.fee}) <button class="btn ghost" data-cancel="1" style="margin-left:10px;padding:4px 10px">STORNIEREN</button></p>`
-      : ''}
+      : ''}` : ''}
 
     <div class="btn-row">
       <button class="btn primary" id="shop-next">NÄCHSTE NACHT</button>

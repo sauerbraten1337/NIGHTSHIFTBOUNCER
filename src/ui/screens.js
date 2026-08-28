@@ -258,15 +258,49 @@ export function createScreens(game) {
   function report(onContinue) { show(renderReport(game, onContinue)); }
   function shop(onNext) { show(renderShop(game, onNext)); }
 
+  /**
+   * Pause. Hier - und nur hier - steht die komplette Tastenbelegung, damit
+   * das laufende Spiel frei von Steuerungstexten bleibt.
+   */
   function pause(onResume, onQuit) {
+    const roles = rolesFor(game.state.mode);
     const el = document.createElement('div');
+    el.className = 'pause';
     el.innerHTML = `
-      <h1 class="title">PAUSE</h1>
-      <div class="subtitle">DIE SCHLANGE WARTET</div>
-      <div class="btn-row">
-        <button class="btn primary" id="pause-resume">WEITER</button>
-        <button class="btn ghost" id="pause-quit">SCHICHT ABBRECHEN</button>
-      </div>`;
+      <div class="pause-main">
+        <h1 class="title">PAUSE</h1>
+        <div class="subtitle">DIE SCHLANGE WARTET</div>
+        <div class="btn-row" style="flex-direction:column;align-items:stretch;max-width:280px">
+          <button class="btn primary" id="pause-resume">WEITER</button>
+          <button class="btn ghost" id="pause-quit">SCHICHT ABBRECHEN</button>
+        </div>
+      </div>
+      <aside class="pause-controls">
+        <h2 class="sec" style="margin-top:0">STEUERUNG</h2>
+        ${roles.map((role) => `
+          <div class="ctl-group">
+            <div class="ctl-head">${escapeHtml(role.label)} — ${role.area === 'airlock' ? 'SCHLEUSE' : 'TÜR'}</div>
+            ${role.actions.map((a) => `
+              <div class="ctl-row"><kbd>${escapeHtml(keyName(a.key))}</kbd>
+                <span>${escapeHtml(a.label)}</span></div>`).join('')}
+          </div>`).join('')}
+        <div class="ctl-group">
+          <div class="ctl-head">ABTASTEN</div>
+          <div class="ctl-row"><kbd>J</kbd><span>Jacke</span></div>
+          <div class="ctl-row"><kbd>K</kbd><span>Hosentaschen</span></div>
+          <div class="ctl-row"><kbd>L</kbd><span>Tasche</span></div>
+          <div class="ctl-row"><kbd>Maus</kbd><span>Ring am Gast anklicken</span></div>
+          <div class="ctl-row"><kbd>1</kbd><kbd>…</kbd><span>Gegenstand beanstanden</span></div>
+          <div class="ctl-row"><kbd>0</kbd><span>Zone freigeben</span></div>
+        </div>
+        <div class="ctl-group">
+          <div class="ctl-head">SYSTEM</div>
+          <div class="ctl-row"><kbd>ESC</kbd><span>Pause</span></div>
+          <div class="ctl-row"><kbd>M</kbd><span>Ton an/aus</span></div>
+        </div>
+        <p class="ctl-note">Alle Kontrollen lassen sich auch anklicken:
+          die Icons unten, der Ausweis, der Block und die Ringe am Gast.</p>
+      </aside>`;
     el.querySelector('#pause-resume').addEventListener('click', onResume);
     el.querySelector('#pause-quit').addEventListener('click', onQuit);
     show(el);
