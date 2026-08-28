@@ -224,8 +224,8 @@ const STEPS = [
     title: 'DIE SCHLANGE WARTET',
     body: (game) => 'Jede Kontrolle kostet Zeit, und die Leute draussen werden ungeduldig. ' +
       'Wer zu lange steht, geht - das kostet Umsatz und Ruf. Mit der Taste ' +
-      (isSolo(game.state) ? '6' : '3') + ' redest du mit der Schlange und verschaffst dir Luft.',
-    hint: (game) => [isSolo(game.state) ? '6' : '3', 'SCHLANGE BERUHIGEN'],
+      (isSolo(game.state) ? '5' : '3') + ' redest du mit der Schlange und verschaffst dir Luft.',
+    hint: (game) => [isSolo(game.state) ? '5' : '3', 'SCHLANGE BERUHIGEN'],
     unlock: 'calm',
     setup(game) {
       const night = game.state.night;

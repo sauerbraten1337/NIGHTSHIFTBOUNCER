@@ -7,10 +7,11 @@
  * Übersichtskarte - das steht jetzt alles auf dem Notizzettel bzw. gar nicht.
  */
 
-import { CLUB_NAME, AREAS } from '../data/config.js';
+import { CLUB_NAME } from '../data/config.js';
 import { currentPhase } from '../systems/nightcycle.js';
 import { repBand } from '../systems/reputation.js';
 import { createNotepad } from './notepad.js';
+import { actionIcon } from './icons.js';
 
 const DECISION_CODES = new Set(['admit', 'reject', 'pass']);
 
@@ -36,8 +37,7 @@ export function createHud(game) {
     tutTitle: document.getElementById('tut-title'),
     tutBody: document.getElementById('tut-body'),
     tutHint: document.getElementById('tut-hint'),
-    net: document.getElementById('netstatus'),
-    hint: document.getElementById('hint')
+    net: document.getElementById('netstatus')
   };
 
   el.club.textContent = CLUB_NAME;
@@ -47,11 +47,14 @@ export function createHud(game) {
   let lastToastKey = '';
   let lastTutorial = '';
 
-  el.decisions.addEventListener('click', (event) => {
-    const btn = event.target.closest('[data-code]');
-    if (!btn) return;
-    game.act(btn.dataset.role, btn.dataset.code);
-  });
+  // Alle Aktionen sind anklickbar - Tastatur bleibt gleichwertig.
+  for (const node of [el.decisions, el.bar1, el.bar2]) {
+    node.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-code]');
+      if (!btn) return;
+      game.act(btn.dataset.role, btn.dataset.code);
+    });
+  }
 
   function buildBars() {
     const key = `${game.state.mode}|${game.localRole ?? ''}`;
@@ -62,24 +65,23 @@ export function createHud(game) {
     el.decisions.innerHTML = '';
 
     for (const player of game.players) {
-      const own = game.controls(player.id);
+      if (!game.controls(player.id)) continue;
       const container = player.area === 'airlock' ? el.bar2 : el.bar1;
       const cls = player.area === 'airlock' ? 'p2' : 'p1';
 
-      const tag = document.createElement('div');
-      tag.className = `role-tag ${cls}`;
-      tag.innerHTML = `${player.role.label}<small>${areaLabel(player.area)}${own ? '' : ' · PARTNER'}</small>`;
-      container.appendChild(tag);
-      if (!own) continue;
-
+      // Kontrollen als Icon-Buttons. Die Tastenbelegung steht nicht mehr im
+      // Bild - die steht komplett im Pausenmenü.
       for (const action of player.role.actions) {
         if (DECISION_CODES.has(action.code)) continue;
-        const div = document.createElement('div');
-        div.className = `act ${cls}`;
-        div.dataset.code = action.code;
-        div.dataset.role = player.id;
-        div.innerHTML = `<span class="key">${keyLabel(action.key)}</span><span class="name">${action.label}</span>`;
-        container.appendChild(div);
+        const btn = document.createElement('button');
+        btn.className = `act ${cls}`;
+        btn.dataset.code = action.code;
+        btn.dataset.role = player.id;
+        btn.title = action.label;
+        btn.innerHTML =
+          `<span class="act-icon">${actionIcon(action.code)}</span>` +
+          `<span class="act-name">${action.label}</span>`;
+        container.appendChild(btn);
       }
 
       // Entscheidungen wandern in die Mitte - gross und anklickbar.
@@ -95,15 +97,13 @@ export function createHud(game) {
         btn.className = `dec ${kind}`;
         btn.dataset.code = action.code;
         btn.dataset.role = player.id;
-        btn.innerHTML = `
-          <span class="dec-icon">${kind === 'yes' ? '▲' : '✕'}</span>
-          <span class="dec-label">${action.label}</span>
-          <span class="dec-key">${keyLabel(action.key)}</span>`;
+        btn.innerHTML =
+          `<span class="dec-icon">${actionIcon(action.code)}</span>` +
+          `<span class="dec-label">${action.label}</span>`;
         group.appendChild(btn);
       }
       el.decisions.appendChild(group);
     }
-    el.hint.innerHTML = hintLine(game);
   }
 
   function update() {
@@ -147,8 +147,8 @@ export function createHud(game) {
     updateDecisions(game, el);
   }
 
-  function show() { el.root.classList.remove('hidden'); el.hint.classList.remove('hidden'); }
-  function hide() { el.root.classList.add('hidden'); el.hint.classList.add('hidden'); }
+  function show() { el.root.classList.remove('hidden'); }
+  function hide() { el.root.classList.add('hidden'); }
 
   function setNet(text, bad = false) {
     if (!text) return el.net.classList.add('hidden');
@@ -158,10 +158,6 @@ export function createHud(game) {
   }
 
   return { update, show, hide, setNet, el, rebuild: () => { builtFor = ''; } };
-}
-
-function areaLabel(area) {
-  return area === 'airlock' ? AREAS.airlock.sub : AREAS.outside.sub;
 }
 
 function updateTutorialPanel(game, el, getLast, setLast) {
@@ -224,18 +220,6 @@ function isFor(player, code) {
   if (!key) return false;
   if (code === 'search') return key === 'search' || key === 'bag';
   return key === code;
-}
-
-function hintLine(game) {
-  const parts = [];
-  for (const player of game.players) {
-    if (!game.controls(player.id)) continue;
-    const keys = player.role.actions.map((a) => `${keyLabel(a.key)} ${a.label}`).join(' · ');
-    parts.push(`<span><b>${player.role.label}</b> ${keys}</span>`);
-  }
-  parts.push('<span><b>ZONEN</b> J K L oder Ring anklicken · Gegenstand anklicken</span>');
-  parts.push('<span><b>SYSTEM</b> ESC PAUSE · M TON · H HILFE</span>');
-  return parts.join('');
 }
 
 export function keyLabel(code) {

@@ -8,6 +8,7 @@
 import {
   queueCapacity, addToast, patienceMultiplier, isSolo, airlockCapacity
 } from './state.js';
+import { FEATURES } from '../data/config.js';
 import { changeReputation, crowdPull } from './reputation.js';
 import { createGuest, guestLine } from './guests.js';
 import { emptyNotes } from './notes.js';
@@ -81,11 +82,15 @@ function updatePatience(game, dt) {
   const night = state.night;
   for (let i = night.queue.length - 1; i >= 0; i--) {
     const g = night.queue[i];
-    const drain = 1 + (g.mood < 0.4 ? 0.4 : 0) + (i > 6 ? 0.25 : 0);
-    g.patience -= dt * drain;
     if (g.saidTimer > 0) g.saidTimer -= dt;
     else g.said = null;
 
+    // Ungeduld ist abgeschaltet: niemand verlässt die Schlange, es geht
+    // ausschliesslich um die Kontrolle an der Tür.
+    if (!FEATURES.queueImpatience) continue;
+
+    const drain = 1 + (g.mood < 0.4 ? 0.4 : 0) + (i > 6 ? 0.25 : 0);
+    g.patience -= dt * drain;
     if (g.patience <= 0) {
       night.queue.splice(i, 1);
       night.stats.left++;

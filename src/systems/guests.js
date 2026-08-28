@@ -9,7 +9,7 @@ import {
   ZONES, IMPAIRMENT_SIGNS
 } from '../data/config.js';
 import { difficultyProfile } from './difficulty.js';
-import { LINES, PERSONALITIES } from '../data/dialogue.js';
+import { LINES, NAME_LINES, PERSONALITIES } from '../data/dialogue.js';
 import { randRange, randInt, pick, weightedPick, chance, clamp } from '../core/rng.js';
 
 let guestSerial = 0;
@@ -238,6 +238,12 @@ function choosePersonality(rng, archetype) {
 }
 
 /** Zufällige Zeile passend zur Situation. */
+/** Der Gast nennt seinen echten Namen - die Antwort auf ANSPRECHEN. */
+export function guestNameLine(rng, guest) {
+  const set = NAME_LINES[guest.personality] ?? NAME_LINES.polite;
+  return pick(rng, set).replace('{name}', guest.name);
+}
+
 export function guestLine(rng, guest, situation) {
   const set = LINES[guest.personality] ?? LINES.polite;
   const pool = set[situation] ?? set.talk;

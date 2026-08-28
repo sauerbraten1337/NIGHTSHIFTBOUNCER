@@ -301,6 +301,18 @@ export const ID_ISSUES = [
   { id: 'age', label: 'Geburtsdatum manipuliert' }
 ];
 
+/**
+ * Was gerade aktiv ist. Der Fokus liegt vorerst allein auf der Kontrolle an
+ * der Tür: Sondernächte, Zufallsereignisse, Acts und ungeduldige Gäste sind
+ * abgeschaltet. Zum Wiedereinschalten reicht ein `true`.
+ */
+export const FEATURES = {
+  nightEvents: false,      // Sondernächte (Rave, VIP Night, Inspection, Chaos)
+  randomEvents: false,     // Stromausfall, Promi, Ansturm, Beschwerden
+  artists: false,          // Act am Hintereingang
+  queueImpatience: false   // Gäste verlassen die Schlange
+};
+
 /** Nacht-Events. */
 export const NIGHT_EVENTS = [
   {
