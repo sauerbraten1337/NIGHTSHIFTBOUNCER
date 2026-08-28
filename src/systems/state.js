@@ -75,6 +75,13 @@ export function createNightState(event, artist, seed, mode = 'solo', quota = TUN
       airlock: newStation('airlock')
     },
 
+    /**
+     * Ab welchem abgearbeiteten Gast spaetestens jemand ausrastet?
+     * Genau ein garantierter Uebergriff pro Nacht - startNight wuerfelt aus,
+     * wann er faellig wird (siehe systems/aggression.js).
+     */
+    forcedAttackAt: 0,
+
     spawnCooldown: 0.25,
     randomEventCooldown: 40,
     activeEffects: [],

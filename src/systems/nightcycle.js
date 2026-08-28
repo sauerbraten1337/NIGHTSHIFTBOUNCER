@@ -8,7 +8,7 @@ import { tickInsideRevenue } from './economy.js';
 import { updateQueue } from './queue.js';
 import { updateRandomEvents } from './randomEvents.js';
 import { nightRating, changeReputation } from './reputation.js';
-import { weightedPick, clamp } from '../core/rng.js';
+import { weightedPick, clamp, randInt } from '../core/rng.js';
 import { resetGuestSerial } from './guests.js';
 import { startTutorial, updateTutorial } from './tutorial.js';
 import { updateAggression } from './aggression.js';
@@ -53,6 +53,8 @@ export function startNight(game, event, artist, opts = {}) {
     state.night.stats.artistFee = artist.fee;
     state.money -= artist.fee;
   }
+  // Ein Uebergriff pro Nacht ist gesetzt - offen ist nur, bei welchem Gast.
+  state.night.forcedAttackAt = randInt(rng, 1, Math.max(1, state.night.quota - 2));
   if (opts.tutorial) startTutorial(game);
   pushLog(state, `NIGHT ${String(state.nightIndex).padStart(2, '0')} - ${event.label}`, 'info');
   addToast(state.night, `OFFEN - ${state.night.quota} LEUTE AUF DER LISTE`, 'info', 4);

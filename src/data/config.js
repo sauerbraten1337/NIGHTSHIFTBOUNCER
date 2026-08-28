@@ -250,14 +250,14 @@ const RAW_ITEMS = [
   { id: 'book', label: 'Notizbuch', zones: ['bag'] },
   { id: 'powerbank', label: 'Powerbank', zones: ['jacket', 'bag'] },
   { id: 'shades', label: 'Sonnenbrille', zones: ['jacket', 'bag'] },
-  { id: 'meds', label: 'Schmerztabletten, beschriftet', zones: ['pockets', 'bag'] },
+  { id: 'meds', label: 'Tabletten, beschriftet', zones: ['pockets', 'bag'] },
   { id: 'deo', label: 'Deoroller', zones: ['bag'] },
   { id: 'selfie', label: 'Selfiestick', zones: ['bag'] },
   { id: 'pen', label: 'Kugelschreiber', zones: ['jacket', 'pockets', 'bag'] },
   { id: 'snack', label: 'Müsliriegel', zones: ['jacket', 'bag'] },
   { id: 'earplugs', label: 'Ohrstöpsel', zones: ['pockets', 'bag'] },
   { id: 'vape', label: 'E-Zigarette', zones: ['jacket', 'pockets', 'bag'] },
-  { id: 'ticket', label: 'Vorverkaufsticket', zones: ['jacket', 'pockets'] },
+  { id: 'ticket', label: 'Ticket', zones: ['jacket', 'pockets'] },
 
   // --- Waffen: es gibt viele, in der Hausordnung steht nur "Waffen" ---
   { id: 'blade', label: 'Klappmesser', cat: 'weapon', zones: ['jacket', 'pockets'] },
@@ -378,6 +378,7 @@ export const DIFFICULTY_STEPS = [
 export const NOTE_TOPICS = [
   { id: 'document', label: 'Dokument', area: 'outside', hint: 'Foto, Name, Datum, Merkmale' },
   { id: 'person', label: 'Zustand der Person', area: 'outside', hint: 'Auftreten, Augen, Hände' },
+  { id: 'statement', label: 'Aussage', area: 'outside', hint: 'Passt, was er sagt, zum Rest?' },
   { id: 'items', label: 'Mitgeführte Sachen', area: 'airlock', hint: 'Jacke, Taschen, Beutel' },
   { id: 'alcohol', label: 'Alkoholwert', area: 'airlock', hint: 'Messwert gegen Grenzwert' }
 ];

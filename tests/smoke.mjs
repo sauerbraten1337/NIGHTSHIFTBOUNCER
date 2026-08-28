@@ -30,8 +30,11 @@ import {
 } from '../src/data/config.js';
 import { difficultyProfile } from '../src/systems/difficulty.js';
 import {
-  startAggression, aggressionActive, aggressionPossible, aggressionRisk
+  startAggression, aggressionActive, aggressionPossible, aggressionRisk, forcedDue
 } from '../src/systems/aggression.js';
+import { buildStatements } from '../src/systems/statements.js';
+import { talkTo } from '../src/systems/alcohol.js';
+import { collectFindings } from '../src/systems/decision.js';
 import { updateNight as tickNight } from '../src/systems/nightcycle.js';
 
 /* ---------- Spiel aufsetzen ---------- */
@@ -649,6 +652,130 @@ function nightWithGuest(seed = 5150, nightIndex = 7) {
     'Jeder Übergriff geht genau einmal aus');
   for (const station of Object.values(ln.stations)) {
     assert.equal(station.aggro, null, 'Am Ende läuft kein Angriff mehr');
+  }
+}
+
+
+/* ---------- Test 11: Aussagen - Zuhören muss sich lohnen ---------- */
+
+{
+  const rngSt = createRng(2468);
+  let withLie = 0;
+  const kinds = new Set();
+  const lieKinds = new Set();
+  const total = 800;
+
+  for (let i = 0; i < total; i++) {
+    const g = createGuest(rngSt, { reputation: 50, nightIndex: 8 });
+    const st = g.truth.statements;
+    assert.ok(st.length >= 2, 'Jeder Gast sagt mehr als einen Satz');
+    assert.equal(st[0].id, 'age', 'Die erste Aussage ist immer die zum Alter');
+    for (const s of st) {
+      assert.ok(s.text.length > 3, 'Aussagen haben einen Text');
+      kinds.add(s.id);
+      if (s.lie) lieKinds.add(s.id);
+    }
+    // Reines Geplauder ist nie eine wertbare Lüge.
+    assert.ok(!st.some((s) => s.id === 'visit' && s.lie), 'Small Talk ist keine Lüge');
+    if (st.some((s) => s.lie)) withLie++;
+  }
+
+  const share = withLie / total;
+  assert.ok(share > 0.12 && share < 0.4, `Gelogen wird regelmässig, aber nicht immer (${Math.round(share * 100)}%)`);
+  assert.ok(kinds.size >= 5, `Verschiedene Themen kommen vor (${kinds.size})`);
+  assert.ok(lieKinds.size >= 3, `Gelogen wird zu verschiedenen Themen (${[...lieKinds].join(', ')})`);
+}
+
+// Jede Ansprache lockt genau eine weitere Aussage heraus.
+{
+  const rngTalk = createRng(1357);
+  const state = makeGame('solo').state;
+  const guest = createGuest(rngTalk, { reputation: 50, nightIndex: 6 });
+  const count = guest.truth.statements.length;
+
+  let talk = null;
+  for (let i = 1; i <= count; i++) {
+    talk = talkTo(rngTalk, state, guest, talk);
+    assert.equal(talk.said.length, i, `Nach ${i} Ansprachen liegen ${i} Aussagen vor`);
+    assert.equal(talk.moreToSay, i < count, 'moreToSay stimmt mit dem Rest überein');
+    assert.equal(talk.realName, guest.name, 'Der echte Name kommt weiterhin heraus');
+  }
+  // Danach wiederholt er sich nur noch - die Liste waechst nicht weiter.
+  talk = talkTo(rngTalk, state, guest, talk);
+  assert.equal(talk.said.length, count, 'Mehr als seine Aussagen hat er nicht');
+}
+
+// Bewertet wird nur, was der Gast wirklich gesagt hat.
+{
+  const g = makeGame('solo');
+  const station = { id: 'door', checks: { id: null, talk: null, alcohol: null }, notes: emptyNotes(), patdown: null };
+  const guest = createGuest(createRng(24), { reputation: 50, nightIndex: 6 });
+  guest.truth.statements = [
+    { id: 'age', text: 'Ich bin 21.', lie: true },
+    { id: 'bag', text: 'Keine Tasche.', lie: false }
+  ];
+
+  // Ohne Ansprechen ist die Aussage weder Treffer noch Versäumnis.
+  toggleTopic(station.notes, 'statement');
+  toggleTopic(station.notes, 'statement');       // -> 'bad'
+  let score = collectFindings(guest, station);
+  assert.equal(score.hits.filter((h) => h.kind === 'statement').length, 0,
+    'Wer nie angesprochen hat, kann keine Lüge melden');
+  assert.equal(score.wrong.filter((h) => h.kind === 'statement').length, 1,
+    'Eine Meldung ohne Gespräch ist ein Fehlgriff');
+
+  // Mit Ansprechen wird die Lüge zum Treffer.
+  station.checks.talk = talkTo(createRng(9), g.state, guest, null);
+  score = collectFindings(guest, station);
+  assert.equal(score.hits.filter((h) => h.kind === 'statement').length, 1, 'Gehörte Lüge zählt als Treffer');
+
+  // Wer sie hört, aber nicht meldet, hat sie übersehen.
+  station.notes = emptyNotes();
+  score = collectFindings(guest, station);
+  assert.equal(score.missed.filter((h) => h.kind === 'statement').length, 1, 'Nicht gemeldete Lüge gilt als übersehen');
+}
+
+// Gescriptete Gäste (Tutorial) bekommen Aussagen, die zu ihrer Wahrheit passen.
+{
+  const guest = createGuest(createRng(5), { reputation: 50, nightIndex: 6 });
+  guest.truth.hasBag = false;
+  guest.truth.contraband = null;
+  guest.truth.drunk = 0;
+  guest.truth.impaired = 0;
+  guest.truth.idIssues = [];
+  guest.doc.tampered = false;
+  guest.truth.statements = buildStatements(createRng(5), guest);
+  assert.equal(guest.truth.statements.some((s) => s.lie), false,
+    'Ein sauberer Gast hat nichts zu lügen');
+}
+
+/* ---------- Test 12: ein Übergriff pro Nacht ist gesetzt ---------- */
+
+{
+  const g = makeGame('solo', 13579);
+  g.state.nightIndex = 10;
+  startNight(g, pickNightEvent(g.rng, g.state), null);
+  const night = g.state.night;
+  assert.ok(night.forcedAttackAt >= 1 && night.forcedAttackAt <= night.quota - 2,
+    `Der garantierte Übergriff ist eingeplant (bei Gast ${night.forcedAttackAt}/${night.quota})`);
+  assert.equal(forcedDue(night), night.processed >= night.forcedAttackAt,
+    'Fällig wird er erst an der ausgewürfelten Stelle');
+
+  night.processed = night.forcedAttackAt;
+  assert.equal(forcedDue(night), true, 'An der Stelle ist er fällig');
+  night.stats.attacks = 1;
+  assert.equal(forcedDue(night), false, 'Ist ohnehin schon jemand ausgerastet, entfällt er');
+}
+
+// In einer kompletten späten Nacht passiert er auch wirklich.
+{
+  for (const seed of [4242, 909, 31337]) {
+    const late = makeGame('solo', seed);
+    late.state.nightIndex = 9;
+    const run = runNight(late);
+    assert.ok(run.ended, 'Nacht beendet');
+    assert.ok(run.night.stats.attacks >= 1,
+      `Seed ${seed}: mindestens ein Übergriff pro Nacht (${run.night.stats.attacks})`);
   }
 }
 

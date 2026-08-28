@@ -176,8 +176,24 @@ export function updateAggression(game, dt) {
     station.aggroCooldown = (station.aggroCooldown ?? 1.5) - dt;
     if (station.aggroCooldown > 0) continue;
     station.aggroCooldown = 1;
-    maybeAggression(game, station, 'idle');
+    // Einer pro Nacht ist gesetzt: ist die ausgewürfelte Stelle erreicht und
+    // bis dahin nichts passiert, geht dieser hier los.
+    const guest = station.guest;
+    if (forcedDue(night) && !guest.tutorial && !guest.isArtist) {
+      startAggression(game, station, 'idle');
+    } else {
+      maybeAggression(game, station, 'idle');
+    }
   }
+}
+
+/**
+ * Steht der garantierte Übergriff dieser Nacht an?
+ * Er entfällt, sobald ohnehin schon jemand ausgerastet ist.
+ */
+export function forcedDue(night) {
+  if (!night || night.stats.attacks > 0) return false;
+  return night.processed >= (night.forcedAttackAt ?? Infinity);
 }
 
 function stationsWithGuest(game, night) {

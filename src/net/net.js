@@ -196,17 +196,29 @@ function viewGuest(guest) {
 }
 
 function viewStation(station) {
-  const checks = station.checks;
+  const checks = viewChecks(station.checks);
   return {
     id: station.id,
     guest: viewGuest(station.guest),
-    // Die Wahrheit ueber das Dokument bleibt auf dem Host.
-    checks: checks.id ? { ...checks, id: { ...checks.id, faults: undefined } } : checks,
+    checks,
     patdown: station.patdown,
     notes: station.notes,
     // Übergriff: der Gast am anderen Rechner muss dieselben Tasten sehen.
     aggro: station.aggro
   };
+}
+
+/**
+ * Die Wahrheit bleibt auf dem Host: weder die echten Ausweisfehler noch die
+ * Information, welche Aussage gelogen war, gehen ueber die Leitung.
+ */
+function viewChecks(checks) {
+  const out = { ...checks };
+  if (checks.id) out.id = { ...checks.id, faults: undefined };
+  if (checks.talk) {
+    out.talk = { ...checks.talk, said: (checks.talk.said ?? []).map((s) => ({ id: s.id, text: s.text })) };
+  }
+  return out;
 }
 
 /**

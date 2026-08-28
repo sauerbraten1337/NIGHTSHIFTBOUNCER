@@ -27,6 +27,10 @@ nicht in den Club darf:
 
 ![Hausordnung](docs/shot-rulebook.png)
 
+Im Titelbildschirm liegt der Katalog: alles, was Gäste dabeihaben können, mit Gruppe und Zone:
+
+![Gegenstände](docs/shot-catalog.png)
+
 ---
 
 ## Starten
@@ -105,7 +109,15 @@ Die Auswahl auf dem Kontrolltisch, die Ausweisfelder und die Abtast-Ringe am Gas
 
 Der Titelbildschirm zeigt die Szene, um die es geht — Clubfassade, Schlange, Türsteher —
 und stellt die Auswahl als Spalte rechts daneben: Spielname oben, darunter Solo, lokaler
-Koop, Online-Koop sowie Einstellungen, Anleitung und Über das Spiel.
+Koop, Online-Koop sowie **Gegenstände**, Einstellungen, Anleitung und Über das Spiel.
+
+**GEGENSTÄNDE** öffnet den Katalog: alle rund 50 Sachen, die Gäste dabeihaben können, mit
+genau dem Icon, das später auf dem Kontrolltisch liegt, der Gruppe der Hausordnung und den
+Zonen, in denen sie stecken. Hier — und nur hier, im Titelbildschirm — kann man in Ruhe
+nachschlagen; in der Schicht steht in der Hausordnung weiterhin nur die Gruppe.
+
+Jeder Bildschirm hinter dem Titel hat einen Rückweg: aus dem Katalog, aus der Online-Lobby
+und aus dem Briefing der ersten Schicht kommt man mit **ZURÜCK** wieder ins Menü.
 
 ## Die Kontrolle
 
@@ -173,9 +185,33 @@ Figur wirklich gezeichnet, auch schon in der Schlange: wer hinsieht, weiss vorhe
 gleich vor ihm steht. Das steht in keiner Anzeige — das siehst du der Person an oder eben
 nicht. Später werden die Anzeichen subtiler.
 
+### Was der Gast erzählt
+
+**ANSPRECHEN** ist keine Geste mehr, sondern eine eigene Prüfebene. Beim ersten Mal nennt der
+Gast seinen Namen und eine erste Behauptung; jede weitere Ansprache lockt die nächste heraus.
+Alles Gesagte sammelt sich unter dem Ausweis, damit du es mit der Karte daneben vergleichen
+kannst.
+
+Jede Aussage ist überprüfbar — und etwa jeder vierte Gast lügt in mindestens einer:
+
+| Er sagt | Du prüfst gegen |
+|---|---|
+| „Ich bin 26." | das Geburtsdatum auf der Karte |
+| „Den hab ich erst neu machen lassen." | das Ablaufdatum |
+| „Ich hab nichts dabei." | die Tasche, die sichtbar an ihm hängt |
+| „Nichts Verbotenes, könnt ihr durchsuchen." | das, was beim Abtasten auf den Tisch kommt |
+| „Ich bin komplett nüchtern." | den Wert auf dem Alkoholtestgerät |
+| „Mir gehts blendend." | rote Augen, Schweiss, Zittern |
+
+Dazwischen steht Geplauder, das nichts beweist („Ich kenn hier Leute"). Das Spiel sagt nie,
+welche Aussage gelogen war — du trägst deinen Verdacht als **Aussage** auf Seite 2 des
+Notizzettels ein und erfährst erst im Bericht, ob du richtig lagst. Wer nie anspricht, kann
+hier weder treffen noch danebenliegen: die Prüfebene bleibt dann einfach ungenutzt.
+
 ### Wenn jemand ausrastet
 
-Selten — bei etwa jedem vierzigsten Gast, ab Nacht 5 — nimmt jemand ein "Nein" nicht hin.
+Mindestens einmal pro Nacht — und sonst bei etwa jedem vierzigsten Gast, ab Nacht 5 — nimmt
+jemand ein "Nein" nicht hin.
 Er kommt auf dich zu, wird im Bild gross, und mitten auf dem Schirm erscheinen
 nacheinander Tasten (`Q` `W` `E` `R` `A` `S` `D` `F`), jede mit einem schrumpfenden
 Zeitring. Drei bis fünf davon musst du treffen, bevor die Zeit abläuft; zwei Fehlgriffe
@@ -187,8 +223,10 @@ Reaktion. Gelingt die Abwehr, fliegt er raus, es gibt Ruf und eine Prämie. Geli
 nicht, kostet das Geld und Ruf, und du stehst danach zwei Sekunden benommen da. Abgewiesen
 wird er in beiden Fällen — wer handgreiflich wird, hat dir die Entscheidung abgenommen.
 
-Ob jemand ausrastet, hängt an ihm: betrunken, unter Einfluss, gereizt und riskant heisst
-deutlich explosiver als ein entspannter Stammgast. Der Bericht zählt am Ende der Nacht,
+Wann es passiert, weisst du nie: eine Nacht würfelt beim Start aus, bei welchem Gast der
+garantierte Übergriff spätestens kommt — rastet vorher schon jemand von selbst aus, war das
+der eine. Ob jemand ausrastet, hängt an ihm: betrunken, unter Einfluss, gereizt und riskant
+heisst deutlich explosiver als ein entspannter Stammgast. Der Bericht zählt am Ende der Nacht,
 wie oft es passiert ist und wie oft du es abgewehrt hast.
 
 ### Der Notizzettel — zwei Seiten, beide deine
@@ -270,6 +308,7 @@ src/main.js           Modi, Spielfluss, Eingaben, Host/Gast-Verdrahtung
 src/core/             rng · bus · input · loop · audio
 src/data/             config (Modi, Rollen, Balancing) · dialogue
 src/systems/          state · guests · queue · identity · security · alcohol · notes
+                      statements (was der Gast behauptet - und ob es stimmt)
                       decision · economy · reputation · upgrades · artists · randomEvents
                       nightcycle · progression · difficulty · tutorial · coop · save
                       aggression (Übergriffe und Tastenabwehr)
@@ -278,6 +317,7 @@ src/render/           layout · palette · sprites · figure (grosse Frontfigure
                       Abtast-Ringe, Alkoholtestgerät) · title (Titelbildschirm)
                       effects · renderer
 src/ui/               hud (inkl. Entscheidungs-Buttons) · notepad (Block mit zwei Seiten)
+                      screens: Menü, Gegenstands-Katalog, Lobby, Briefing, Pause
                       idcard (Ausweis in der Hand) · itemtray (Kontrolltisch)
                       rulebook (ausfahrende Hausordnung am linken Rand)
                       report · shop · screens

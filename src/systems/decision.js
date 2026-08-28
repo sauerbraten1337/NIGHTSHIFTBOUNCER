@@ -86,6 +86,17 @@ export function collectFindings(guest, station) {
     else if (!noted && over) missed.push({ kind: 'alcohol', label: 'Alkoholwert' });
   }
 
+  // Aussage: nur was der Gast wirklich gesagt hat, zaehlt. Wer nie
+  // angesprochen hat, kann hier weder treffen noch etwas uebersehen.
+  const said = checks.talk?.said ?? [];
+  const lies = said.filter((s) => s.lie);
+  if (problems.includes('statement')) {
+    if (lies.length) hits.push({ kind: 'statement', label: 'Falsche Aussage' });
+    else wrong.push({ kind: 'statement', label: 'Aussage' });
+  } else if (lies.length) {
+    missed.push({ kind: 'statement', label: 'Falsche Aussage' });
+  }
+
   // Zustand der Person: nur als Angabe wertbar, wenn der Gast wirklich
   // beeintraechtigt ist.
   if (problems.includes('person')) {

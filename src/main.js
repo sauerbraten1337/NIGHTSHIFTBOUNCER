@@ -181,7 +181,10 @@ function goBriefing() {
   applyMode(game.state.mode);
   pendingEvent = pickNightEvent(game.rng, game.state);
   const tutorial = game.tutorialWanted && !game.state.tutorialDone;
-  screens.briefing(pendingEvent, () => beginNight(tutorial), { tutorial });
+  // Vor der ersten Schicht kommt man noch zurueck zum Titel; nach einer
+  // gespielten Nacht waere das ein Rueckweg mitten aus der Karriere heraus.
+  const onBack = game.state.nightIndex === 0 ? () => goMenu() : null;
+  screens.briefing(pendingEvent, () => beginNight(tutorial), { tutorial, onBack });
 }
 
 function beginNight(tutorial) {

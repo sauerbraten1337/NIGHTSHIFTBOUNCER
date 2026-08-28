@@ -3,7 +3,8 @@
 import { escapeHtml } from './hud.js';
 import { renderReport } from './report.js';
 import { renderShop } from './shop.js';
-import { CLUB_NAME, MODES, rolesFor, DEFENSE_KEYS } from '../data/config.js';
+import { CLUB_NAME, MODES, rolesFor, DEFENSE_KEYS, ITEMS, ITEM_CATEGORIES, ZONES } from '../data/config.js';
+import { drawItemIcon } from '../render/items.js';
 import { clubTier, capacity, rank } from '../systems/state.js';
 import { hasSave, clearSave } from '../systems/save.js';
 import { repBand } from '../systems/reputation.js';
@@ -24,6 +25,13 @@ export function createScreens(game) {
   }
 
   function hide() { root.classList.add('hidden'); }
+
+  /**
+   * Die Tutorial-Einstellung gehoert nicht in einen einzelnen Menue-Aufbau:
+   * wer aus dem Katalog oder aus dem Briefing zurueckkommt, soll seine
+   * Auswahl wiederfinden.
+   */
+  let tutorialWanted = true;
 
   /* ---------- Hauptmenü ---------- */
 
@@ -48,12 +56,12 @@ export function createScreens(game) {
 
     const nav = el.querySelector('#menu-nav');
     const panel = el.querySelector('#menu-panel');
-    let tutorial = true;
 
     const items = [
       { id: 'solo', label: MODES.solo.label, note: 'Allein an der Tür. Alles liegt bei dir.', kind: 'mode' },
       { id: 'local', label: MODES.local.label, note: 'Zwei an einer Tastatur, geteilter Bildschirm.', kind: 'mode' },
       { id: 'online', label: MODES.online.label, note: 'Raum erstellen oder mit Code beitreten.', kind: 'mode' },
+      { id: 'catalog', label: 'GEGENSTÄNDE', note: 'Alles, was Gäste dabeihaben können.', kind: 'screen' },
       { id: 'settings', label: 'EINSTELLUNGEN', note: 'Tutorial, Spielstand.', kind: 'panel' },
       { id: 'howto', label: 'ANLEITUNG', note: 'Wie eine Schicht abläuft.', kind: 'panel' },
       { id: 'credits', label: 'ÜBER DAS SPIEL', note: 'Was das hier ist.', kind: 'panel' }
@@ -82,10 +90,12 @@ export function createScreens(game) {
     function choose(item) {
       if (item.kind === 'mode') {
         lastMode = item.id;
-        onStart(item.id, tutorial);
+        onStart(item.id, tutorialWanted);
         return;
       }
-      if (item.kind === 'continue') { onContinue(lastMode, tutorial); return; }
+      if (item.kind === 'continue') { onContinue(lastMode, tutorialWanted); return; }
+      // Eigener Bildschirm mit Rueckweg ins Menue.
+      if (item.kind === 'screen') { catalog(() => menu({ onStart, onContinue })); return; }
       togglePanel(item.id);
     }
 
@@ -114,7 +124,7 @@ export function createScreens(game) {
       if (id === 'settings') {
         return `
           <label class="menu-toggle">
-            <input type="checkbox" id="menu-tutorial" ${tutorial ? 'checked' : ''} />
+            <input type="checkbox" id="menu-tutorial" ${tutorialWanted ? 'checked' : ''} />
             <span>TUTORIAL SPIELEN</span>
           </label>
           <p class="menu-note">Die Einarbeitung erklärt Ausweis, Abtasten und Entscheidung Schritt für Schritt.</p>
@@ -141,7 +151,7 @@ export function createScreens(game) {
 
     function wireSettings() {
       panel.querySelector('#menu-tutorial')?.addEventListener('change', (e) => {
-        tutorial = e.target.checked;
+        tutorialWanted = e.target.checked;
       });
       panel.querySelector('#menu-clear')?.addEventListener('click', (e) => {
         clearSave();
@@ -151,6 +161,54 @@ export function createScreens(game) {
     }
 
     show(el, { bare: true });
+  }
+
+  /* ---------- Gegenstands-Katalog ---------- */
+
+  /**
+   * Alles, was in der Nacht auf dem Kontrolltisch landen kann - mit dem
+   * Icon, das im Spiel gezeichnet wird, und der Gruppe der Hausordnung.
+   *
+   * Bewusst nur hier im Titelbildschirm: waehrend der Schicht muss man
+   * weiterhin selbst wissen, was ein Schlagring ist.
+   */
+  function catalog(onBack) {
+    const groups = [
+      { id: null, label: 'ZUGELASSEN', rule: 'Alltagsgegenstände. Nicht zu beanstanden.' },
+      ...ITEM_CATEGORIES.map((c) => ({ id: c.id, label: c.label.toUpperCase(), rule: c.rule, severity: c.severity }))
+    ];
+
+    const el = document.createElement('div');
+    el.innerHTML = `
+      <h1 class="title">GEGENSTÄNDE</h1>
+      <div class="subtitle">${ITEMS.length} SACHEN · ${ITEMS.filter((i) => i.forbidden).length} DAVON VERBOTEN</div>
+      <p style="font-size:13px;color:#aab2bf;max-width:760px">
+        Was Gäste dabeihaben können. In der Schicht steht in der Hausordnung nur die Gruppe —
+        welcher Gegenstand dazugehört, entscheidest du dort selbst.</p>
+      ${groups.map((g) => `
+        <h2 class="sec">${escapeHtml(g.label)}${g.severity ? ` · STUFE ${'I'.repeat(g.severity)}` : ''}</h2>
+        <p class="cat-rule">${escapeHtml(g.rule)}</p>
+        <div class="cat-grid">
+          ${ITEMS.filter((i) => (i.cat ?? null) === g.id).map((i) => `
+            <div class="cat-item ${g.id ? 'bad' : 'ok'}">
+              <canvas width="96" height="96" data-item="${escapeHtml(i.id)}"></canvas>
+              <span class="cat-label">${escapeHtml(i.label)}</span>
+              <span class="cat-zones">${i.zones.map(zoneLabel).join(' · ')}</span>
+            </div>`).join('')}
+        </div>`).join('')}
+      <div class="btn-row"><button class="btn ghost" id="catalog-back">ZURÜCK</button></div>
+    `;
+    el.querySelector('#catalog-back').addEventListener('click', onBack);
+    show(el);
+    // Dieselben Icons wie auf dem Kontrolltisch - kein zweiter Zeichensatz.
+    for (const canvas of el.querySelectorAll('.cat-item canvas')) {
+      const ctx = canvas.getContext('2d');
+      drawItemIcon(ctx, canvas.dataset.item, canvas.width);
+    }
+  }
+
+  function zoneLabel(id) {
+    return ZONES.find((z) => z.id === id)?.label ?? id.toUpperCase();
   }
 
   /* ---------- Online-Lobby ---------- */
@@ -249,9 +307,13 @@ export function createScreens(game) {
           Foto, Name, Geburtsdatum, Gültigkeit, Hologramm.</div>
       </div>
 
-      <div class="btn-row"><button class="btn primary" id="briefing-start">SCHICHT BEGINNEN</button></div>
+      <div class="btn-row">
+        <button class="btn primary" id="briefing-start">SCHICHT BEGINNEN</button>
+        ${opts.onBack ? '<button class="btn ghost" id="briefing-back">ZURÜCK ZUM TITEL</button>' : ''}
+      </div>
     `;
     el.querySelector('#briefing-start').addEventListener('click', onStart);
+    el.querySelector('#briefing-back')?.addEventListener('click', opts.onBack);
     show(el);
   }
 
@@ -320,7 +382,7 @@ export function createScreens(game) {
     show(el);
   }
 
-  return { show, hide, menu, lobby, briefing, report, shop, pause, waiting, root };
+  return { show, hide, menu, lobby, briefing, report, shop, pause, waiting, catalog, root };
 }
 
 /** Was ab heute zusätzlich auffällig sein kann. */
