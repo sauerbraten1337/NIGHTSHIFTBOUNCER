@@ -10,7 +10,7 @@ import { violationsOf } from './guests.js';
 import { admitRevenue, plannedBarSpend, earn, fine, incidentCost } from './economy.js';
 import { changeReputation } from './reputation.js';
 import { incidentChance, scorePatdown } from './security.js';
-import { addToast, addRadio, pushLog, isSolo } from './state.js';
+import { addToast, pushLog, isSolo } from './state.js';
 import { emptyNotes, reportedProblems } from './notes.js';
 import { moveToAirlock } from './queue.js';
 import { inspectionVerdict, scoreInspection } from './identity.js';
@@ -138,9 +138,9 @@ export function passGuest(game, guest, station) {
   moveToAirlock(game, guest);
   clearStation(station);
   guest.said = null;
-  addRadio(night, 'TÜR', verdict.checked
-    ? (verdict.clean ? 'Ausweis geprüft, kommt zu euch.' : 'Der ist auffällig - schaut ihn euch an.')
-    : 'Kommt ungeprüft durch, macht ihr weiter.');
+  addToast(night, verdict.checked
+    ? (verdict.clean ? 'TÜR: AUSWEIS GEPRÜFT, KOMMT DURCH' : 'TÜR: AUFFÄLLIG - GENAU ANSEHEN')
+    : 'TÜR: UNGEPRÜFT DURCHGELASSEN', verdict.clean === false ? 'warn' : 'info', 3);
   bus.emit('sfx', 'door');
   if (rng() < 0.001) pushLog(state, 'Tür läuft', 'info');
   return { verdict };
@@ -205,7 +205,6 @@ function resolveBadAdmission(game, guest, worst) {
       night.stats.incidents++;
       state.lifetime.incidents++;
       addToast(night, `BUSSGELD -${f.value} EUR: MINDERJÄHRIG`, 'bad', 5);
-      addRadio(night, 'FUNK', 'Da war jemand zu jung. Das gibt Ärger.');
       bus.emit('sfx', 'alarm');
     } else {
       changeReputation(state, -1.5, 'Risiko');
@@ -222,7 +221,6 @@ function resolveBadAdmission(game, guest, worst) {
     night.stats.incidents++;
     state.lifetime.incidents++;
     addToast(night, `ZWISCHENFALL: ${worst.label.toUpperCase()} (-${cost} EUR)`, 'bad', 5);
-    addRadio(night, 'FLOOR', `Zwischenfall im Club. ${worst.label}.`);
     pushLog(state, `Zwischenfall: ${worst.label}`, 'bad');
     bus.emit('sfx', 'alarm');
   } else {
@@ -252,7 +250,6 @@ export function rejectGuest(game, guest, station) {
       night.stats.catches++;
       rep += 0.4;
       addToast(night, 'GUTER FANG - SECURITY HAT IHN GESTOPPT', 'good', 4);
-      addRadio(night, 'SECURITY', 'Den hätten wir fast reingelassen.');
     } else if (isSolo(state) || !atAirlock) {
       const verify = isSolo(state) ? soloVerification(station.checks) : { state: 'none' };
       if (verify.state === 'verified') { rep += 0.25; night.stats.verified++; }
@@ -264,7 +261,7 @@ export function rejectGuest(game, guest, station) {
     addToast(night, `RICHTIG ABGEWIESEN: ${violations[0].label}`, 'good');
     if (guest.inspector) {
       changeReputation(state, 2, 'Testkontrolle bestanden');
-      addRadio(night, 'FUNK', 'Das war eine Testperson. Sauber gemacht.');
+      addToast(night, 'TESTPERSON ERKANNT', 'good', 3);
     }
   } else {
     night.stats.mistakes++;
@@ -274,7 +271,7 @@ export function rejectGuest(game, guest, station) {
     state.xp += 2;
     bus.emit('sfx', 'deny');
     addToast(night, `FALSCH ABGEWIESEN (-${lost} EUR Potenzial)`, 'bad');
-    if (guest.truth.vip) addRadio(night, 'FUNK', 'Das war ein VIP. Der redet morgen über uns.');
+    if (guest.truth.vip) addToast(night, 'DAS WAR EIN VIP', 'bad', 4);
     if (guest.inspector) changeReputation(state, 1, 'Testkontrolle');
   }
 

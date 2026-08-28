@@ -49,14 +49,22 @@ async function newPage() {
   });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   await page.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#menu-start');
+  await page.waitForSelector('.menu-item[data-id="solo"]');
   return page;
 }
 
+/** Tutorial-Haken sitzt im Menue unter EINSTELLUNGEN. */
+async function setTutorial(page, on) {
+  if (on) return;
+  await page.click('.menu-item[data-id="settings"]');
+  await page.waitForSelector('#menu-tutorial');
+  await page.uncheck('#menu-tutorial');
+  await page.click('.menu-item[data-id="settings"]');
+}
+
 async function startMode(page, mode, tutorial) {
-  await page.click(`.mode-card[data-mode="${mode}"]`);
-  if (!tutorial) await page.uncheck('#menu-tutorial');
-  await page.click('#menu-start');
+  await setTutorial(page, tutorial);
+  await page.click(`.menu-item[data-id="${mode}"]`);
   await page.waitForSelector('#briefing-start', { timeout: 5000 });
   await page.click('#briefing-start');
   await page.waitForTimeout(800);
@@ -123,6 +131,30 @@ for (let i = 0; i < 30; i++) {
     });
     await solo.waitForTimeout(250);
     for (let z = 0; z < 3; z++) {
+      // Die erste Zone wird mit der Maus auf den Ring geoeffnet, der Rest per Aktion.
+      if (!results.zoneByMouse) {
+        const ring = await solo.evaluate(() => {
+          const g = window.NULLWERK;
+          const pat = g.state.night.stations.door.patdown;
+          if (!pat || pat.complete) return null;
+          const hit = g.renderer.zoneHits.find((z2) => pat.zones[z2.zone]?.state === 'closed');
+          if (!hit) return null;
+          const p = g.renderer.toScreen(hit.x, hit.y);
+          return { zone: hit.zone, x: p.x, y: p.y };
+        });
+        if (ring) {
+          await solo.mouse.click(ring.x, ring.y);
+          // Das Ausleeren der Zone dauert eine knappe Sekunde.
+          await solo.waitForFunction((id) => {
+            const pat = window.NULLWERK.state.night?.stations.door.patdown;
+            return !pat || pat.zones[id]?.state !== 'closed';
+          }, ring.zone, { timeout: 4000 }).catch(() => {});
+          results.zoneByMouse = await solo.evaluate((id) => {
+            const pat = window.NULLWERK.state.night?.stations.door.patdown;
+            return !!pat && pat.zones[id]?.state !== 'closed';
+          }, ring.zone);
+        }
+      }
       const zone = await solo.evaluate(() => {
         const pat = window.NULLWERK.state.night.stations.door.patdown;
         if (!pat || pat.complete) return null;
@@ -336,18 +368,16 @@ await coop.close();
 /* ---------- 3. Online: Raum erstellen und beitreten ---------- */
 
 const host = await newPage();
-await host.click('.mode-card[data-mode="online"]');
-await host.uncheck('#menu-tutorial');
-await host.click('#menu-start');
+await setTutorial(host, false);
+await host.click('.menu-item[data-id="online"]');
 await host.waitForSelector('#lobby-host');
 await host.click('#lobby-host');
 await host.waitForSelector('.roomcode', { timeout: 5000 });
 const code = (await host.textContent('.roomcode')).trim();
 
 const guest = await newPage();
-await guest.click('.mode-card[data-mode="online"]');
-await guest.uncheck('#menu-tutorial');
-await guest.click('#menu-start');
+await setTutorial(guest, false);
+await guest.click('.menu-item[data-id="online"]');
 await guest.waitForSelector('#lobby-code');
 await guest.fill('#lobby-code', code);
 await guest.click('#lobby-join');
@@ -411,6 +441,7 @@ console.log(`  Solo   Einlass ${results.solo.stats.admitted} · abgewiesen ${res
   ` · richtig ${results.solo.stats.correct}/${results.solo.stats.correct + results.solo.stats.mistakes}`);
 console.log(`  Solo   Freischaltungen ${Object.entries(results.solo.unlocks).filter(([, v]) => v).map(([k]) => k).join(',')}`);
 console.log(`  Report/Shop           ${results.report}`);
+console.log(`  Abtast-Ring per Maus  ${results.zoneByMouse === true}`);
 console.log(`  Kontrolltisch         ${results.trayShown === true} · max. ${results.trayCount ?? 0} Gegenstände` +
   ` · Icons gezeichnet ${results.trayPainted === true}`);
 console.log(`  Auswahl per Klick     verboten ${results.contrabandFound === true} · freigegeben ${results.clearedByClick === true}`);
@@ -458,6 +489,7 @@ if (results.coop.stats.admitted < 1) fail('Koop: Security hat niemanden eingelas
 if (results.online.hostRole !== 'host' || results.online.guestRole !== 'guest') fail('Online: Rollen falsch');
 if (!results.online.guestSeesNight) fail('Online: der Gast bekommt keine Schnappschüsse');
 if (!results.trayShown) fail('Kontrolltisch mit Gegenständen wurde nie gezeigt');
+if (!results.zoneByMouse) fail('Abtast-Ring liess sich nicht mit der Maus anklicken');
 if (!results.ui.notepad) fail('Notizzettel fehlt');
 if (!results.ui.notepadHand.includes('caveat') && !results.ui.notepadHand.includes('cursive')) {
   fail('Notizzettel ist nicht in Handschrift gesetzt');

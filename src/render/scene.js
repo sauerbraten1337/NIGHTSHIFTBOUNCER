@@ -15,7 +15,8 @@ import { upgradeLevel } from '../systems/state.js';
 
 /**
  * @param {object} opts { rect:{x,y,w,h}, area:'outside'|'airlock', station,
- *                        queue:[], t, beat, pulse, dark, label }
+ *                        queue:[], t, beat, pulse, dark }
+ * @returns {Array} anklickbare Abtast-Zonen in Ansichtskoordinaten
  */
 export function drawStationView(ctx, game, opts) {
   const { rect, area } = opts;
@@ -28,9 +29,9 @@ export function drawStationView(ctx, game, opts) {
   if (area === 'outside') drawOutside(ctx, game, opts);
   else drawAirlock(ctx, game, opts);
 
-  drawGuestAtStation(ctx, game, opts);
-  drawViewFrame(ctx, game, opts);
+  const zones = drawGuestAtStation(ctx, game, opts);
   ctx.restore();
+  return zones;
 }
 
 /* ---------------------------------------------------------------- */
@@ -106,18 +107,6 @@ function drawOutside(ctx, game, opts) {
   spill.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = spill;
   ctx.fillRect(0, 0, w, h);
-  ctx.restore();
-
-  // Leuchtreklame auf der anderen Strassenseite (der Club liegt hinter uns)
-  const flicker = Math.sin(t * 9) > 0.6 ? 0.45 : 1;
-  ctx.save();
-  ctx.font = `${Math.round(h * 0.028)}px "Archivo Black", "Arial Black", sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.letterSpacing = '4px';
-  ctx.shadowColor = PAL.cyan;
-  ctx.shadowBlur = 18 * flicker * light;
-  ctx.fillStyle = withAlpha('#bff0ff', 0.5 * flicker * light);
-  ctx.fillText('SPÄTI 24H', w * 0.19, horizon - 54);
   ctx.restore();
 
   // Absperrgitter
@@ -428,7 +417,7 @@ function drawGuestAtStation(ctx, game, opts) {
     ctx.letterSpacing = '4px';
     ctx.fillText(area === 'outside' ? 'NIEMAND AN DER TÜR' : 'SCHLEUSE FREI', w / 2, h * 0.62);
     ctx.restore();
-    return;
+    return [];
   }
 
   const holding = !!station.checks.id;
@@ -450,8 +439,9 @@ function drawGuestAtStation(ctx, game, opts) {
   });
 
   // Abtast-Zonen einblenden - die Ringe sitzen auf den echten Körperstellen
+  let zones = [];
   if (station.patdown && !station.patdown.complete) {
-    drawPatdownOverlay(ctx, station, w, t, anchors);
+    zones = drawPatdownOverlay(ctx, station, w, t, anchors);
   }
 
   // Alkoholtestgerät liegt auf dem Tisch, sobald gemessen wurde
@@ -474,6 +464,8 @@ function drawGuestAtStation(ctx, game, opts) {
     ctx.fillText(guest.isArtist ? 'ACT' : 'VIP', w / 2, baseY - figureH - 34);
     ctx.restore();
   }
+
+  return zones;
 }
 
 /** Höhe der Figur: nie breiter als die (im Splitscreen halbe) Ansicht. */
@@ -490,9 +482,11 @@ const ZONE_LABEL = {
 /**
  * Abtast-Zonen: ruhiger Ring auf der tatsächlichen Körperstelle, umlaufender
  * Suchbogen für die offene Zone, Häkchen für erledigt, Ausrufezeichen für Fund.
+ * Gibt die Ringe zurück, damit man sie auch mit der Maus anklicken kann.
  */
 function drawPatdownOverlay(ctx, station, w, t, anchors) {
   const pat = station.patdown;
+  const hits = [];
 
   for (const zone of Object.values(pat.zones)) {
     const anchor = anchors?.[zone.id];
@@ -505,6 +499,7 @@ function drawPatdownOverlay(ctx, station, w, t, anchors) {
     const radiusY = anchor.ry;
     const open = zone.state === 'open';
     const done = zone.state === 'done';
+    if (!done) hits.push({ zone: zone.id, x: cx, y: cy, rx: radiusX, ry: radiusY });
     // Nur die Angabe des SPIELERS färbt den Ring - nicht die Wahrheit.
     const flagged = (zone.flagged ?? []).length > 0;
     const color = done ? (flagged ? PAL.amber : PAL.green) : PAL.cyan;
@@ -561,11 +556,13 @@ function drawPatdownOverlay(ctx, station, w, t, anchors) {
     ctx.textBaseline = 'middle';
     const note = done
       ? (flagged ? `${(zone.flagged ?? []).length} BEANSTANDET` : 'ABGESCHLOSSEN')
-      : open ? 'AUSGELEERT' : `[${cfg.key}]`;
+      : open ? 'AUSGELEERT' : `[${cfg.key}] ODER KLICKEN`;
     const text = `${cfg.label} · ${note}`;
     ctx.fillText(text, cx + radiusX + 12, cy);
     ctx.restore();
   }
+
+  return hits;
 }
 
 /**
@@ -657,37 +654,6 @@ function drawBreathalyzer(ctx, w, h, t, result, key) {
   ctx.fillStyle = PAL.grey;
   ctx.fillText(live ? 'MESSUNG …' : 'ALCO-CHECK 4', x + dw * 0.8, y + dh * 0.77);
 
-  ctx.restore();
-}
-
-/* ---------------------------------------------------------------- */
-
-function drawViewFrame(ctx, game, opts) {
-  const { rect, label, accent = PAL.red, sub } = opts;
-  const w = rect.w;
-
-  // Kopfzeile der Ansicht (unter der HUD-Leiste)
-  const top = 74;
-  ctx.save();
-  ctx.fillStyle = 'rgba(6,8,12,0.72)';
-  ctx.fillRect(0, top, w, 24);
-  ctx.font = '10px "IBM Plex Mono", monospace';
-  ctx.letterSpacing = '3px';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = accent;
-  ctx.textAlign = 'left';
-  ctx.fillText(label ?? '', 12, top + 12);
-  if (sub) {
-    ctx.fillStyle = withAlpha(PAL.grey, 0.9);
-    ctx.textAlign = 'right';
-    ctx.fillText(sub, w - 12, top + 12);
-  }
-  ctx.strokeStyle = withAlpha(accent, 0.35);
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, top + 24.5);
-  ctx.lineTo(w, top + 24.5);
-  ctx.stroke();
   ctx.restore();
 }
 

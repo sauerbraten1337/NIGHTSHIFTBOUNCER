@@ -1,6 +1,6 @@
 /**
  * HUD: Schichtplan (Gäste), Geld/Ruf/Schlange, Aktionsleisten, die grossen
- * Entscheidungs-Buttons unten in der Mitte, Funk, Tutorial, Toasts.
+ * Entscheidungs-Buttons unten in der Mitte, Tutorial, Toasts.
  *
  * Bewusst NICHT mehr im HUD: der Tages-Timer (die Schicht endet, wenn die
  * Gästeliste abgearbeitet ist), Belegung des Clubs, Ausbaustufe und die alte
@@ -27,8 +27,6 @@ export function createHud(game) {
     repbar: document.getElementById('hud-repbar'),
     queue: document.getElementById('hud-queue'),
     effects: document.getElementById('hud-effects'),
-    radio: document.getElementById('hud-radio'),
-    radioPanel: document.getElementById('radio-panel'),
     toasts: document.getElementById('toasts'),
     bar1: document.getElementById('bar-p1'),
     bar2: document.getElementById('bar-p2'),
@@ -46,7 +44,6 @@ export function createHud(game) {
   const notepad = createNotepad(game);
 
   let builtFor = '';
-  let lastRadioKey = '';
   let lastToastKey = '';
   let lastTutorial = '';
 
@@ -136,14 +133,6 @@ export function createHud(game) {
     el.effects.innerHTML = (night.activeEffects ?? [])
       .map((e) => `<div class="effect-row"><span>${escapeHtml(e.label)}</span><span>${Math.ceil(e.remaining)}s</span></div>`)
       .join('');
-
-    const radio = night.radio ?? [];
-    const radioKey = radio.map((r) => r.speaker + r.text).join('|');
-    if (radioKey !== lastRadioKey) {
-      lastRadioKey = radioKey;
-      el.radio.innerHTML = radio.map((r) => `<li><b>${escapeHtml(r.speaker)}</b> ${escapeHtml(r.text)}</li>`).join('');
-      el.radioPanel.classList.toggle('hidden', radio.length === 0);
-    }
 
     const toasts = night.toasts ?? [];
     const toastKey = toasts.map((t) => t.text).join('|');
@@ -244,7 +233,7 @@ function hintLine(game) {
     const keys = player.role.actions.map((a) => `${keyLabel(a.key)} ${a.label}`).join(' · ');
     parts.push(`<span><b>${player.role.label}</b> ${keys}</span>`);
   }
-  parts.push('<span><b>ZONEN</b> J K L · Gegenstand anklicken</span>');
+  parts.push('<span><b>ZONEN</b> J K L oder Ring anklicken · Gegenstand anklicken</span>');
   parts.push('<span><b>SYSTEM</b> ESC PAUSE · M TON · H HILFE</span>');
   return parts.join('');
 }

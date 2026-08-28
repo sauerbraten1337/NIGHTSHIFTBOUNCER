@@ -4,7 +4,7 @@
  */
 
 import { RANDOM_EVENTS } from '../data/config.js';
-import { addToast, addRadio } from './state.js';
+import { addToast } from './state.js';
 import { changeReputation } from './reputation.js';
 import { createGuest } from './guests.js';
 import { insertGuest } from './queue.js';
@@ -48,17 +48,17 @@ export function triggerRandomEvent(game, event) {
   switch (event.id) {
     case 'blackout':
       pushEffect(night, event, 16);
-      addRadio(night, 'TECHNIK', 'Strom weg. Kein Licht, kein Prüfgerät.');
+      addToast(night, 'STROM WEG - KEIN LICHT, KEIN PRÜFGERÄT', 'bad', 5);
       bus.emit('sfx', 'alarm');
       break;
     case 'scannerFail':
       pushEffect(night, event, 25);
-      addRadio(night, 'TECHNIK', 'Prüfgerät spinnt. Ohne Hinweise weitermachen.');
+      addToast(night, 'PRÜFGERÄT SPINNT - OHNE HINWEISE WEITER', 'warn', 5);
       bus.emit('sfx', 'beep');
       break;
     case 'rush':
       pushEffect(night, event, 12);
-      addRadio(night, 'TÜR', 'Da kommt eine ganze Gruppe auf einmal.');
+      addToast(night, 'EINE GANZE GRUPPE AUF EINMAL', 'warn', 4);
       break;
     case 'celebrity': {
       const guest = createGuest(rng, {
@@ -69,13 +69,11 @@ export function triggerRandomEvent(game, event) {
       guest.name = `${guest.name}`;
       insertGuest(game, guest, true);
       addToast(night, 'UNERWARTETER GAST VORNE', 'warn');
-      addRadio(night, 'FUNK', 'Vorne steht jemand, den alle fotografieren.');
       break;
     }
     case 'complaint': {
       for (const g of night.queue.slice(0, 6)) g.mood = Math.max(0, g.mood - 0.35);
       addToast(night, 'DIE SCHLANGE WIRD UNRUHIG', 'warn');
-      addRadio(night, 'SCHLANGE', 'Leute beschweren sich über die Wartezeit.');
       break;
     }
     case 'influencerPost':
@@ -86,7 +84,7 @@ export function triggerRandomEvent(game, event) {
     case 'artistLate':
       if (night.artist && !night.artistArrived) {
         night.artistDelayed = true;
-        addRadio(night, 'BOOKING', `${night.artist.name} kommt später.`);
+        addToast(night, `${night.artist.name.toUpperCase()} KOMMT SPÄTER`, 'warn', 4);
       }
       break;
     case 'fakePass': {

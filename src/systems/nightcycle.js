@@ -3,7 +3,7 @@
  */
 
 import { TUNING, NIGHT_EVENTS } from '../data/config.js';
-import { createNightState, capacity, addToast, addRadio, pushLog, guestQuota } from './state.js';
+import { createNightState, capacity, addToast, pushLog, guestQuota } from './state.js';
 import { tickInsideRevenue } from './economy.js';
 import { updateQueue } from './queue.js';
 import { updateRandomEvents } from './randomEvents.js';
@@ -53,7 +53,7 @@ export function startNight(game, event, artist, opts = {}) {
   }
   if (opts.tutorial) startTutorial(game);
   pushLog(state, `NIGHT ${String(state.nightIndex).padStart(2, '0')} - ${event.label}`, 'info');
-  addRadio(state.night, 'TÜR', `Wir sind offen. ${state.night.quota} Leute auf der Liste.`);
+  addToast(state.night, `OFFEN - ${state.night.quota} LEUTE AUF DER LISTE`, 'info', 4);
   game.bus.emit('nightStart', state.night);
   return state.night;
 }
@@ -121,10 +121,6 @@ function updateToasts(night, dt) {
   for (let i = night.toasts.length - 1; i >= 0; i--) {
     night.toasts[i].life -= dt;
     if (night.toasts[i].life <= 0) night.toasts.splice(i, 1);
-  }
-  for (let i = night.radio.length - 1; i >= 0; i--) {
-    night.radio[i].life -= dt;
-    if (night.radio[i].life <= 0) night.radio.splice(i, 1);
   }
 }
 

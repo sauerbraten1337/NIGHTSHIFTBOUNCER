@@ -85,20 +85,24 @@ geprüft wurde.
 
 **Solo**
 `1` Ausweis · `2` Ansprechen · `3` Abtasten · `4` Alkotest · `5` Schlange ·
-`E` Einlassen · `X` Abweisen · Zonen `J` `K` `L` · Gegenstand: anklicken oder `1`–`6`, `0` = Zone freigeben
+`E` Einlassen · `X` Abweisen · Zonen `J` `K` `L` oder Ring anklicken · Gegenstand: anklicken oder `1`–`6`, `0` = Zone freigeben
 
 **Koop — Spieler 1 (Bouncer, draussen)**
 `1` Ausweis · `2` Ansprechen · `3` Schlange · `E` Durchlassen · `X` Abweisen
 
 **Koop — Spieler 2 (Security, Schleuse)**
-`7` Abtasten (Zonen `J` Jacke / `K` Hosentaschen / `L` Tasche) · `8` Alkotest ·
+`7` Abtasten (Zonen `J` Jacke / `K` Hosentaschen / `L` Tasche, oder Ring anklicken) · `8` Alkotest ·
 `ENTER` Einlassen · `BACKSPACE` Zurückschicken
 
 System: `ESC` Pause · `M` Ton · `H` Hilfe
 
 Einlassen und Abweisen liegen als grosse Buttons unten in der Bildmitte — Maus oder Taste.
-Die Auswahl auf dem Kontrolltisch und die Ausweisfelder laufen über die Maus (im Solo
-zusätzlich über die Zifferntasten).
+Die Auswahl auf dem Kontrolltisch, die Ausweisfelder und die Abtast-Ringe am Gast laufen
+über die Maus (im Solo zusätzlich über die Zifferntasten).
+
+Der Titelbildschirm zeigt die Szene, um die es geht — Clubfassade, Schlange, Türsteher —
+und stellt die Auswahl als Spalte rechts daneben: Spielname oben, darunter Solo, lokaler
+Koop, Online-Koop sowie Einstellungen, Anleitung und Über das Spiel.
 
 ## Die Kontrolle
 
@@ -213,7 +217,7 @@ Schlange beruhigen → freier Betrieb. Abwählbar im Menü.
 * **Acts buchen** — fiktive Künstler; auch der Headliner braucht einen Ausweis.
 * **Night Report**, 6 Ränge, 5 Talente, Save-System (`localStorage`).
 * **Prozeduraler Techno** (WebAudio, kein Asset), dessen Intensität Nachtphase und
-  Schlangenlänge folgt, plus Mess-, Funk- und Türsounds.
+  Schlangenlänge folgt, plus Mess-, Signal- und Türsounds.
 
 ---
 
@@ -234,7 +238,8 @@ src/systems/          state · guests · queue · identity · security · alcoho
                       nightcycle · progression · difficulty · tutorial · coop · save
 src/render/           layout · palette · sprites · figure (grosse Frontfiguren)
                       items (gezeichnete Gegenstände) · scene (Tür-/Schleusenansicht,
-                      Abtast-Ringe, Alkoholtestgerät) · effects · renderer
+                      Abtast-Ringe, Alkoholtestgerät) · title (Titelbildschirm)
+                      effects · renderer
 src/ui/               hud (inkl. Entscheidungs-Buttons) · notepad (Block mit zwei Seiten)
                       idcard (Ausweis in der Hand) · itemtray (Kontrolltisch)
                       rulebook (ausfahrende Hausordnung am linken Rand)
