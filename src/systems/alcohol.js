@@ -9,11 +9,23 @@
 import { TUNING, ALCOHOL_LIMIT_PROMILLE, IMPAIRMENT_SIGNS } from '../data/config.js';
 import { guestLine, guestNameLine } from './guests.js';
 
-export function talkTo(rng, state, guest) {
+/**
+ * ANSPRECHEN. Beim ersten Mal nennt der Gast seinen Namen, danach ruecken
+ * seine Aussagen nach - eine pro Ansprache. `previous` ist das, was er in
+ * dieser Kontrolle schon gesagt hat.
+ */
+export function talkTo(rng, state, guest, previous = null) {
   // Der Gast nennt zuerst seinen Namen und redet dann weiter - der Name ist
   // das, was der Spieler mit dem Ausweis abgleichen muss.
   const realName = guest.name;
-  const line = `${guestNameLine(rng, guest)} ${guestLine(rng, guest, 'talk')}`;
+  const said = [...(previous?.said ?? [])];
+  const statements = guest.truth.statements ?? [];
+  const next = statements[said.length] ?? null;
+  if (next) said.push(next);
+
+  const line = said.length <= 1
+    ? `${guestNameLine(rng, guest)} ${next?.text ?? guestLine(rng, guest, 'talk')}`
+    : (next?.text ?? guestLine(rng, guest, 'talk'));
   const drunk = guest.truth.drunk;
   const impaired = guest.truth.impaired ?? 0;
 
@@ -30,7 +42,13 @@ export function talkTo(rng, state, guest) {
     : guest.personality === 'arrogant' ? 'fordernd'
       : guest.personality === 'nervous' ? 'nervös' : 'entspannt';
 
-  return { line, realName, hint, stateHint, moodHint, drunkGuess: drunk };
+  return {
+    line, realName, hint, stateHint, moodHint, drunkGuess: drunk,
+    /** Alles, was er in dieser Kontrolle bisher behauptet hat. */
+    said,
+    /** Sind noch Aussagen offen? Dann lohnt sich nachfragen. */
+    moreToSay: said.length < statements.length
+  };
 }
 
 /**

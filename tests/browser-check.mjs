@@ -76,6 +76,32 @@ const results = {};
 
 const solo = await newPage();
 if (shots) await solo.screenshot({ path: 'docs/shot-menu.png' });
+
+// Gegenstands-Katalog im Titelbildschirm - inklusive Rueckweg ins Menue.
+await solo.click('.menu-item[data-id="catalog"]');
+await solo.waitForSelector('#catalog-back', { timeout: 5000 });
+results.catalog = await solo.evaluate(() => ({
+  items: document.querySelectorAll('.cat-item').length,
+  groups: document.querySelectorAll('.cat-grid').length,
+  painted: [...document.querySelectorAll('.cat-item canvas')].every((c) => c.width > 0),
+  // Kein Name darf aus seiner Karte laufen.
+  overflow: [...document.querySelectorAll('.cat-label')].filter((e) => e.scrollWidth > e.clientWidth + 1).length
+}));
+if (shots) await solo.screenshot({ path: 'docs/shot-catalog.png' });
+await solo.click('#catalog-back');
+await solo.waitForSelector('.menu-item[data-id="solo"]', { timeout: 5000 });
+results.catalog.back = true;
+
+// Vor der ersten Schicht fuehrt ein Zurueck-Button ins Menue zurueck.
+await solo.click('.menu-item[data-id="solo"]');
+await solo.waitForSelector('#briefing-start', { timeout: 5000 });
+results.briefingBack = await solo.evaluate(() => !!document.getElementById('briefing-back'));
+if (results.briefingBack) {
+  await solo.click('#briefing-back');
+  await solo.waitForSelector('.menu-item[data-id="solo"]', { timeout: 5000 });
+  results.briefingBackWorks = true;
+}
+
 await startMode(solo, 'solo', true);
 
 // Tutorial führt durch: warten, bis der erste Gast an der Tür steht.
@@ -216,6 +242,26 @@ results.talk = await solo.evaluate(() => {
   };
 });
 
+// Nochmal ansprechen: der Gast rueckt die naechste Aussage heraus, und alles
+// Gesagte steht unter dem Ausweis - nur so kann man es mit der Karte vergleichen.
+// Der Ausweis muss dafuer vorliegen - genau daneben stehen die Aussagen.
+await solo.evaluate(() => {
+  const g = window.NULLWERK;
+  if (!g.state.night.stations.door.checks.id) g.act('bouncer', 'id');
+});
+await solo.waitForTimeout(1800);
+await solo.click('.act[data-code="talk"]').catch(() => {});
+await solo.waitForTimeout(1800);
+results.statements = await solo.evaluate(() => {
+  const st = window.NULLWERK.state.night.stations.door;
+  return {
+    said: st.checks.talk?.said?.length ?? 0,
+    shown: document.querySelectorAll('.idc-statements li').length,
+    // Die Wahrheit ("war das gelogen?") darf im Text nirgends stehen.
+    leaks: /gelogen|LÜGE|lie/i.test(document.querySelector('.idc-statements')?.textContent ?? '')
+  };
+});
+
 // Pausenmenü: liegt über allem und trägt die komplette Steuerung.
 await solo.keyboard.press('Escape');
 await solo.waitForSelector('.pause-controls', { timeout: 4000 });
@@ -312,6 +358,14 @@ for (let i = 0; i < 24; i++) {
     results.trayShown = true;
     results.trayCount = Math.max(results.trayCount ?? 0, tray.count);
     results.trayPainted = tray.painted;
+    results.trayOverflow = (results.trayOverflow ?? 0) + await coop.evaluate(() =>
+      [...document.querySelectorAll('.tray-item')].filter((item) => {
+        const label = item.querySelector('.tray-label');
+        if (!label) return false;
+        const l = label.getBoundingClientRect();
+        const c = item.getBoundingClientRect();
+        return label.scrollWidth > label.clientWidth + 1 || l.left < c.left - 1 || l.right > c.right + 1;
+      }).length);
     // Auswahl per echtem Mausklick auf die Karte
     if (tray.forbidden && !tray.flagged.includes(tray.forbidden)) {
       await coop.click(`.tray-item[data-item="${tray.forbidden}"]`).catch(() => {});
@@ -509,6 +563,12 @@ console.log(`  Koop   durchgelassen ${results.coop.stats.passed} · eingelassen 
 console.log(`  Online Rollen ${results.online.hostRole}/${results.online.guestRole}` +
   ` · Gast sieht Nacht ${results.online.guestSeesNight} (Uhr ${results.online.guestClock} vs Host ${results.online.hostClock})`);
 console.log(`  Online durchgelassen ${results.online.passed} · eingelassen ${results.online.admitted}`);
+console.log(`  Gegenstands-Katalog   ${results.catalog.items} Karten · ${results.catalog.groups} Gruppen` +
+  ` · gezeichnet ${results.catalog.painted} · Text laeuft raus ${results.catalog.overflow}`);
+console.log(`  Zurueck zum Titel     Katalog ${results.catalog.back === true} · Briefing ${results.briefingBackWorks === true}`);
+console.log(`  Aussagen              ${results.statements.said} gesagt · ${results.statements.shown} am Ausweis` +
+  ` · verraet die Wahrheit ${results.statements.leaks}`);
+console.log(`  Namen im Tray         laufen raus: ${results.trayOverflow ?? 0}`);
 console.log(`  Konsolenfehler        ${errors.length}`);
 
 let failed = false;
@@ -553,6 +613,19 @@ if (results.actionButtons.count < 4 || results.actionButtons.icons !== results.a
 if (results.actionButtons.keyBadges > 0 || results.actionButtons.hintLine || results.actionButtons.roleTags > 0) {
   fail('Im laufenden Spiel stehen noch Steuerungshinweise oder Rollen-Tags im Bild');
 }
+if (results.catalog.items < 20 || results.catalog.groups < 2 || !results.catalog.painted) {
+  fail('Der Gegenstands-Katalog im Titelbildschirm ist unvollständig');
+}
+if (results.catalog.overflow > 0) fail('Im Katalog laufen Namen aus ihrer Karte');
+if (!results.catalog.back) fail('Aus dem Katalog kommt man nicht ins Menü zurück');
+if (!results.briefingBack || !results.briefingBackWorks) {
+  fail('Vom Briefing führt kein Zurück-Button in den Titelbildschirm');
+}
+if (results.statements.said < 2 || results.statements.shown < 2) {
+  fail('Erneutes Ansprechen bringt keine weitere Aussage auf den Ausweis');
+}
+if (results.statements.leaks) fail('Das Spiel verrät, welche Aussage gelogen war');
+if ((results.trayOverflow ?? 0) > 0) fail('Auf dem Kontrolltisch laufen die Namen aus ihrer Karte');
 if (!results.talk.done) fail('ANSPRECHEN liess sich nicht anklicken');
 if (!results.talk.saysName) fail('Der Gast nennt beim Ansprechen nicht seinen Namen');
 if (results.pause.rows < 8 || !results.pause.rightSide) fail('Im Pausenmenü fehlt die Steuerung rechts');

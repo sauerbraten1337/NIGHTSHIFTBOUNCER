@@ -7,6 +7,7 @@
  */
 
 import { createGuest } from './guests.js';
+import { buildStatements } from './statements.js';
 import { insertGuest } from './queue.js';
 import { addToast, isSolo } from './state.js';
 import { ITEMS, ZONES, itemById } from '../data/config.js';
@@ -49,6 +50,8 @@ function scripted(game, spec = {}) {
   guest.patience = guest.patienceMax = 999;
 
   spec.build?.(guest);
+  // Die Aussagen muessen zur (jetzt ueberschriebenen) Wahrheit passen.
+  guest.truth.statements = buildStatements(game.rng, guest);
   guest.tutorial = spec.id ?? true;
   return guest;
 }
@@ -138,7 +141,10 @@ const STEPS = [
     id: 'talkUnlock',
     title: 'ANSPRECHEN FREIGESCHALTET',
     body: 'Manche Ausweise gehören jemand anderem. Sprich den Gast an - er nennt seinen Namen. ' +
-      'Stimmt der nicht mit dem Dokument überein, hast du ihn.',
+      'Stimmt der nicht mit dem Dokument überein, hast du ihn. Frag ruhig mehrmals: ' +
+      'jede Ansprache lockt eine weitere Aussage heraus, und die stehen unter dem Ausweis. ' +
+      'Alter, Gültigkeit, Taschen, Zustand - was er sagt, muss zum Rest passen. Tut es das nicht, ' +
+      'trag "Aussage" auf Seite 2 als "entspricht nicht" ein.',
     hint: ['2', 'ANSPRECHEN'],
     unlock: 'talk',
     setup(game) {

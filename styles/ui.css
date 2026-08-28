@@ -386,13 +386,17 @@ html, body {
 
 .tray-items { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .tray-item {
-  position: relative; width: 92px; padding: 6px 5px 8px;
+  position: relative; width: 110px; box-sizing: border-box; padding: 6px 5px 8px;
   background: #11151d; border: 1px solid var(--line); color: var(--text);
   font-family: var(--mono); cursor: pointer; transition: 100ms;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
 .tray-item canvas { width: 62px; height: 62px; }
-.tray-label { font-size: 10px; letter-spacing: 1px; text-align: center; line-height: 1.25; }
+/* Lange Namen ("Teleskopschlagstock") muessen umbrechen statt herauszulaufen. */
+.tray-label {
+  width: 100%; font-size: 10px; letter-spacing: 0.5px; text-align: center;
+  line-height: 1.25; overflow-wrap: anywhere; hyphens: auto;
+}
 .tray-key {
   position: absolute; top: 4px; left: 5px; font-size: 9px; color: var(--dim);
   border: 1px solid var(--line); padding: 0 4px;
@@ -409,8 +413,9 @@ html, body {
 /* ---------- Hausordnung am linken Rand ---------- */
 
 .rulebook {
-  /* Etwas oberhalb der Mitte: der Ausweis liegt unten links. */
-  position: absolute; left: 0; top: 38%; transform: translateY(-50%);
+  /* Weit oben: der Ausweis liegt unten links und ist mit dem
+     Gespraechsprotokoll hoeher geworden. */
+  position: absolute; left: 0; top: 28%; transform: translateY(-50%);
   display: flex; align-items: center; pointer-events: auto; z-index: 7;
 }
 .rb-tab {
@@ -476,6 +481,35 @@ html, body {
   border: 2px solid #4a5a8a; color: #4a5a8a; padding: 5px 10px;
   font-size: 9px; letter-spacing: 3px; opacity: 0.85;
 }
+
+/* ---------- Gegenstands-Katalog im Titelbildschirm ---------- */
+
+.cat-rule { margin: 2px 0 10px; font-size: 12px; color: var(--dim); max-width: 760px; }
+.cat-grid {
+  display: grid; gap: 10px; margin-bottom: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+}
+.cat-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 6px 10px; background: #0f131a; border: 1px solid var(--line);
+}
+.cat-item.bad { border-color: rgba(255, 47, 60, 0.45); }
+.cat-item.ok { border-color: rgba(76, 224, 138, 0.3); }
+.cat-item canvas { width: 64px; height: 64px; }
+.cat-label {
+  font-size: 10px; letter-spacing: 0.5px; text-align: center; line-height: 1.25;
+  overflow-wrap: anywhere; hyphens: auto;
+}
+.cat-zones { font-size: 8px; letter-spacing: 1px; color: var(--dim); text-align: center; }
+
+/* Gespraechsprotokoll unter dem Ausweis: die Aussagen zum Vergleichen. */
+.idc-statements {
+  margin-top: 8px; border-top: 1px solid var(--line); padding-top: 7px;
+  font-size: 11px; line-height: 1.35; color: var(--text);
+}
+.idc-stmt-head { font-size: 8px; letter-spacing: 3px; color: var(--cyan); margin-bottom: 4px; }
+.idc-statements ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.idc-statements li { color: #c3cbd8; border-left: 2px solid var(--line); padding-left: 7px; }
 
 .tray-clear {
   display: block; width: 100%; margin-top: 9px; padding: 7px;

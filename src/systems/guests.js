@@ -11,6 +11,7 @@ import {
 import { difficultyProfile } from './difficulty.js';
 import { LINES, NAME_LINES, PERSONALITIES } from '../data/dialogue.js';
 import { randRange, randInt, pick, weightedPick, chance, clamp } from '../core/rng.js';
+import { buildStatements } from './statements.js';
 
 let guestSerial = 0;
 
@@ -161,6 +162,8 @@ export function createGuest(rng, ctx = {}) {
       impairmentSigns: signs,
       /** Wird erst wahr, wenn der Gast tatsächlich handgreiflich wird. */
       aggressive: false,
+      /** Was er behauptet, wenn man ihn anspricht (siehe statements.js). */
+      statements: [],
       repValue: archetype.rep
     },
 
@@ -193,6 +196,8 @@ export function createGuest(rng, ctx = {}) {
   };
 
   guest.difficulty = nightIndex;
+  // Was der Gast behauptet, haengt an seiner Wahrheit - also erst jetzt bauen.
+  guest.truth.statements = buildStatements(rng, guest);
   return guest;
 }
 

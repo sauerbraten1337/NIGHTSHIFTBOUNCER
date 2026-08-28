@@ -53,6 +53,7 @@ export function arriveArtist(game) {
   guest.truth.contrabandZone = null;
   guest.truth.impaired = 0;
   guest.truth.impairmentSigns = [];
+  guest.truth.statements = [];
   for (const zone of Object.keys(guest.truth.carried ?? {})) {
     guest.truth.carried[zone] = guest.truth.carried[zone].filter((i) => !i.forbidden);
   }

@@ -42,7 +42,9 @@ export function createIdCard(game, { root, roleId = 'bouncer' } = {}) {
       return;
     }
 
-    const markKey = Object.entries(inspection.marks).map(([k, v]) => k + v).join('|');
+    const said = station.checks.talk?.said ?? [];
+    const markKey = Object.entries(inspection.marks).map(([k, v]) => k + v).join('|')
+      + `|said${said.length}`;
     if (renderedFor === guest.id && renderedMarks === markKey) return;
     renderedFor = guest.id;
     renderedMarks = markKey;
@@ -101,6 +103,8 @@ function template(game, guest, inspection, station) {
       </div>
     </div>
 
+    ${statementBlock(station)}
+
     <div class="idc-foot">
       ${said ? `<span class="idc-said">GAST SAGT: <b>${escapeHtml(said)}</b></span>`
              : '<span class="idc-said dim">Namen erfragen: ANSPRECHEN</span>'}
@@ -109,6 +113,23 @@ function template(game, guest, inspection, station) {
         : '<span class="idc-said dim">Feld anklicken: nicht korrekt · in Ordnung · leer</span>'}
     </div>
   `;
+}
+
+/**
+ * Das Protokoll des Gesprächs. Es steht hier, damit man die Aussagen mit der
+ * Karte daneben vergleichen kann - ob eine davon gelogen ist, sagt niemand.
+ */
+function statementBlock(station) {
+  const talk = station.checks.talk;
+  const said = talk?.said ?? [];
+  if (!said.length) return '';
+  return `
+    <div class="idc-statements">
+      <div class="idc-stmt-head">AUSSAGEN${talk.moreToSay ? ' · REDET NOCH' : ''}</div>
+      <ul>
+        ${said.map((s) => `<li>„${escapeHtml(s.text)}“</li>`).join('')}
+      </ul>
+    </div>`;
 }
 
 function birthMarkup(doc) {

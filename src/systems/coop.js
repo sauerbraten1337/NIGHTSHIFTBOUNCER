@@ -369,11 +369,15 @@ function completeAction(game, player, pending) {
       break;
     }
     case 'talk': {
-      const result = talkTo(rng, state, guest);
+      // Jede weitere Ansprache lockt die naechste Aussage heraus.
+      const result = talkTo(rng, state, guest, checks.talk);
       checks.talk = result;
       guest.said = result.line;
       guest.saidTimer = 3.6;
-      setResult(player, 'info', `SAGT: "${result.realName}" - ${result.hint}`);
+      const last = result.said[result.said.length - 1];
+      setResult(player, 'info', last
+        ? `SAGT: "${last.text}"${result.moreToSay ? ' (redet noch)' : ''}`
+        : `SAGT: "${result.realName}" - ${result.hint}`);
       break;
     }
     case 'alcohol': {
