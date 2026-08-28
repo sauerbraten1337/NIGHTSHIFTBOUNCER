@@ -13,9 +13,9 @@ import { drawStationView } from './scene.js';
 import {
   createEffects, updateEffects, drawFog, drawDust, drawSparks, scanlines, vignette
 } from './effects.js';
+import { drawTitleScene } from './title.js';
 import { currentPhase, shiftProgress } from '../systems/nightcycle.js';
 import { isSolo } from '../systems/state.js';
-import { AREAS } from '../data/config.js';
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
@@ -35,6 +35,8 @@ export function createRenderer(canvas) {
 
   /** Rechtecke der aktuellen Ansichten (Weltkoordinaten) - fürs UI-Layout. */
   let viewRects = [];
+  /** Anklickbare Abtast-Ringe (Weltkoordinaten) - fürs Zeigen mit der Maus. */
+  let zoneHits = [];
 
   function render(game, dt) {
     const { state } = game;
@@ -56,8 +58,13 @@ export function createRenderer(canvas) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
 
-    if (!night) {
-      ctx.restore?.();
+    // Titelbildschirm: eigene Schauszene mit Club, Schlange und Türsteher.
+    if (!night || state.phase !== 'night') {
+      zoneHits = [];
+      viewRects = [];
+      drawTitleScene(ctx, WORLD.width, WORLD.height, time, pulse);
+      vignette(ctx, WORLD.width, WORLD.height, 0.55);
+      scanlines(ctx, WORLD.width, WORLD.height, 0.03);
       return;
     }
 
@@ -66,8 +73,9 @@ export function createRenderer(canvas) {
     const views = layoutViews(game);
     viewRects = views;
 
+    const hits = [];
     for (const view of views) {
-      drawStationView(ctx, game, {
+      const zones = drawStationView(ctx, game, {
         rect: view.rect,
         area: view.area,
         station: view.station,
@@ -75,12 +83,13 @@ export function createRenderer(canvas) {
         t: time,
         beat,
         pulse,
-        dark,
-        label: view.label,
-        sub: view.sub,
-        accent: view.accent
+        dark
       });
+      for (const z of zones ?? []) {
+        hits.push({ ...z, x: z.x + view.rect.x, y: z.y + view.rect.y, role: view.role });
+      }
     }
+    zoneHits = hits;
 
     // Trennlinie im Splitscreen
     if (views.length === 2) {
@@ -105,18 +114,16 @@ export function createRenderer(canvas) {
     const doorView = {
       id: 'outside',
       area: 'outside',
+      role: 'bouncer',
       station: night.stations.door,
-      queue: night.queue,
-      label: `${AREAS.outside.label} · ${AREAS.outside.sub}`,
-      accent: PAL.red
+      queue: night.queue
     };
     const airlockView = {
       id: 'airlock',
       area: 'airlock',
+      role: 'security',
       station: night.stations.airlock,
-      queue: night.airlockQueue,
-      label: `${AREAS.airlock.label} · ${AREAS.airlock.sub}`,
-      accent: PAL.cyan
+      queue: night.airlockQueue
     };
 
     if (solo) {
@@ -148,12 +155,27 @@ export function createRenderer(canvas) {
     };
   }
 
+  /** Umkehrung von toWorld: Weltkoordinate -> Bildschirmkoordinate. */
+  function toScreen(worldX, worldY) {
+    const bounds = canvas.getBoundingClientRect();
+    const scale = Math.min(canvas.width / WORLD.width, canvas.height / WORLD.height);
+    const dpr = canvas.width / bounds.width;
+    const offsetX = (canvas.width - WORLD.width * scale) / 2;
+    const offsetY = (canvas.height - WORLD.height * scale) / 2;
+    return {
+      x: bounds.left + (worldX * scale + offsetX) / dpr,
+      y: bounds.top + (worldY * scale + offsetY) / dpr
+    };
+  }
+
   return {
     render,
     resize,
     fx,
     toWorld,
+    toScreen,
     get views() { return viewRects; },
+    get zoneHits() { return zoneHits; },
     get beat() { return beatTime % 1; }
   };
 }

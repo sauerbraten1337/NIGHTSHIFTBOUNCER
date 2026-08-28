@@ -86,8 +86,7 @@ export function createNightState(event, artist, seed, mode = 'solo', quota = TUN
       findings: 0, falseAlarms: 0, overlooked: 0, findingPay: 0
     },
     repDelta: 0,
-    toasts: [],
-    radio: []
+    toasts: []
   };
 }
 
@@ -216,10 +215,4 @@ export function addToast(night, text, kind = 'info', ttl = 3.4) {
   if (!night) return;
   night.toasts.push({ text, kind, ttl, life: ttl });
   if (night.toasts.length > 6) night.toasts.shift();
-}
-
-export function addRadio(night, speaker, text) {
-  if (!night) return;
-  night.radio.unshift({ speaker, text, life: 7 });
-  if (night.radio.length > 5) night.radio.length = 5;
 }

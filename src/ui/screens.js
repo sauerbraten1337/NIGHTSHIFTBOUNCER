@@ -13,9 +13,12 @@ export function createScreens(game) {
   const root = document.getElementById('screen');
   const inner = document.getElementById('screen-inner');
 
-  function show(node) {
+  function show(node, opts = {}) {
     inner.innerHTML = '';
     inner.appendChild(node);
+    // "bare": kein Kasten, keine Abdunklung - der Titelbildschirm zeigt die Szene.
+    root.classList.toggle('bare', !!opts.bare);
+    inner.classList.toggle('bare', !!opts.bare);
     root.classList.remove('hidden');
     inner.scrollTop = 0;
   }
@@ -24,82 +27,130 @@ export function createScreens(game) {
 
   /* ---------- Hauptmenü ---------- */
 
+  /**
+   * Der Titelbildschirm laesst die Szene auf dem Canvas frei: das Menue steht
+   * als schmale Spalte rechts, oben der Clubname, darunter die Auswahl.
+   */
   function menu({ onStart, onContinue }) {
     const el = document.createElement('div');
+    el.className = 'menu';
     el.innerHTML = `
-      <h1 class="title">${CLUB_NAME}</h1>
-      <div class="subtitle">NIGHTSHIFT — BOUNCER CO-OP</div>
-      <p style="font-size:13px;line-height:1.6;color:#aab2bf;max-width:760px">
-        Du stehst an der Tür eines Underground-Clubs und siehst, was ein Türsteher sieht:
-        die Strasse, die Schlange und den Gast direkt vor dir. Er reicht dir seinen Ausweis —
-        du prüfst ihn selbst. Foto, Alter, Ablaufdatum, Hologramm. Danach entscheidest du.
-      </p>
-
-      <h2 class="sec">WIE WILLST DU SPIELEN?</h2>
-      <div class="grid cols2" id="mode-grid">
-        ${modeCard('solo', 'Du machst Tür und Kontrolle allein. Es gibt keinen Security-Bereich — alles passiert an der Tür.',
-      'WASD · 1 Ausweis · 2 Ansprechen · 3 Scan · 4 Abtasten · 5 Alkotest · 6 Schlange · E Einlassen · X Abweisen')}
-        ${modeCard('local', 'Zwei Spieler an einer Tastatur, Splitscreen: links die Tür draussen, rechts die Schleuse innen.',
-      'P1: 1 / 2 / 3 · E · X    ·    P2: 7 / 8 / 9 · J K L · ENTER · BACKSPACE')}
-        ${modeCard('online', 'Raum erstellen oder mit Code beitreten. Jeder spielt an seinem Rechner seinen eigenen Bereich.',
-      'Host = Bouncer draussen · Gast = Security in der Schleuse')}
+      <div class="menu-head">
+        <div class="menu-kicker">NULLWERK PRÄSENTIERT</div>
+        <h1 class="menu-title">${escapeHtml(CLUB_NAME)}</h1>
+        <div class="menu-sub">NIGHTSHIFT — BOUNCER CO-OP</div>
+        <div class="menu-tag">Tür auf, Tür zu. Du entscheidest, wer reinkommt.</div>
       </div>
-
-      <h2 class="sec">DIE BEIDEN BEREICHE</h2>
-      <div class="keys-help">
-        <div><b>DRAUSSEN — BOUNCER</b><br>
-          Warteschlange, Ausweiskontrolle von Hand, Gespräch.
-          Wer okay aussieht, wird in die Schleuse durchgelassen.</div>
-        <div><b>INNEN — SICHERHEITSSCHLEUSE</b><br>
-          Getrennt vom Club: Scanner, Abtasten, Alkoholtest.
-          Erst die Security öffnet die Tür zum Floor.</div>
-        <div><b>ZWEITE VERTEIDIGUNGSLINIE</b><br>
-          Was der Bouncer übersieht, kann die Security noch fangen —
-          das gibt dem Team einen Bonus statt einer Strafe.</div>
-      </div>
-
-      <div class="btn-row">
-        <button class="btn primary" id="menu-start">SCHICHT BEGINNEN</button>
-        ${hasSave() ? '<button class="btn" id="menu-continue">KARRIERE FORTSETZEN</button>' : ''}
-        ${hasSave() ? '<button class="btn ghost" id="menu-clear">SPIELSTAND LÖSCHEN</button>' : ''}
-        <label style="font-size:11px;color:var(--dim);display:flex;align-items:center;gap:6px;margin-left:8px">
-          <input type="checkbox" id="menu-tutorial" checked /> TUTORIAL SPIELEN
-        </label>
-      </div>
-      <p style="margin-top:12px;font-size:10px;color:#5b626e;letter-spacing:2px">TON STARTET MIT DEM ERSTEN KLICK.</p>
+      <nav class="menu-nav" id="menu-nav"></nav>
+      <div class="menu-panel hidden" id="menu-panel"></div>
+      <div class="menu-foot">TON STARTET MIT DEM ERSTEN KLICK · ESC PAUSE · M TON</div>
     `;
 
-    let selected = 'solo';
-    const cards = el.querySelectorAll('.mode-card');
-    const select = (mode) => {
-      selected = mode;
-      cards.forEach((c) => c.classList.toggle('selected', c.dataset.mode === mode));
-    };
-    cards.forEach((card) => card.addEventListener('click', () => select(card.dataset.mode)));
-    select('solo');
+    const nav = el.querySelector('#menu-nav');
+    const panel = el.querySelector('#menu-panel');
+    let tutorial = true;
 
-    el.querySelector('#menu-start').addEventListener('click', () => {
-      onStart(selected, el.querySelector('#menu-tutorial').checked);
-    });
-    el.querySelector('#menu-continue')?.addEventListener('click', () => {
-      onContinue(selected, el.querySelector('#menu-tutorial').checked);
-    });
-    el.querySelector('#menu-clear')?.addEventListener('click', (e) => {
-      clearSave();
-      e.target.disabled = true;
-      e.target.textContent = 'GELÖSCHT';
-    });
-    show(el);
-  }
+    const items = [
+      { id: 'solo', label: MODES.solo.label, note: 'Allein an der Tür. Alles liegt bei dir.', kind: 'mode' },
+      { id: 'local', label: MODES.local.label, note: 'Zwei an einer Tastatur, geteilter Bildschirm.', kind: 'mode' },
+      { id: 'online', label: MODES.online.label, note: 'Raum erstellen oder mit Code beitreten.', kind: 'mode' },
+      { id: 'settings', label: 'EINSTELLUNGEN', note: 'Tutorial, Spielstand.', kind: 'panel' },
+      { id: 'howto', label: 'ANLEITUNG', note: 'Wie eine Schicht abläuft.', kind: 'panel' },
+      { id: 'credits', label: 'ÜBER DAS SPIEL', note: 'Was das hier ist.', kind: 'panel' }
+    ];
+    if (hasSave()) {
+      items.splice(3, 0, {
+        id: 'continue', label: 'KARRIERE FORTSETZEN',
+        note: 'Weiter mit dem gespeicherten Club.', kind: 'continue'
+      });
+    }
 
-  function modeCard(id, desc, keys) {
-    const mode = MODES[id];
-    return `
-      <div class="mode-card" data-mode="${id}">
-        <h3>${escapeHtml(mode.label)}</h3>
-        <p>${escapeHtml(desc)}</p>
-        <div class="keys">${escapeHtml(keys)}</div>
-      </div>`;
+    for (const item of items) {
+      const btn = document.createElement('button');
+      btn.className = `menu-item${item.kind === 'mode' || item.kind === 'continue' ? ' play' : ''}`;
+      btn.dataset.id = item.id;
+      btn.innerHTML = `
+        <span class="mi-mark">▸</span>
+        <span class="mi-text"><b>${escapeHtml(item.label)}</b><i>${escapeHtml(item.note)}</i></span>`;
+      btn.addEventListener('click', () => choose(item));
+      nav.appendChild(btn);
+    }
+
+    /** Merkt sich, welcher Modus zuletzt gewaehlt wurde (fuer FORTSETZEN). */
+    let lastMode = 'solo';
+
+    function choose(item) {
+      if (item.kind === 'mode') {
+        lastMode = item.id;
+        onStart(item.id, tutorial);
+        return;
+      }
+      if (item.kind === 'continue') { onContinue(lastMode, tutorial); return; }
+      togglePanel(item.id);
+    }
+
+    let openPanel = null;
+    function togglePanel(id) {
+      if (openPanel === id) {
+        openPanel = null;
+        panel.classList.add('hidden');
+        markOpen();
+        return;
+      }
+      openPanel = id;
+      panel.classList.remove('hidden');
+      panel.innerHTML = panelHtml(id);
+      markOpen();
+      if (id === 'settings') wireSettings();
+    }
+
+    function markOpen() {
+      nav.querySelectorAll('.menu-item').forEach((b) => {
+        b.classList.toggle('open', b.dataset.id === openPanel);
+      });
+    }
+
+    function panelHtml(id) {
+      if (id === 'settings') {
+        return `
+          <label class="menu-toggle">
+            <input type="checkbox" id="menu-tutorial" ${tutorial ? 'checked' : ''} />
+            <span>TUTORIAL SPIELEN</span>
+          </label>
+          <p class="menu-note">Die Einarbeitung erklärt Ausweis, Abtasten und Entscheidung Schritt für Schritt.</p>
+          ${hasSave()
+            ? '<button class="btn ghost" id="menu-clear">SPIELSTAND LÖSCHEN</button>'
+            : '<p class="menu-note">Kein Spielstand vorhanden.</p>'}`;
+      }
+      if (id === 'howto') {
+        return `
+          <ol class="menu-steps">
+            <li><b>AUSWEIS</b> verlangen und selbst prüfen: Foto, Name, Geburtsdatum, Gültigkeit, Hologramm.</li>
+            <li><b>ANSPRECHEN</b> — was sagt der Gast, passt es zum Ausweis?</li>
+            <li><b>ABTASTEN</b> — Jacke, Hosentaschen, Tasche. Ringe anklicken oder <kbd>J</kbd><kbd>K</kbd><kbd>L</kbd>.</li>
+            <li><b>ALKOTEST</b> bei Verdacht. Den Grenzwert liest du selbst ab.</li>
+            <li><b>ENTSCHEIDEN</b> — einlassen oder abweisen. Niemand sagt dir, ob es richtig war.</li>
+          </ol>`;
+      }
+      return `
+        <p class="menu-note">Ein Club, eine Tür, eine Nacht. Im Koop steht einer draussen an der Tür
+        und einer drinnen in der Sicherheitsschleuse — was der eine übersieht, kann der andere
+        noch fangen.</p>
+        <p class="menu-note">Alles hier ist von Hand gezeichneter Code: keine Bilder, keine Assets.</p>`;
+    }
+
+    function wireSettings() {
+      panel.querySelector('#menu-tutorial')?.addEventListener('change', (e) => {
+        tutorial = e.target.checked;
+      });
+      panel.querySelector('#menu-clear')?.addEventListener('click', (e) => {
+        clearSave();
+        e.target.disabled = true;
+        e.target.textContent = 'GELÖSCHT';
+      });
+    }
+
+    show(el, { bare: true });
   }
 
   /* ---------- Online-Lobby ---------- */

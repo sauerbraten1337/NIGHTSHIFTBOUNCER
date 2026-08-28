@@ -344,6 +344,31 @@ function readGuestInput() {
   }
 }
 
+/* ---------------- Maus: Abtast-Ringe direkt anklicken ---------------- */
+
+/** Welcher Ring liegt unter dem Mauszeiger? */
+function zoneAt(clientX, clientY) {
+  if (game.state.phase !== 'night' || game.paused) return null;
+  const p = renderer.toWorld(clientX, clientY);
+  for (const hit of renderer.zoneHits) {
+    const dx = (p.x - hit.x) / hit.rx;
+    const dy = (p.y - hit.y) / hit.ry;
+    if (dx * dx + dy * dy <= 1) return hit;
+  }
+  return null;
+}
+
+canvas.addEventListener('pointerdown', (event) => {
+  const hit = zoneAt(event.clientX, event.clientY);
+  if (!hit) return;
+  event.preventDefault();
+  game.act(hit.role, 'zone', { zone: hit.zone });
+});
+
+canvas.addEventListener('pointermove', (event) => {
+  canvas.style.cursor = zoneAt(event.clientX, event.clientY) ? 'pointer' : '';
+});
+
 /* ---------------- Systemtasten ---------------- */
 
 window.addEventListener('keydown', (e) => {
@@ -372,4 +397,5 @@ loop.start();
 applyMode('solo');
 goMenu();
 
+game.renderer = renderer;
 window.NULLWERK = game;

@@ -11,7 +11,7 @@
  */
 
 import { rolesFor, PATDOWN_KEYS, TUNING, AREA_CHECKS } from '../data/config.js';
-import { actionSpeed, addToast, addRadio, isSolo } from './state.js';
+import { actionSpeed, addToast, isSolo } from './state.js';
 import { requestId, toggleField, fieldLabel, inspectionVerdict, idSummary } from './identity.js';
 import { startPatdown, openZone, pickItem, closeZone, patdownResult, pendingZones } from './security.js';
 import { toggleCheck, toggleTopic, flipPage, topicLabel } from './notes.js';
@@ -350,8 +350,7 @@ function completeAction(game, player, pending) {
       const result = alcoholTest(state, guest);
       checks.alcohol = result;
       setResult(player, 'info', `MESSUNG LÄUFT — ${result.text}`);
-      addRadio(night, 'SECURITY', `Alkoholtest: ${result.promille.toFixed(1)} ‰`);
-      bus.emit('sfx', 'scan');
+        bus.emit('sfx', 'scan');
       updateVerification(game, guest, station);
       break;
     }
@@ -413,7 +412,6 @@ function updateVerification(game, guest, station) {
   } else if (verify.state === 'conflict' && !checks.conflict) {
     checks.conflict = true;
     addToast(night, 'CHECK AGAIN — BEFUNDE WIDERSPRECHEN SICH', 'warn', 4);
-    addRadio(night, 'FUNK', 'Das passt nicht zusammen. Nochmal prüfen.');
     game.bus.emit('sfx', 'alarm');
   }
 }

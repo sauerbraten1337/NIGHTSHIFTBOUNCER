@@ -8,7 +8,7 @@
 
 import { createGuest } from './guests.js';
 import { insertGuest } from './queue.js';
-import { addToast, addRadio, isSolo } from './state.js';
+import { addToast, isSolo } from './state.js';
 import { ITEMS, ZONES, itemById } from '../data/config.js';
 
 /** Baut einen Gast mit genau den Eigenschaften, die der Schritt zeigen soll. */
@@ -67,7 +67,7 @@ const STEPS = [
       'Seite 1 die Checkliste zum selbst Abhaken, Seite 2 dein Befund. ' +
       'Oben links steht, wie viele Gäste heute auf der Liste stehen - danach ist Schluss.',
     setup(game) {
-      addRadio(game.state.night, 'CHEF', 'Erste Schicht. Nimm dir Zeit, heute ist wenig los.');
+      addToast(game.state.night, 'CHEF: ERSTE SCHICHT - HEUTE IST WENIG LOS', 'info', 5);
     },
     wait: (game, elapsed) => elapsed > 3.5
   },
@@ -247,7 +247,7 @@ const STEPS = [
       state.unlocks = { id: true, talk: true, search: true, alcohol: true, calm: true };
       state.tutorialDone = true;
       state.night.tutorial.blockSpawns = false;
-      addRadio(state.night, 'CHEF', 'Läuft. Ab jetzt bist du dran.');
+      addToast(state.night, 'CHEF: LÄUFT. AB JETZT BIST DU DRAN.', 'good', 5);
     },
     wait: (game, elapsed) => elapsed > 6
   }
