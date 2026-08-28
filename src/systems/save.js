@@ -4,7 +4,7 @@ const KEY = 'nullwerk.save.v1';
 
 const PERSISTED = [
   'version', 'money', 'reputation', 'xp', 'talentPoints', 'talents', 'upgrades',
-  'nightIndex', 'clubsOwned', 'expandUnlocked', 'lifetime'
+  'nightIndex', 'clubsOwned', 'expandUnlocked', 'lifetime', 'character'
 ];
 
 export function saveGame(state, storage = safeStorage()) {

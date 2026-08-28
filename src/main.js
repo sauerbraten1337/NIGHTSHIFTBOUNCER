@@ -18,6 +18,7 @@ import { createInitialState, rank, pushLog, isSolo, addToast } from './systems/s
 import { createPlayers, updatePlayers, tryAction, stationOf } from './systems/coop.js';
 import { startNight, updateNight, pickNightEvent, currentPhase, shiftProgress, endNight } from './systems/nightcycle.js';
 import { saveGame, loadGame } from './systems/save.js';
+import { normalizeCharacter } from './systems/character.js';
 import { checkRankUp } from './systems/progression.js';
 import { rolesFor, DEFENSE_KEYS } from './data/config.js';
 
@@ -133,18 +134,42 @@ function goMenu() {
       game.state = createInitialState(mode);
       game.state.tutorialDone = carry.tutorialDone && false;
       applyMode(mode);
-      if (mode === 'online') goLobby();
-      else goBriefing();
+      // Eine neue Karriere beginnt vor dem Spiegel: erst der eigene Türsteher.
+      goCharacterEditor(() => (mode === 'online' ? goLobby() : goBriefing()));
     },
     onContinue: (mode, tutorial) => {
       game.tutorialWanted = tutorial;
       game.state = createInitialState(mode);
       loadGame(game.state);
       game.state.mode = mode;
+      game.state.character = normalizeCharacter(game.state.character);
       applyMode(mode);
+      // Wer weiterspielt, hat seinen Türsteher schon - ausser der Spielstand
+      // stammt noch aus der Zeit vor dem Editor.
+      if (!game.state.character.created) {
+        goCharacterEditor(() => (mode === 'online' ? goLobby() : goBriefing()));
+        return;
+      }
       if (mode === 'online') goLobby();
       else goBriefing();
     }
+  });
+}
+
+/**
+ * Charaktereditor. Beim Start der Karriere führt er weiter ins Spiel,
+ * am Kleiderschrank im Büro nur zurück ins Büro.
+ */
+function goCharacterEditor(onDone, opts = {}) {
+  game.state.phase = 'character';
+  hud.hide();
+  screens.character({
+    title: opts.title,
+    subtitle: opts.subtitle,
+    confirmLabel: opts.confirmLabel,
+    onBack: opts.onBack,
+    backLabel: opts.backLabel,
+    onDone
   });
 }
 
@@ -215,7 +240,28 @@ function goReport() {
     screens.waiting('Der Host sieht sich den Night Report an …');
     return;
   }
-  screens.report(() => screens.shop(goBriefing));
+  screens.report(goOffice);
+}
+
+/**
+ * Der Tag danach: im Büro des Clubleiters. Am Kleiderschrank ändert man
+ * sein Aussehen, am Laptop kauft man ein, durch die Tür geht es in die
+ * nächste Nacht.
+ */
+function goOffice() {
+  game.state.phase = 'office';
+  hud.hide();
+  screens.office({
+    onWardrobe: () => goCharacterEditor(goOffice, {
+      title: 'KLEIDERSCHRANK',
+      subtitle: 'NEUES OUTFIT FÜR DIE NÄCHSTE SCHICHT',
+      confirmLabel: 'ÜBERNEHMEN',
+      onBack: goOffice,
+      backLabel: 'ABBRECHEN'
+    }),
+    onLaptop: () => screens.shop(goOffice),
+    onDoor: goBriefing
+  });
 }
 
 /* ---------------- Bus-Ereignisse ---------------- */

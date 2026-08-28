@@ -58,7 +58,7 @@ function shopHtml(game) {
       : ''}` : ''}
 
     <div class="btn-row">
-      <button class="btn primary" id="shop-next">NÄCHSTE NACHT</button>
+      <button class="btn primary" id="shop-next">ZURÜCK INS BÜRO</button>
       <button class="btn ghost" id="shop-save">SPEICHERN</button>
     </div>
   `;

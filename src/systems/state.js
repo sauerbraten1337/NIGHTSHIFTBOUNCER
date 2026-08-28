@@ -8,6 +8,7 @@ import { TUNING, UPGRADES, CLUB_TIERS, RANKS, rolesFor, AIRLOCK_CAPACITY } from 
 import { clamp } from '../core/rng.js';
 import { emptyNotes } from './notes.js';
 import { cheats } from './admin.js';
+import { createCharacter } from './character.js';
 
 export function createInitialState(mode = 'solo') {
   const upgrades = {};
@@ -27,6 +28,8 @@ export function createInitialState(mode = 'solo') {
     clubsOwned: 1,
     expandUnlocked: false,
     bookedArtist: null,
+    /** Der eigene Türsteher - im Editor erstellt, am Kleiderschrank änderbar. */
+    character: createCharacter(),
     tutorialDone: false,
     /** Freischaltungen: das Tutorial gibt Mechaniken nacheinander frei. */
     unlocks: { id: true, talk: false, search: false, alcohol: false, calm: false },

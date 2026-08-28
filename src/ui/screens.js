@@ -3,6 +3,8 @@
 import { escapeHtml } from './hud.js';
 import { renderReport } from './report.js';
 import { renderShop } from './shop.js';
+import { renderOffice } from './office.js';
+import { renderCharacterEditor } from './character.js';
 import { CLUB_NAME, MODES, rolesFor, DEFENSE_KEYS, ITEMS, ITEM_CATEGORIES, ZONES } from '../data/config.js';
 import { drawItemIcon } from '../render/items.js';
 import { clubTier, capacity, rank } from '../systems/state.js';
@@ -21,6 +23,12 @@ export function createScreens(game) {
     // "bare": kein Kasten, keine Abdunklung - der Titelbildschirm zeigt die Szene.
     root.classList.toggle('bare', !!opts.bare);
     inner.classList.toggle('bare', !!opts.bare);
+    // "full": randlos ueber den ganzen Bildschirm - das Buero ist ein Raum,
+    // kein Formular in einem Kasten.
+    root.classList.toggle('full', !!opts.full);
+    inner.classList.toggle('full', !!opts.full);
+    // "wide": breiter Kasten fuer Nachtabschluss und Charaktereditor.
+    inner.classList.toggle('wide', !!opts.wide);
     root.classList.remove('hidden');
     inner.scrollTop = 0;
   }
@@ -318,8 +326,14 @@ export function createScreens(game) {
     show(el);
   }
 
-  function report(onContinue) { show(renderReport(game, onContinue)); }
+  function report(onContinue) { show(renderReport(game, onContinue), { wide: true }); }
   function shop(onNext) { show(renderShop(game, onNext)); }
+
+  /** Das Büro am Tag: Schrank, Laptop, Tür. */
+  function office(handlers) { show(renderOffice(game, handlers), { full: true }); }
+
+  /** Charaktereditor - beim ersten Start und am Kleiderschrank. */
+  function character(opts) { show(renderCharacterEditor(game, opts), { wide: true }); }
 
   /**
    * Pause. Hier - und nur hier - steht die komplette Tastenbelegung, damit
@@ -506,7 +520,10 @@ export function createScreens(game) {
     show(el);
   }
 
-  return { show, hide, menu, lobby, briefing, report, shop, pause, waiting, catalog, root };
+  return {
+    show, hide, menu, lobby, briefing, report, shop, office, character,
+    pause, waiting, catalog, root
+  };
 }
 
 /** Was ab heute zusätzlich auffällig sein kann. */
