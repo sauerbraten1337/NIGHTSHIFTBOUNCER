@@ -62,9 +62,18 @@ async function setTutorial(page, on) {
   await page.click('.menu-item[data-id="settings"]');
 }
 
+/** Neue Karriere: erst der Charaktereditor, dann geht es weiter. */
+async function passCharacterEditor(page) {
+  const done = await page.waitForSelector('#chared-done', { timeout: 5000 }).catch(() => null);
+  if (!done) return false;
+  await done.click();
+  return true;
+}
+
 async function startMode(page, mode, tutorial) {
   await setTutorial(page, tutorial);
   await page.click(`.menu-item[data-id="${mode}"]`);
+  await passCharacterEditor(page);
   await page.waitForSelector('#briefing-start', { timeout: 5000 });
   await page.click('#briefing-start');
   await page.waitForTimeout(800);
@@ -92,8 +101,24 @@ await solo.click('#catalog-back');
 await solo.waitForSelector('.menu-item[data-id="solo"]', { timeout: 5000 });
 results.catalog.back = true;
 
-// Vor der ersten Schicht fuehrt ein Zurueck-Button ins Menue zurueck.
+// Charaktereditor beim Start: Figur, Regler und Vorschau.
 await solo.click('.menu-item[data-id="solo"]');
+await solo.waitForSelector('#chared-done', { timeout: 5000 });
+results.editor = await solo.evaluate(() => ({
+  canvas: !!document.querySelector('#chared-canvas'),
+  swatches: document.querySelectorAll('.ce-swatch').length,
+  chips: document.querySelectorAll('.ce-chip').length,
+  name: !!document.querySelector('#ce-name')
+}));
+// Eine Auswahl ändern und den Namen setzen - beides muss im Zustand landen.
+await solo.fill('#ce-name', 'TESTER');
+await solo.click('.ce-group:nth-of-type(2) .ce-swatch:last-child').catch(() => {});
+await solo.click('.ce-chip').catch(() => {});
+if (shots) await solo.screenshot({ path: 'docs/shot-character.png' });
+await solo.click('#chared-done');
+results.editor.saved = await solo.evaluate(() => window.NULLWERK.state.character);
+
+// Vor der ersten Schicht fuehrt ein Zurueck-Button ins Menue zurueck.
 await solo.waitForSelector('#briefing-start', { timeout: 5000 });
 results.briefingBack = await solo.evaluate(() => !!document.getElementById('briefing-back'));
 if (results.briefingBack) {
@@ -302,11 +327,56 @@ results.soloEnd = await solo.evaluate(() => {
   return { phase: window.NULLWERK.state.phase, processed: n.processed, quota: n.quota };
 });
 results.report = await solo.waitForSelector('#report-next', { timeout: 10000 }).then(() => true).catch(() => false);
-if (shots && results.report) await solo.screenshot({ path: 'docs/shot-report.png' });
+// Sterne, Balken und Sprechblase laufen gestaffelt ein - erst danach das Bild.
+if (shots && results.report) {
+  await solo.waitForTimeout(1800);
+  await solo.screenshot({ path: 'docs/shot-report.png' });
+}
 if (results.report) {
+  // Der Abschluss zeigt links die Zahlen, rechts den eigenen Charakter.
+  results.reportScreen = await solo.evaluate(() => ({
+    stars: document.querySelectorAll('.rep-star').length,
+    litStars: document.querySelectorAll('.rep-star.on').length,
+    canvas: !!document.querySelector('#rep-canvas'),
+    grade: document.querySelector('.rep-grade')?.textContent.trim() ?? '',
+    tiles: document.querySelectorAll('.rep-tile').length,
+    // links die Stats, rechts die Figur
+    statsLeft: (() => {
+      const l = document.querySelector('.rep-left')?.getBoundingClientRect();
+      const r = document.querySelector('.rep-right')?.getBoundingClientRect();
+      return !!l && !!r && l.left < r.left;
+    })()
+  }));
+
   await solo.click('#report-next');
+  // Danach steht man am Tag im Büro: Schrank, Laptop, Tür.
+  await solo.waitForSelector('.office-hit[data-spot="laptop"]', { timeout: 5000 });
+  results.office = await solo.evaluate(() => ({
+    phase: window.NULLWERK.state.phase,
+    spots: [...document.querySelectorAll('.office-hit')].map((b) => b.dataset.spot),
+    canvas: !!document.querySelector('#office-canvas')
+  }));
+  if (shots) await solo.screenshot({ path: 'docs/shot-office.png' });
+
+  // Kleiderschrank: Charakter bearbeiten und zurück ins Büro.
+  await solo.click('.office-hit[data-spot="wardrobe"]');
+  await solo.waitForSelector('#chared-done', { timeout: 5000 });
+  results.office.wardrobe = true;
+  await solo.click('#chared-done');
+  await solo.waitForSelector('.office-hit[data-spot="laptop"]', { timeout: 5000 });
+
+  // Laptop: die Upgrades.
+  await solo.click('.office-hit[data-spot="laptop"]');
   await solo.waitForSelector('#shop-next', { timeout: 5000 });
+  results.office.laptop = true;
   if (shots) await solo.screenshot({ path: 'docs/shot-shop.png' });
+  await solo.click('#shop-next');
+  await solo.waitForSelector('.office-hit[data-spot="door"]', { timeout: 5000 });
+
+  // Tür: die nächste Nacht beginnt.
+  await solo.click('.office-hit[data-spot="door"]');
+  results.office.door = await solo.waitForSelector('#briefing-start', { timeout: 5000 })
+    .then(() => true).catch(() => false);
 }
 await solo.close();
 
@@ -472,6 +542,7 @@ await coop.close();
 const host = await newPage();
 await setTutorial(host, false);
 await host.click('.menu-item[data-id="online"]');
+await passCharacterEditor(host);
 await host.waitForSelector('#lobby-host');
 await host.click('#lobby-host');
 await host.waitForSelector('.roomcode', { timeout: 5000 });
@@ -480,6 +551,7 @@ const code = (await host.textContent('.roomcode')).trim();
 const guest = await newPage();
 await setTutorial(guest, false);
 await guest.click('.menu-item[data-id="online"]');
+await passCharacterEditor(guest);
 await guest.waitForSelector('#lobby-code');
 await guest.fill('#lobby-code', code);
 await guest.click('#lobby-join');
@@ -544,6 +616,14 @@ console.log(`  Solo   Einlass ${results.solo.stats.admitted} · abgewiesen ${res
   ` · richtig ${results.solo.stats.correct}/${results.solo.stats.correct + results.solo.stats.mistakes}`);
 console.log(`  Solo   Freischaltungen ${Object.entries(results.solo.unlocks).filter(([, v]) => v).map(([k]) => k).join(',')}`);
 console.log(`  Report/Shop           ${results.report}`);
+console.log(`  Charaktereditor       Vorschau ${results.editor.canvas} · ${results.editor.swatches} Farbfelder` +
+  ` · ${results.editor.chips} Schalter · Name ${results.editor.saved?.name}`);
+console.log(`  Nachtabschluss        ${results.reportScreen?.litStars ?? 0}/${results.reportScreen?.stars ?? 0} Sterne` +
+  ` · ${results.reportScreen?.grade} · Figur rechts ${results.reportScreen?.statsLeft}` +
+  ` · ${results.reportScreen?.tiles ?? 0} Kacheln`);
+console.log(`  Büro                  Phase ${results.office?.phase} · ${(results.office?.spots ?? []).join(', ')}` +
+  ` · Schrank ${results.office?.wardrobe === true} · Laptop ${results.office?.laptop === true}` +
+  ` · Tür ${results.office?.door === true}`);
 console.log(`  Abtast-Ring per Maus  ${results.zoneByMouse === true}`);
 console.log(`  Aktions-Buttons       ${results.actionButtons.count} · mit Icon ${results.actionButtons.icons}` +
   ` · Tastenhinweise ${results.actionButtons.keyBadges} · Rollen-Tags ${results.actionButtons.roleTags}`);
@@ -601,6 +681,24 @@ if (!results.notes.page2.topics) fail('Seite 2 hat keine Befund-Zeilen');
 if (results.notes.topicSet !== 'ok') fail('Auf Seite 2 lässt sich kein Befund eintragen');
 if (results.solo.stats.admitted + results.solo.stats.rejected < 3) fail('Solo: zu wenige Entscheidungen');
 if (!results.report) fail('Night Report wurde nicht angezeigt');
+if (!results.editor.canvas || results.editor.swatches < 12 || !results.editor.name) {
+  fail('Der Charaktereditor beim Spielstart ist unvollständig');
+}
+if (results.editor.saved?.name !== 'TESTER' || results.editor.saved?.created !== true) {
+  fail('Der erstellte Charakter wird nicht übernommen');
+}
+if (!results.reportScreen?.canvas || !results.reportScreen?.statsLeft) {
+  fail('Im Nachtabschluss fehlt die Figur rechts neben den Stats');
+}
+if ((results.reportScreen?.stars ?? 0) !== 5 || !results.reportScreen?.grade) {
+  fail('Im Nachtabschluss fehlen Sterne oder Bewertung');
+}
+if (results.office?.phase !== 'office' || (results.office?.spots ?? []).length !== 3) {
+  fail('Nach der Nacht steht man nicht im Büro mit Schrank, Laptop und Tür');
+}
+if (!results.office?.wardrobe) fail('Am Kleiderschrank öffnet sich kein Charaktereditor');
+if (!results.office?.laptop) fail('Am Laptop öffnen sich keine Upgrades');
+if (!results.office?.door) fail('Die Bürotür startet nicht die nächste Nacht');
 if (results.coop.stats.passed < 1) fail('Koop: niemand wurde in die Schleuse durchgelassen');
 if (results.coop.stats.admitted < 1) fail('Koop: Security hat niemanden eingelassen');
 if (results.online.hostRole !== 'host' || results.online.guestRole !== 'guest') fail('Online: Rollen falsch');

@@ -119,6 +119,38 @@ nachschlagen; in der Schicht steht in der Hausordnung weiterhin nur die Gruppe.
 Jeder Bildschirm hinter dem Titel hat einen Rückweg: aus dem Katalog, aus der Online-Lobby
 und aus dem Briefing der ersten Schicht kommt man mit **ZURÜCK** wieder ins Menü.
 
+## Dein Türsteher
+
+Eine neue Karriere beginnt im **Charaktereditor**: Name, Hautton, Haarfarbe, Frisur, Jacke,
+Statur, Bart und der farbige Streifen auf der Jacke. Die Figur steht daneben auf dem Podest
+und ändert sich sofort mit — gezeichnet mit derselben Routine wie alle Menschen im Spiel.
+**WÜRFELN** legt auf einen Schlag jemand Neues hin.
+
+![Charaktereditor](docs/shot-character.png)
+
+Der Charakter wird mitgespeichert und taucht danach überall auf, wo es um dich geht:
+im Nachtabschluss und im Büro. Ändern kannst du ihn jederzeit am Kleiderschrank.
+
+## Der Tag danach
+
+Eine Schicht endet nicht mit einer Tabelle, sondern mit dem **Nachtabschluss**: links laufen
+die Zahlen hoch — Netto, Ruf, Erfahrung, Trefferquote, alle Befunde und die ganze Bilanz —
+rechts steht dein Türsteher auf der Bühne und reagiert. Fünf Sterne: er springt im Konfetti.
+Ein Stern: er steht im Regen und lässt die Schultern hängen. Sterne, Balken und Bewertung
+fahren beim Öffnen nacheinander ein.
+
+![Nachtabschluss](docs/shot-report.png)
+
+Danach ist Tag, und du sitzt im **Büro des Clubleiters**. Drei Stellen sind anklickbar:
+
+| Stelle | Was passiert |
+|---|---|
+| **Kleiderschrank** | Charaktereditor — Aussehen und Name ändern. |
+| **Laptop** | Upgrades, Talente und Acts (der bisherige Shop). |
+| **Tür** | Raus in die nächste Nacht. |
+
+![Büro](docs/shot-office.png)
+
 ## Die Kontrolle
 
 Der Ausweis liegt gross und lesbar unten links. **Jeder Klick auf ein Feld schaltet deinen
@@ -289,7 +321,8 @@ Schlange beruhigen → freier Betrieb. Abwählbar im Menü.
 * **Nacht-Events** (Rave, VIP Night, Artist Night, Sold Out, Inspection, Chaos) und
   **Zufallsereignisse** (Stromausfall, defektes Prüfgerät, Ansturm, viraler Post, falscher Backstage-Pass …).
 * **Acts buchen** — fiktive Künstler; auch der Headliner braucht einen Ausweis.
-* **Night Report**, 6 Ränge, 5 Talente, Save-System (`localStorage`).
+* **Nachtabschluss mit eigenem Charakter**, Büro am Tag, 6 Ränge, 5 Talente,
+  Save-System (`localStorage`, inklusive Charakter).
 * **Prozeduraler Techno** (WebAudio, kein Asset), dessen Intensität Nachtphase und
   Schlangenlänge folgt, plus Mess-, Signal- und Türsounds.
 
@@ -332,20 +365,24 @@ src/main.js           Modi, Spielfluss, Eingaben, Host/Gast-Verdrahtung
 src/core/             rng · bus · input · loop · audio
 src/data/             config (Modi, Rollen, Balancing) · dialogue
 src/systems/          state · guests · queue · identity · security · alcohol · notes
+                      character (der eigene Türsteher: Aussehen, Name, Speicherung)
                       statements (was der Gast behauptet - und ob es stimmt)
                       decision · economy · reputation · upgrades · artists · randomEvents
                       nightcycle · progression · difficulty · tutorial · coop · save
                       aggression (Übergriffe und Tastenabwehr)
                       admin (Testzugang: Nachtwahl und Cheats hinter einem Code)
-src/render/           layout · palette · sprites · figure (grosse Frontfiguren)
+src/render/           layout · palette · sprites · figure (grosse Frontfiguren,
+                      Stimmungen und Haltungen für den eigenen Charakter)
                       items (gezeichnete Gegenstände) · scene (Tür-/Schleusenansicht,
                       Abtast-Ringe, Alkoholtestgerät) · title (Titelbildschirm)
+                      office (Büro am Tag, samt anklickbarer Stellen)
                       effects · renderer
 src/ui/               hud (inkl. Entscheidungs-Buttons) · notepad (Block mit zwei Seiten)
                       screens: Menü, Gegenstands-Katalog, Lobby, Briefing, Pause
                       idcard (Ausweis in der Hand) · itemtray (Kontrolltisch)
                       rulebook (ausfahrende Hausordnung am linken Rand)
                       adminhud (Röntgenblick auf die Wahrheit des Gastes)
+                      character (Charaktereditor) · office (Büro am Tag)
                       report · shop · screens
 src/net/net.js        Räume, Schnappschüsse, Aktionen
 server/index.js       Statischer Server + WebSocket-Raumvermittlung

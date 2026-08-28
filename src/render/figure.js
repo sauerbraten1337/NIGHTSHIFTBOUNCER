@@ -14,7 +14,12 @@ const MOOD_FACE = {
   drunk: { brow: -0.1, mouth: 0.15, eye: 0.5 },
   arrogant: { brow: -0.3, mouth: -0.15, eye: 0.8 },
   aggressive: { brow: -0.9, mouth: -0.7, eye: 1.1 },
-  nervous: { brow: 0.5, mouth: -0.2, eye: 1.15 }
+  nervous: { brow: 0.5, mouth: -0.2, eye: 1.15 },
+  // Stimmungen des eigenen Charakters nach der Nacht.
+  happy: { brow: 0.25, mouth: 0.95, eye: 1 },
+  proud: { brow: 0.1, mouth: 0.6, eye: 0.95 },
+  tired: { brow: 0.15, mouth: -0.15, eye: 0.6 },
+  sad: { brow: 0.75, mouth: -0.95, eye: 0.85 }
 };
 
 /**
@@ -26,7 +31,7 @@ export function drawFigure(ctx, opts) {
   const {
     x, y, h = 300, look = {}, personality = 'polite', t = 0,
     drunk = 0, holdingId = false, accent = null, dim = 0, vip = false,
-    bag = false, bagOut = false, signs = [], rage = 0
+    bag = false, bagOut = false, signs = [], rage = 0, pose = 'idle'
   } = opts;
 
   // Fahle Haut ist eines der Anzeichen, die man von aussen sieht.
@@ -42,6 +47,12 @@ export function drawFigure(ctx, opts) {
   const sway = Math.sin(t * (0.9 + drunk * 2.2)) * (1.5 + drunk * 9) + shaky + restless;
   const breath = Math.sin(t * 1.6) * 0.006 * h;
 
+  // Haltung: jubeln (Hüpfer, Arme hoch) oder hängen lassen (Schultern runter).
+  const cheer = pose === 'cheer' ? Math.abs(Math.sin(t * 3.1)) : 0;
+  const slump = pose === 'slump' ? 1 : 0;
+  // Der Körper hebt beim Hüpfen ab und sackt beim Hängenlassen zusammen.
+  const shift = slump * h * 0.03 - cheer * h * 0.055;
+
   const headR = h * 0.095 * bulk;
   const headY = y - h + headR;
   const shoulderY = headY + headR * 1.5;
@@ -52,11 +63,13 @@ export function drawFigure(ctx, opts) {
   ctx.translate(x, 0);
   ctx.translate(sway * 0.4, 0);
 
-  // Schatten
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  // Schatten - bleibt am Boden, auch wenn die Figur abhebt.
+  ctx.fillStyle = `rgba(0,0,0,${0.5 - cheer * 0.2})`;
   ctx.beginPath();
-  ctx.ellipse(0, y, shoulderW * 1.5, h * 0.022, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, y, shoulderW * (1.5 - cheer * 0.35), h * 0.022, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  ctx.translate(0, shift);
 
   // Beine
   ctx.strokeStyle = shade(outfit, -0.35);
@@ -122,16 +135,31 @@ export function drawFigure(ctx, opts) {
   ctx.lineWidth = h * 0.042 * bulk;
   // Beim Übergriff greift er nach vorn - die Hände kommen auf einen zu.
   const reach = rage > 0 ? Math.sin(t * 9) * h * 0.02 : 0;
-  const handL = rage > 0
-    ? { x: -shoulderW * 0.92, y: torsoTop + h * 0.11 + reach }
-    : holdingId
-      ? { x: -shoulderW * 1.1, y: torsoTop + h * 0.13 + armSwing }
-      : { x: -shoulderW * 1.02, y: hipY + armSwing };
-  const handR = rage > 0
-    ? { x: shoulderW * 0.92, y: torsoTop + h * 0.11 - reach }
-    : holdingId
-      ? { x: shoulderW * 0.55, y: torsoTop + h * 0.14 }
-      : { x: shoulderW * 1.02, y: hipY - armSwing };
+  const handL = cheer || slump
+    ? posedHand(-1)
+    : rage > 0
+      ? { x: -shoulderW * 0.92, y: torsoTop + h * 0.11 + reach }
+      : holdingId
+        ? { x: -shoulderW * 1.1, y: torsoTop + h * 0.13 + armSwing }
+        : { x: -shoulderW * 1.02, y: hipY + armSwing };
+  const handR = cheer || slump
+    ? posedHand(1)
+    : rage > 0
+      ? { x: shoulderW * 0.92, y: torsoTop + h * 0.11 - reach }
+      : holdingId
+        ? { x: shoulderW * 0.55, y: torsoTop + h * 0.14 }
+        : { x: shoulderW * 1.02, y: hipY - armSwing };
+
+  /** Jubel reisst die Arme hoch, Enttäuschung lässt sie nach unten fallen. */
+  function posedHand(side) {
+    if (slump) {
+      return { x: side * shoulderW * 0.86, y: hipY + h * 0.09 + Math.sin(t * 1.2 + side) * h * 0.004 };
+    }
+    return {
+      x: side * shoulderW * (1.05 + cheer * 0.16),
+      y: torsoTop - h * (0.03 + cheer * 0.09) + Math.sin(t * 3.1 + side * 0.4) * h * 0.006
+    };
+  }
 
   ctx.beginPath();
   ctx.moveTo(-shoulderW * 0.9, torsoTop + h * 0.03);
@@ -196,12 +224,12 @@ export function drawFigure(ctx, opts) {
 
   // Ankerpunkte in Weltkoordinaten - die Abtast-Ringe sitzen genau dort,
   // wo die jeweilige Stelle wirklich gezeichnet wurde.
-  const shift = x + sway * 0.4;
+  const anchorX = x + sway * 0.4;
   return {
-    jacket: { x: shift, y: torsoTop + h * 0.09, rx: shoulderW * 0.95, ry: h * 0.075 },
-    pockets: { x: shift, y: hipY + h * 0.03, rx: shoulderW * 0.85, ry: h * 0.06 },
+    jacket: { x: anchorX, y: torsoTop + h * 0.09 + shift, rx: shoulderW * 0.95, ry: h * 0.075 },
+    pockets: { x: anchorX, y: hipY + h * 0.03 + shift, rx: shoulderW * 0.85, ry: h * 0.06 },
     bag: bagCenter
-      ? { x: shift + bagCenter.x, y: bagCenter.y, rx: h * 0.13, ry: h * 0.1 }
+      ? { x: anchorX + bagCenter.x, y: bagCenter.y + shift, rx: h * 0.13, ry: h * 0.1 }
       : null
   };
 }
@@ -330,9 +358,9 @@ function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t, signs =
     }
   }
 
-  // Haare
+  // Haare - der eigene Charakter bestimmt die Frisur unabhängig von der Farbe.
   ctx.fillStyle = hair;
-  const style = (look.hair ?? 0) % 4;
+  const style = (look.hairStyle ?? (look.hair ?? 0)) % 4;
   ctx.beginPath();
   if (style === 0) {
     ctx.ellipse(x, y - r * 0.28, r * 0.92, r * 0.75, 0, Math.PI, Math.PI * 2);
@@ -351,7 +379,7 @@ function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t, signs =
   }
 
   // Bartschatten
-  if ((look.outfit ?? 0) % 3 === 0) {
+  if (look.beard ?? ((look.outfit ?? 0) % 3 === 0)) {
     ctx.fillStyle = withAlpha(shade(hair, -0.45), 0.2);
     ctx.beginPath();
     ctx.ellipse(x, y + r * 0.66, r * 0.5, r * 0.22, 0, 0, Math.PI * 2);
