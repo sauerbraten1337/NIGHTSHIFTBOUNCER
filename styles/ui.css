@@ -431,7 +431,8 @@ html, body {
 
 /* Optik eines amtlichen Schreibens */
 .rb-doc {
-  width: min(430px, 34vw); max-height: 62vh; overflow-y: auto;
+  /* Sieben Gruppen mit Erläuterung: mehr Höhe, Rest scrollt. */
+  width: min(430px, 34vw); max-height: 80vh; overflow-y: auto;
   background: linear-gradient(180deg, #fdfaf1 0%, #f4eedd 100%);
   color: #1d2430; border: 1px solid #b9a87d; border-left: none;
   padding: 18px 20px 22px;
@@ -463,6 +464,8 @@ html, body {
 }
 .rb-table td { padding: 4px 6px; border-bottom: 1px dotted #c0b492; vertical-align: top; }
 .rb-no { color: #8a8060; }
+/* Erlaeuterung unter der Gruppe: sagt, was gemeint ist - ohne Einzelaufzaehlung. */
+.rb-note { display: block; margin-top: 2px; color: #6d6349; font-style: italic; line-height: 1.35; }
 .rb-sev { letter-spacing: 2px; font-weight: 700; white-space: nowrap; }
 .rb-sev.s1 { color: #7a6a2a; }
 .rb-sev.s2 { color: #a0561a; }

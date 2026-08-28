@@ -343,7 +343,11 @@ results.rulebook = await coop.evaluate(() => {
     official: !!rb?.querySelector('.rb-letterhead') && !!rb?.querySelector('.rb-stamp')
       && /§/.test(rb.textContent),
     forbiddenRows: rb ? rb.querySelectorAll('.rb-table tbody tr').length : 0,
-    listsBlade: /Klinge/i.test(rb?.textContent ?? '')
+    // Die Liste nennt nur Gruppen ("Waffen"), nie einzelne Gegenstände -
+    // sonst könnte man die Kontrolle einfach ablesen.
+    listsGroups: /Waffen/i.test(rb?.textContent ?? ''),
+    listsSingleItems: /Klappmesser|Schlagring|Teleskopschlagstock|Bengalfackel/i
+      .test(rb?.textContent ?? '')
   };
 });
 
@@ -477,7 +481,8 @@ console.log(`  Schichtplan           ${results.ui.shiftCounter} Gäste · Solo e
   ` ${results.soloEnd.processed}/${results.soloEnd.quota} -> ${results.soloEnd.phase}`);
 console.log(`  Hausordnung links     Pfeil ${results.rulebook.hasArrow} · ausgefahren ${results.rulebook.open}` +
   ` (${results.rulebook.width}px) · amtliche Optik ${results.rulebook.official}` +
-  ` · ${results.rulebook.forbiddenRows} verbotene Sachen`);
+  ` · ${results.rulebook.forbiddenRows} verbotene Gruppen` +
+  ` · nennt Einzelstücke ${results.rulebook.listsSingleItems}`);
 console.log(`  Notizzettel 2 Seiten  Reiter ${results.notes.tabs} · Checkliste ${results.notes.checklist}` +
   ` · selbst abgehakt ${results.notes.checkedSelf ?? 0} · Seite ${results.notes.page2.page}` +
   ` · Befunde ${results.notes.page2.topics} (${results.notes.topicSet ?? '—'})`);
@@ -522,8 +527,11 @@ if (!results.rulebook.exists || !results.rulebook.hasArrow) fail('Der Pfeil für
 if (!results.rulebook.atLeftEdge) fail('Die Hausordnung klebt nicht am linken Rand');
 if (!results.rulebook.open || results.rulebook.width < 100) fail('Die Hausordnung fährt bei Hover nicht aus');
 if (!results.rulebook.official) fail('Die Hausordnung sieht nicht nach amtlichem Dokument aus');
-if (results.rulebook.forbiddenRows < 5 || !results.rulebook.listsBlade) {
-  fail('Die Hausordnung listet die verbotenen Gegenstände nicht auf');
+if (results.rulebook.forbiddenRows < 5 || !results.rulebook.listsGroups) {
+  fail('Die Hausordnung listet die verbotenen Gruppen nicht auf');
+}
+if (results.rulebook.listsSingleItems) {
+  fail('Die Hausordnung verrät einzelne Gegenstände - dann muss man nicht mehr selbst prüfen');
 }
 if (results.notes.tabs !== 2) fail('Der Notizzettel hat keine zwei Seiten');
 if (!results.notes.checklist) fail('Seite 1 hat keine abhakbare Checkliste');

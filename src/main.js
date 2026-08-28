@@ -19,7 +19,7 @@ import { createPlayers, updatePlayers, tryAction, stationOf } from './systems/co
 import { startNight, updateNight, pickNightEvent, currentPhase, shiftProgress, endNight } from './systems/nightcycle.js';
 import { saveGame, loadGame } from './systems/save.js';
 import { checkRankUp } from './systems/progression.js';
-import { rolesFor } from './data/config.js';
+import { rolesFor, DEFENSE_KEYS } from './data/config.js';
 
 import { createRenderer } from './render/renderer.js';
 import { createHud } from './ui/hud.js';
@@ -333,10 +333,20 @@ const loop = createLoop({
 /** Eingaben des Gastes: direkt als Netzwerk-Aktion. */
 function readGuestInput() {
   const role = game.roleById('security');
+  const station = game.stationFor('security');
+
+  // Übergriff: es zählt nur noch die Abwehr, alles andere ist gesperrt.
+  const aggro = station?.aggro;
+  if (aggro && aggro.phase !== 'over') {
+    for (const entry of DEFENSE_KEYS) {
+      if (input.justPressed(entry.key)) game.act('security', 'defend', { key: entry.key });
+    }
+    return;
+  }
+
   for (const action of role.actions) {
     if (input.justPressed(action.key)) game.act('security', action.code);
   }
-  const station = game.stationFor('security');
   if (station?.patdown && !station.patdown.complete) {
     for (const [key, zone] of [['KeyJ', 'jacket'], ['KeyK', 'pockets'], ['KeyL', 'bag']]) {
       if (input.justPressed(key)) game.act('security', 'zone', { zone });
@@ -358,7 +368,26 @@ function zoneAt(clientX, clientY) {
   return null;
 }
 
+/** Liegt eine eingeblendete Abwehr-Taste unter dem Zeiger? */
+function keyAt(clientX, clientY) {
+  if (game.state.phase !== 'night' || game.paused) return null;
+  const p = renderer.toWorld(clientX, clientY);
+  for (const hit of renderer.keyHits) {
+    const dx = (p.x - hit.x) / hit.rx;
+    const dy = (p.y - hit.y) / hit.ry;
+    if (dx * dx + dy * dy <= 1) return hit;
+  }
+  return null;
+}
+
 canvas.addEventListener('pointerdown', (event) => {
+  // Abwehr geht auch mit der Maus - wer lieber klickt, ist nicht wehrlos.
+  const key = keyAt(event.clientX, event.clientY);
+  if (key) {
+    event.preventDefault();
+    game.act(key.role, 'defend', { key: key.key });
+    return;
+  }
   const hit = zoneAt(event.clientX, event.clientY);
   if (!hit) return;
   event.preventDefault();
@@ -366,7 +395,8 @@ canvas.addEventListener('pointerdown', (event) => {
 });
 
 canvas.addEventListener('pointermove', (event) => {
-  canvas.style.cursor = zoneAt(event.clientX, event.clientY) ? 'pointer' : '';
+  const over = keyAt(event.clientX, event.clientY) || zoneAt(event.clientX, event.clientY);
+  canvas.style.cursor = over ? 'pointer' : '';
 });
 
 /* ---------------- Systemtasten ---------------- */

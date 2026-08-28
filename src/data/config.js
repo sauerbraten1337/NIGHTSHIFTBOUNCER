@@ -185,40 +185,143 @@ export const ARCHETYPES = [
 ];
 
 /**
+ * Gruppen verbotener Sachen. NUR diese Gruppen stehen in der Hausordnung -
+ * nicht die einzelnen Gegenstände. Der Spieler muss also selbst einordnen,
+ * ob ein Schlagring eine Waffe ist und ob ein Fläschchen ohne Etikett unter
+ * "unklare Substanzen" fällt. Abgelesen werden kann das nicht mehr.
+ */
+export const ITEM_CATEGORIES = [
+  {
+    id: 'weapon', label: 'Waffen und gefährliche Gegenstände', severity: 3,
+    rule: 'Stich- und Schneidwerkzeuge, Schlag- und Elektrogeräte sowie Reizstoffsprays jeder Art.'
+  },
+  {
+    id: 'pyro', label: 'Pyrotechnik und offenes Feuer', severity: 3,
+    rule: 'Alles, was gezündet wird oder brennt, funkt oder qualmt. Feuerzeuge bleiben erlaubt.'
+  },
+  {
+    id: 'drugs', label: 'Unklare Substanzen', severity: 2,
+    rule: 'Päckchen, Döschen, Briefchen und Fläschchen ohne lesbare Beschriftung. '
+      + 'Beschriftete Medikamente aus der Apotheke sind zugelassen.'
+  },
+  {
+    id: 'tool', label: 'Werkzeug', severity: 2,
+    rule: 'Handwerkszeug jeder Grösse, auch zusammengeklappt.'
+  },
+  {
+    id: 'glass', label: 'Glas und mitgebrachte Getränke', severity: 1,
+    rule: 'Behälter aus Glas und Metall mit Inhalt. Leere Plastikflaschen sind zugelassen.'
+  },
+  {
+    id: 'media', label: 'Professionelle Aufnahmetechnik', severity: 1,
+    rule: 'Kameras mit Wechselobjektiv, Actioncams, Objektive, Stative. Handys bleiben erlaubt.'
+  },
+  {
+    id: 'light', label: 'Blendlicht', severity: 1,
+    rule: 'Laser und starke Blendleuchten, die in die Menge gerichtet werden können.'
+  }
+];
+
+export function categoryById(id) {
+  return ITEM_CATEGORIES.find((c) => c.id === id) ?? null;
+}
+
+/**
  * Gegenstände, die beim Abtasten zum Vorschein kommen.
  * Die meisten sind völlig harmlos - genau darum muss man hinsehen.
- * `zones` sagt, wo ein Gegenstand plausibel steckt.
+ * `zones` sagt, wo ein Gegenstand plausibel steckt, `cat` die Gruppe der
+ * Hausordnung (nur bei verbotenen Sachen gesetzt).
  */
-export const ITEMS = [
+const RAW_ITEMS = [
   // --- harmlos ---
-  { id: 'gum', label: 'Kaugummi', forbidden: false, severity: 0, zones: ['pockets', 'bag'] },
-  { id: 'phone', label: 'Handy', forbidden: false, severity: 0, zones: ['jacket', 'pockets', 'bag'] },
-  { id: 'keys', label: 'Schlüsselbund', forbidden: false, severity: 0, zones: ['jacket', 'pockets', 'bag'] },
-  { id: 'lighter', label: 'Feuerzeug', forbidden: false, severity: 0, zones: ['jacket', 'pockets'] },
-  { id: 'smokes', label: 'Zigaretten', forbidden: false, severity: 0, zones: ['jacket', 'bag'] },
-  { id: 'wallet', label: 'Portemonnaie', forbidden: false, severity: 0, zones: ['jacket', 'pockets', 'bag'] },
-  { id: 'earbuds', label: 'Kopfhörer', forbidden: false, severity: 0, zones: ['jacket', 'pockets', 'bag'] },
-  { id: 'coins', label: 'Kleingeld', forbidden: false, severity: 0, zones: ['pockets'] },
-  { id: 'tissues', label: 'Taschentücher', forbidden: false, severity: 0, zones: ['jacket', 'bag'] },
-  { id: 'balm', label: 'Lippenpflege', forbidden: false, severity: 0, zones: ['pockets', 'bag'] },
-  { id: 'mints', label: 'Pfefferminz', forbidden: false, severity: 0, zones: ['pockets', 'bag'] },
-  { id: 'charger', label: 'Ladekabel', forbidden: false, severity: 0, zones: ['bag'] },
-  { id: 'bottle', label: 'Wasserflasche', forbidden: false, severity: 0, zones: ['bag'] },
-  { id: 'book', label: 'Notizbuch', forbidden: false, severity: 0, zones: ['bag'] },
+  { id: 'gum', label: 'Kaugummi', zones: ['pockets', 'bag'] },
+  { id: 'phone', label: 'Handy', zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'keys', label: 'Schlüsselbund', zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'lighter', label: 'Feuerzeug', zones: ['jacket', 'pockets'] },
+  { id: 'smokes', label: 'Zigaretten', zones: ['jacket', 'bag'] },
+  { id: 'wallet', label: 'Portemonnaie', zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'earbuds', label: 'Kopfhörer', zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'coins', label: 'Kleingeld', zones: ['pockets'] },
+  { id: 'tissues', label: 'Taschentücher', zones: ['jacket', 'bag'] },
+  { id: 'balm', label: 'Lippenpflege', zones: ['pockets', 'bag'] },
+  { id: 'mints', label: 'Pfefferminz', zones: ['pockets', 'bag'] },
+  { id: 'charger', label: 'Ladekabel', zones: ['bag'] },
+  { id: 'bottle', label: 'Plastikflasche, leer', zones: ['bag'] },
+  { id: 'book', label: 'Notizbuch', zones: ['bag'] },
+  { id: 'powerbank', label: 'Powerbank', zones: ['jacket', 'bag'] },
+  { id: 'shades', label: 'Sonnenbrille', zones: ['jacket', 'bag'] },
+  { id: 'meds', label: 'Schmerztabletten, beschriftet', zones: ['pockets', 'bag'] },
+  { id: 'deo', label: 'Deoroller', zones: ['bag'] },
+  { id: 'selfie', label: 'Selfiestick', zones: ['bag'] },
+  { id: 'pen', label: 'Kugelschreiber', zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'snack', label: 'Müsliriegel', zones: ['jacket', 'bag'] },
+  { id: 'earplugs', label: 'Ohrstöpsel', zones: ['pockets', 'bag'] },
+  { id: 'vape', label: 'E-Zigarette', zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'ticket', label: 'Vorverkaufsticket', zones: ['jacket', 'pockets'] },
 
-  // --- verboten ---
-  { id: 'camera', label: 'Profikamera', forbidden: true, severity: 1, zones: ['bag'] },
-  { id: 'glass', label: 'Glasflasche', forbidden: true, severity: 1, zones: ['bag', 'jacket'] },
-  { id: 'laser', label: 'Laserpointer', forbidden: true, severity: 1, zones: ['jacket', 'pockets'] },
-  { id: 'substance', label: 'Verdächtiges Päckchen', forbidden: true, severity: 2, zones: ['jacket', 'pockets', 'bag'] },
-  { id: 'spray', label: 'Reizgas', forbidden: true, severity: 2, zones: ['jacket', 'bag'] },
-  { id: 'tool', label: 'Multitool', forbidden: true, severity: 2, zones: ['jacket', 'pockets', 'bag'] },
-  { id: 'baton', label: 'Teleskopstock', forbidden: true, severity: 3, zones: ['jacket', 'bag'] },
-  { id: 'blade', label: 'Klinge', forbidden: true, severity: 3, zones: ['jacket', 'pockets'] }
+  // --- Waffen: es gibt viele, in der Hausordnung steht nur "Waffen" ---
+  { id: 'blade', label: 'Klappmesser', cat: 'weapon', zones: ['jacket', 'pockets'] },
+  { id: 'cutter', label: 'Cuttermesser', cat: 'weapon', zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'butterfly', label: 'Butterflymesser', cat: 'weapon', zones: ['jacket', 'pockets'] },
+  { id: 'knuckles', label: 'Schlagring', cat: 'weapon', zones: ['jacket', 'pockets'] },
+  { id: 'baton', label: 'Teleskopschlagstock', cat: 'weapon', zones: ['jacket', 'bag'] },
+  { id: 'stun', label: 'Elektroschocker', cat: 'weapon', zones: ['jacket', 'bag'] },
+  { id: 'spray', label: 'Reizgasspray', cat: 'weapon', severity: 2, zones: ['jacket', 'pockets', 'bag'] },
+
+  // --- Pyrotechnik ---
+  { id: 'flare', label: 'Bengalfackel', cat: 'pyro', zones: ['bag'] },
+  { id: 'banger', label: 'Böller', cat: 'pyro', severity: 2, zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'smokepot', label: 'Rauchtopf', cat: 'pyro', zones: ['bag'] },
+  { id: 'sparkler', label: 'Wunderkerzen', cat: 'pyro', severity: 1, zones: ['jacket', 'bag'] },
+
+  // --- unklare Substanzen ---
+  { id: 'substance', label: 'Unbeschriftetes Päckchen', cat: 'drugs', zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'pills', label: 'Döschen mit losen Pillen', cat: 'drugs', zones: ['pockets', 'bag'] },
+  { id: 'powder', label: 'Briefchen mit Pulver', cat: 'drugs', zones: ['jacket', 'pockets'] },
+  { id: 'vial', label: 'Fläschchen ohne Etikett', cat: 'drugs', zones: ['pockets', 'bag'] },
+
+  // --- Werkzeug ---
+  { id: 'tool', label: 'Multitool', cat: 'tool', zones: ['jacket', 'pockets', 'bag'] },
+  { id: 'screwdriver', label: 'Schraubendreher', cat: 'tool', zones: ['jacket', 'bag'] },
+  { id: 'pliers', label: 'Kombizange', cat: 'tool', zones: ['bag'] },
+
+  // --- Glas und Getränke ---
+  { id: 'glass', label: 'Glasflasche', cat: 'glass', zones: ['jacket', 'bag'] },
+  { id: 'flask', label: 'Flachmann', cat: 'glass', zones: ['jacket', 'pockets'] },
+  { id: 'wine', label: 'Weinflasche', cat: 'glass', zones: ['bag'] },
+
+  // --- Aufnahmetechnik ---
+  { id: 'camera', label: 'Profikamera', cat: 'media', zones: ['bag'] },
+  { id: 'lens', label: 'Teleobjektiv', cat: 'media', zones: ['bag'] },
+  { id: 'actioncam', label: 'Actioncam', cat: 'media', zones: ['jacket', 'pockets', 'bag'] },
+
+  // --- Blendlicht ---
+  { id: 'laser', label: 'Laserpointer', cat: 'light', zones: ['jacket', 'pockets'] },
+  { id: 'blinder', label: 'Blendleuchte', cat: 'light', severity: 2, zones: ['jacket', 'bag'] }
 ];
+
+/**
+ * `forbidden` und `severity` ergeben sich aus der Gruppe - so kann keine
+ * Tabellenzeile aus Versehen widersprüchlich werden.
+ */
+export const ITEMS = RAW_ITEMS.map((item) => {
+  const category = item.cat ? categoryById(item.cat) : null;
+  return {
+    ...item,
+    cat: item.cat ?? null,
+    catLabel: category?.label ?? null,
+    forbidden: !!category,
+    severity: item.severity ?? category?.severity ?? 0
+  };
+});
 
 export function itemById(id) {
   return ITEMS.find((i) => i.id === id) ?? null;
+}
+
+/** Alle verbotenen Sachen einer Gruppe (fürs Balancing und für Tests). */
+export function itemsOfCategory(catId) {
+  return ITEMS.filter((i) => i.cat === catId);
 }
 
 /** Abtast-Zonen. 'bag' gibt es nur, wenn der Gast wirklich eine Tasche dabei hat. */
@@ -248,6 +351,11 @@ export const DIFFICULTY_STEPS = [
   {
     night: 4, id: 'impaired', label: 'ZUSTAND',
     desc: 'Nicht jeder Rausch riecht nach Alkohol: weite Pupillen, Schwitzen, Zittern, mahlender Kiefer.'
+  },
+  {
+    night: 5, id: 'aggression', label: 'ÜBERGRIFFE',
+    desc: 'Manche lassen sich das Abweisen nicht gefallen und gehen auf dich los. '
+      + 'Dann zählt nur noch, wie schnell du die eingeblendeten Tasten triffst.'
   },
   {
     night: 6, id: 'subtleId', label: 'FEINE FÄLSCHUNGEN',
@@ -284,13 +392,24 @@ export const CHECKLIST = [
   { id: 'alcohol', label: 'Alkoholtest gemacht', area: 'airlock' }
 ];
 
-/** Sichtbare Anzeichen für Substanzeinfluss (abstrakt, ohne Konsumdetails). */
+/**
+ * Sichtbare Anzeichen für Substanzeinfluss (abstrakt, ohne Konsumdetails).
+ *
+ * Alles hier ist von aussen erkennbar, bevor man den Gast überhaupt
+ * anspricht: rote Augen, fahle Haut, Augenringe, ein glasiger Blick. Wer
+ * hinsieht, braucht dafür kein Gerät.
+ */
 export const IMPAIRMENT_SIGNS = [
-  { id: 'pupils', label: 'weite Pupillen', min: 0.35 },
-  { id: 'sweat', label: 'schwitzt stark', min: 0.5 },
-  { id: 'jaw', label: 'mahlender Kiefer', min: 0.6 },
-  { id: 'shake', label: 'zitternde Hände', min: 0.7 },
-  { id: 'absent', label: 'wirkt abwesend', min: 0.45 }
+  { id: 'redEyes', label: 'gerötete Augen', min: 0.3, face: true },
+  { id: 'pupils', label: 'weite Pupillen', min: 0.35, face: true },
+  { id: 'glassy', label: 'glasiger Blick', min: 0.4, face: true },
+  { id: 'absent', label: 'wirkt abwesend', min: 0.45 },
+  { id: 'rings', label: 'dunkle Augenringe', min: 0.5, face: true },
+  { id: 'sweat', label: 'schwitzt stark', min: 0.5, face: true },
+  { id: 'pale', label: 'fahle Haut', min: 0.55, face: true },
+  { id: 'jaw', label: 'mahlender Kiefer', min: 0.6, face: true },
+  { id: 'restless', label: 'steht keine Sekunde still', min: 0.65 },
+  { id: 'shake', label: 'zitternde Hände', min: 0.7 }
 ];
 
 export const ID_ISSUES = [
@@ -310,7 +429,62 @@ export const FEATURES = {
   nightEvents: false,      // Sondernächte (Rave, VIP Night, Inspection, Chaos)
   randomEvents: false,     // Stromausfall, Promi, Ansturm, Beschwerden
   artists: false,          // Act am Hintereingang
-  queueImpatience: false   // Gäste verlassen die Schlange
+  queueImpatience: false,  // Gäste verlassen die Schlange
+  aggression: true         // Gäste gehen auf den Türsteher los (Abwehr per Taste)
+};
+
+/**
+ * Tasten, die bei einem Angriff auf dem Bildschirm erscheinen. Bewusst weit
+ * auseinander und nicht mit den Aktionstasten belegt, damit man im Reflex
+ * nicht aus Versehen jemanden einlässt.
+ */
+export const DEFENSE_KEYS = [
+  { key: 'KeyQ', label: 'Q' },
+  { key: 'KeyW', label: 'W' },
+  { key: 'KeyE', label: 'E' },
+  { key: 'KeyR', label: 'R' },
+  { key: 'KeyA', label: 'A' },
+  { key: 'KeyS', label: 'S' },
+  { key: 'KeyD', label: 'D' },
+  { key: 'KeyF', label: 'F' }
+];
+
+/**
+ * Abwehr von Angriffen.
+ *
+ * Ein Gast rastet nur selten aus - und wenn, dann kommt er auf einen zu und
+ * man hat wenige Sekunden, die eingeblendeten Tasten zu treffen.
+ */
+export const AGGRESSION = {
+  /** Grundchance, dass ein Gast beim Abweisen ausrastet. */
+  rejectChance: 0.07,
+  /** Chance pro Sekunde, dass er schon während der Kontrolle ausrastet. */
+  idleChancePerSecond: 0.004,
+  /** Erst ab dieser Nacht kann es passieren (Tutorial bleibt aussen vor). */
+  minNight: 5,
+
+  /** Anlauf: so lange rennt er auf einen zu, bevor die erste Taste kommt. */
+  chargeTime: 0.9,
+  /** Wie viele Tasten muss man treffen? */
+  keys: [3, 5],
+  /** Zeitfenster für die erste Taste, danach wird es enger. */
+  keyTime: 1.5,
+  keyTimeStep: 0.12,
+  keyTimeMin: 0.7,
+  /** So viele Fehlgriffe oder verpasste Fenster verzeiht die Abwehr. */
+  strikes: 2,
+  /** Wie lange steht das Ergebnis im Bild, bevor der Gast rausfliegt? */
+  resultTime: 1.4,
+
+  /** Belohnung für eine saubere Abwehr. */
+  winRep: 1.6,
+  winBonus: 60,
+  winXp: 20,
+  /** Kosten, wenn man ihn nicht abwehrt. */
+  failRep: -3.5,
+  failCost: 220,
+  /** Wie lange ist der Spieler danach benommen und kann nichts tun? */
+  failStun: 2.2
 };
 
 /** Nacht-Events. */

@@ -35,11 +35,18 @@ export function renderReport(game, onContinue) {
     ${kv('Zu Unrecht beanstandet', s.falseAlarms ?? 0, (s.falseAlarms ?? 0) > 0 ? 'bad' : '')}
     ${kv('Übersehen', s.overlooked ?? 0, (s.overlooked ?? 0) > 0 ? 'bad' : '')}
 
+    ${s.attacks ? `
+    <h2 class="sec">ÜBERGRIFFE</h2>
+    ${kv('Auf dich losgegangen', s.attacks)}
+    ${kv('Abgewehrt', s.defended ?? 0, (s.defended ?? 0) > 0 ? 'good' : '')}
+    ${kv('Erwischt worden', s.attacksLanded ?? 0, (s.attacksLanded ?? 0) > 0 ? 'bad' : '')}` : ''}
+
     <h2 class="sec">BILANZ</h2>
     ${kv('Eintritt', `€${Math.round(s.entry).toLocaleString('de-DE')}`, 'good')}
     ${kv('Bar & VIP', `€${Math.round(s.bar).toLocaleString('de-DE')}`, 'good')}
     ${kv('Prämie für Befunde', `€${Math.round(s.findingPay ?? 0).toLocaleString('de-DE')}`,
       (s.findingPay ?? 0) > 0 ? 'good' : '')}
+    ${s.defensePay ? kv('Prämie für Abwehr', `€${Math.round(s.defensePay).toLocaleString('de-DE')}`, 'good') : ''}
     ${s.fines ? kv('Bußgelder & Schäden', `−€${Math.round(s.fines).toLocaleString('de-DE')}`, 'bad') : ''}
     ${s.artistFee ? kv('Gage', `−€${Math.round(s.artistFee).toLocaleString('de-DE')}`, 'bad') : ''}
     ${kv('Netto', `€${Math.round(netto).toLocaleString('de-DE')}`, netto >= 0 ? 'good' : 'bad')}

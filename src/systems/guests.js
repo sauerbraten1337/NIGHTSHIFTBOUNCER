@@ -159,6 +159,8 @@ export function createGuest(rng, ctx = {}) {
       contrabandZone,
       impaired,
       impairmentSigns: signs,
+      /** Wird erst wahr, wenn der Gast tatsächlich handgreiflich wird. */
+      aggressive: false,
       repValue: archetype.rep
     },
 
@@ -270,6 +272,8 @@ export function violationsOf(guest) {
     v.push({ id: 'impaired', label: 'Steht sichtbar unter Einfluss', severity: 2 });
   }
   if (t.blacklisted) v.push({ id: 'blacklist', label: 'Hausverbot', severity: 2 });
+  // Wer handgreiflich wird, hat sich die Entscheidung selbst abgenommen.
+  if (t.aggressive) v.push({ id: 'aggressive', label: 'Übergriff an der Tür', severity: 3 });
   return v;
 }
 
@@ -283,8 +287,7 @@ export function visibleTells(guest, talentStreet = 0) {
   const t = guest.truth;
   if (t.drunk > 0.55) tells.push('schwankt');
   for (const sign of t.impairmentSigns ?? []) {
-    tells.push({ pupils: 'weite Pupillen', sweat: 'schwitzt', jaw: 'mahlender Kiefer',
-      shake: 'zittert', absent: 'wirkt abwesend' }[sign] ?? sign);
+    tells.push(IMPAIRMENT_SIGNS.find((s) => s.id === sign)?.label ?? sign);
   }
   if (t.risk > 0.65 && talentStreet >= 1) tells.push('unruhig');
   if (t.contraband && talentStreet >= 2 && t.contraband.severity >= 2) tells.push('greift staendig zur Jacke');

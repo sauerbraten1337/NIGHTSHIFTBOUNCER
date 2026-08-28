@@ -16,7 +16,8 @@ import { upgradeLevel } from '../systems/state.js';
 /**
  * @param {object} opts { rect:{x,y,w,h}, area:'outside'|'airlock', station,
  *                        queue:[], t, beat, pulse, dark }
- * @returns {Array} anklickbare Abtast-Zonen in Ansichtskoordinaten
+ * @returns {{zones: Array, keys: Array}} anklickbare Abtast-Ringe und
+ *          Abwehr-Tasten in Ansichtskoordinaten
  */
 export function drawStationView(ctx, game, opts) {
   const { rect, area } = opts;
@@ -29,9 +30,9 @@ export function drawStationView(ctx, game, opts) {
   if (area === 'outside') drawOutside(ctx, game, opts);
   else drawAirlock(ctx, game, opts);
 
-  const zones = drawGuestAtStation(ctx, game, opts);
+  const result = drawGuestAtStation(ctx, game, opts);
   ctx.restore();
-  return zones;
+  return result;
 }
 
 /* ---------------------------------------------------------------- */
@@ -231,6 +232,9 @@ function drawQueueDepth(ctx, game, opts, horizon) {
       t: t + guest.swayPhase,
       drunk: guest.truth.drunk,
       vip: guest.truth.vip,
+      // Auffälligkeiten sieht man schon in der Schlange - wer hinsieht, weiss
+      // vorher, was gleich vor ihm steht.
+      signs: guest.truth.impairmentSigns ?? [],
       dim: 0.25 + depth * 0.45
     });
   }
@@ -331,6 +335,7 @@ function drawAirlock(ctx, game, opts) {
       personality: g.personality,
       t: t + g.swayPhase,
       drunk: g.truth.drunk,
+      signs: g.truth.impairmentSigns ?? [],
       dim: 0.35 + i * 0.08
     });
   }
@@ -417,26 +422,45 @@ function drawGuestAtStation(ctx, game, opts) {
     ctx.letterSpacing = '4px';
     ctx.fillText(area === 'outside' ? 'NIEMAND AN DER TÜR' : 'SCHLEUSE FREI', w / 2, h * 0.62);
     ctx.restore();
-    return [];
+    return { zones: [], keys: [] };
   }
 
-  const holding = !!station.checks.id;
-  const figureH = guestHeight(w, h);
+  // Bei einem Übergriff kommt der Gast auf einen zu: er wird gross, er wackelt.
+  const aggro = station.aggro;
+  const near = aggro ? Math.pow(aggro.approach ?? 0, 0.8) : 0;
+  const rattle = aggro
+    ? Math.sin(t * 30) * (2 + (aggro.shake ?? 0) * 6 + (aggro.missFlash > 0 ? 5 : 0))
+    : 0;
+
+  const holding = !!station.checks.id && !aggro;
+  const figureH = guestHeight(w, h) * (1 + near * 0.55);
   const anchors = drawFigure(ctx, {
-    x: w / 2,
-    y: baseY,
+    x: w / 2 + rattle,
+    y: baseY + near * h * 0.06,
     h: figureH,
     look: guest.look,
-    personality: guest.personality,
+    personality: aggro ? 'aggressive' : guest.personality,
     t: t + guest.swayPhase,
     drunk: guest.truth.drunk,
     holdingId: holding,
     vip: guest.truth.vip,
-    bag: !!guest.truth.hasBag,
+    bag: !!guest.truth.hasBag && !aggro,
     bagOut: !!station.patdown?.bagOut,
     signs: guest.truth.impairmentSigns ?? [],
+    rage: aggro ? Math.max(0.35, near) : 0,
     accent: guest.isArtist ? PAL.amber : guest.truth.vip ? PAL.purple : null
   });
+
+  // Angriff: Tastenfolge statt Kontrolle - alles andere hat jetzt Pause.
+  if (aggro) {
+    const keys = drawDefenseOverlay(ctx, aggro, w, h, t);
+    if (guest.said && guest.saidTimer > 0) {
+      // Die Figur ragt jetzt über den Bildrand hinaus - die Blase bleibt im Bild.
+      drawSpeech(ctx, w / 2, Math.max(h * 0.14, baseY - figureH - 26),
+        guest.said, PAL.red, Math.min(320, w * 0.62));
+    }
+    return { zones: [], keys };
+  }
 
   // Abtast-Zonen einblenden - die Ringe sitzen auf den echten Körperstellen
   let zones = [];
@@ -465,7 +489,123 @@ function drawGuestAtStation(ctx, game, opts) {
     ctx.restore();
   }
 
-  return zones;
+  return { zones, keys: [] };
+}
+
+/* ---------------------------------------------------------------- */
+/* Übergriff: die Tasten, die jetzt sitzen müssen                     */
+/* ---------------------------------------------------------------- */
+
+/**
+ * Zeichnet Warnrahmen, Tastenfolge und Zeitfenster.
+ * Gibt die Tastenfelder zurück, damit man sie auch anklicken kann - wer
+ * lieber mit der Maus spielt, soll nicht wehrlos sein.
+ */
+function drawDefenseOverlay(ctx, aggro, w, h, t) {
+  const hits = [];
+  const danger = aggro.phase === 'fail' ? 0.55
+    : aggro.phase === 'win' ? 0.1
+      : 0.2 + (aggro.approach ?? 0) * 0.25 + (aggro.missFlash > 0 ? 0.25 : 0);
+
+  // Roter Rahmen, der mit jedem Fehlgriff aufblitzt
+  ctx.save();
+  const edge = ctx.createLinearGradient(0, 0, 0, h);
+  edge.addColorStop(0, withAlpha(PAL.red, danger));
+  edge.addColorStop(0.45, 'rgba(0,0,0,0)');
+  edge.addColorStop(1, withAlpha(PAL.red, danger));
+  ctx.fillStyle = edge;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+
+  // Feste Höhe auf Brusthöhe: die Tasten sollen immer an derselben Stelle
+  // stehen, egal wie nah der Gast schon ist.
+  const cx = w / 2;
+  const cy = h * 0.5;
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  if (aggro.phase === 'charge') {
+    ctx.font = '20px "Archivo Black", "Arial Black", sans-serif';
+    ctx.fillStyle = PAL.red;
+    ctx.letterSpacing = '4px';
+    ctx.fillText('ER KOMMT AUF DICH ZU', cx, cy);
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.fillStyle = withAlpha(PAL.white, 0.8);
+    ctx.fillText('TASTEN DRÜCKEN, SOBALD SIE ERSCHEINEN', cx, cy + 26);
+    ctx.restore();
+    return hits;
+  }
+
+  if (aggro.phase === 'win' || aggro.phase === 'fail') {
+    const won = aggro.phase === 'win';
+    ctx.font = '26px "Archivo Black", "Arial Black", sans-serif';
+    ctx.fillStyle = won ? PAL.green : PAL.red;
+    ctx.letterSpacing = '5px';
+    ctx.fillText(won ? 'ABGEWEHRT' : 'ERWISCHT', cx, cy);
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.fillStyle = withAlpha(PAL.white, 0.75);
+    ctx.letterSpacing = '2px';
+    ctx.fillText(won ? 'ER FLIEGT RAUS' : 'DAS TEAM ZIEHT IHN WEG', cx, cy + 28);
+    ctx.restore();
+    return hits;
+  }
+
+  // --- laufende Tastenfolge ---
+  const size = Math.min(64, w * 0.075);
+  const gap = size * 0.42;
+  const total = aggro.keys.length;
+  const startX = cx - ((total - 1) * (size + gap)) / 2;
+
+  for (let i = 0; i < total; i++) {
+    const entry = aggro.keys[i];
+    const x = startX + i * (size + gap);
+    const done = i < aggro.index;
+    const current = i === aggro.index;
+    const scale = current ? 1 + Math.sin(t * 9) * 0.04 + (aggro.hitFlash > 0 ? 0.06 : 0) : 0.78;
+    const box = size * scale;
+    const color = done ? PAL.green : current ? PAL.white : PAL.grey;
+
+    if (current) {
+      glow(ctx, x, cy, box * 2.4, aggro.missFlash > 0 ? PAL.red : PAL.cyan, 0.35);
+      hits.push({ key: entry.key, x, y: cy, rx: box * 0.8, ry: box * 0.8 });
+    }
+
+    ctx.fillStyle = withAlpha('#0b0e14', done ? 0.6 : 0.9);
+    roundRect(ctx, x - box / 2, cy - box / 2, box, box, box * 0.18);
+    ctx.fill();
+    ctx.strokeStyle = withAlpha(color, done ? 0.5 : 1);
+    ctx.lineWidth = current ? 3 : 2;
+    roundRect(ctx, x - box / 2, cy - box / 2, box, box, box * 0.18);
+    ctx.stroke();
+
+    ctx.fillStyle = withAlpha(color, done ? 0.5 : 1);
+    ctx.font = `${Math.round(box * 0.5)}px "Archivo Black", "Arial Black", sans-serif`;
+    ctx.fillText(entry.label, x, cy + box * 0.03);
+
+    // Zeitfenster als schrumpfender Ring um die aktuelle Taste
+    if (current) {
+      const left = Math.max(0, aggro.keyLeft / aggro.keyTime);
+      ctx.strokeStyle = left > 0.4 ? PAL.cyan : PAL.red;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(x, cy, box * 0.78, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
+      ctx.stroke();
+    }
+  }
+
+  // Fehlversuche
+  ctx.font = '11px "IBM Plex Mono", monospace';
+  ctx.letterSpacing = '3px';
+  ctx.fillStyle = withAlpha(PAL.white, 0.8);
+  ctx.fillText(`ABWEHR ${aggro.index}/${total}`, cx, cy - size * 1.15);
+  const left = Math.max(0, aggro.maxStrikes - aggro.strikes + 1);
+  ctx.fillStyle = left > 1 ? withAlpha(PAL.amber, 0.9) : PAL.red;
+  ctx.fillText(`${'●'.repeat(left)}${'○'.repeat(Math.max(0, aggro.maxStrikes + 1 - left))}`, cx, cy + size * 1.2);
+
+  ctx.restore();
+  return hits;
 }
 
 /** Höhe der Figur: nie breiter als die (im Splitscreen halbe) Ansicht. */
