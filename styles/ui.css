@@ -787,3 +787,47 @@ kbd {
   .effects-panel { display: none; }
   .idcard { width: 380px; }
 }
+
+/* ---------- Admin: Testhilfen im Pausenmenü ---------- */
+
+.admin {
+  margin-top: 22px; border: 1px solid var(--line); padding: 14px 16px;
+  max-width: 340px; background: rgba(255, 176, 32, 0.04);
+}
+.admin-head { font-size: 9px; letter-spacing: 3px; color: var(--dim); margin-bottom: 8px; }
+.admin-head.open { color: var(--amber); }
+.admin-note { font-size: 10px; line-height: 1.6; color: var(--dim); margin: 6px 0 0; }
+.admin-label { display: block; font-size: 9px; letter-spacing: 3px; color: var(--cyan); margin-bottom: 6px; }
+.admin-group { margin-top: 14px; }
+.admin-login { display: flex; gap: 8px; align-items: stretch; }
+.admin-input {
+  flex: 1; min-width: 0;
+  font-family: var(--mono); font-size: 13px; letter-spacing: 3px;
+  background: #0a0d12; border: 1px solid var(--line); color: var(--text); padding: 8px 10px;
+}
+.admin-input:focus { outline: none; border-color: var(--amber); }
+.admin-toggle { margin: 5px 0; font-size: 10px; letter-spacing: 2px; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-actions .btn { font-size: 10px; padding: 7px 10px; }
+.admin-msg { font-size: 10px; letter-spacing: 2px; color: var(--dim); margin-top: 10px; min-height: 12px; }
+.admin-msg.ok { color: var(--green); }
+.admin-msg.bad { color: var(--red); }
+.admin-lock { margin-top: 12px; font-size: 10px; }
+
+/* Röntgenblick: die Wahrheit des Gastes, nur mit Admin-Code */
+.adminhud {
+  position: absolute; top: 96px; right: 16px; z-index: 6;
+  width: 250px; pointer-events: none;
+  border: 1px solid var(--amber); background: rgba(7, 9, 13, 0.9);
+  padding: 10px 12px; font-family: var(--mono);
+}
+.adminhud.hidden { display: none; }
+.adminhud-head { font-size: 9px; letter-spacing: 2px; color: var(--amber); margin-bottom: 8px; }
+.adminhud-empty { font-size: 10px; color: var(--dim); }
+.adminhud-station + .adminhud-station { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.adminhud-title { font-size: 9px; letter-spacing: 3px; color: var(--cyan); margin-bottom: 5px; }
+.adminhud-row {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 10px; color: var(--dim); line-height: 1.6;
+}
+.adminhud-row b { color: var(--text); font-weight: 500; text-align: right; }

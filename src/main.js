@@ -14,7 +14,7 @@ import { createInput } from './core/input.js';
 import { createLoop } from './core/loop.js';
 import { createAudio } from './core/audio.js';
 
-import { createInitialState, rank, pushLog, isSolo } from './systems/state.js';
+import { createInitialState, rank, pushLog, isSolo, addToast } from './systems/state.js';
 import { createPlayers, updatePlayers, tryAction, stationOf } from './systems/coop.js';
 import { startNight, updateNight, pickNightEvent, currentPhase, shiftProgress, endNight } from './systems/nightcycle.js';
 import { saveGame, loadGame } from './systems/save.js';
@@ -28,6 +28,12 @@ import { createIdCard } from './ui/idcard.js';
 import { createItemTray } from './ui/itemtray.js';
 import { createRulebook } from './ui/rulebook.js';
 import { createNet, serializeState, applySnapshot } from './net/net.js';
+import { createAdminHud } from './ui/adminhud.js';
+import {
+  restoreAdmin, adminAddMoney, adminSetReputation, adminUnlockAll,
+  adminPrepareNight, adminShortenShift
+} from './systems/admin.js';
+import { startAggression, aggressionActive } from './systems/aggression.js';
 
 const canvas = document.getElementById('scene');
 
@@ -96,6 +102,7 @@ const screens = createScreens(game);
 const idcard = createIdCard(game, { roleId: 'bouncer' });
 const itemTray = createItemTray(game, { roleId: 'security' });
 const rulebook = createRulebook(game);
+const adminHud = createAdminHud(game);
 game.net = createNet(game.bus);
 
 let pendingEvent = null;
@@ -330,6 +337,7 @@ const loop = createLoop({
       idcard.update();
       itemTray.update();
     }
+    adminHud.update();
   }
 });
 
@@ -417,15 +425,72 @@ function togglePause() {
       game.paused = false;
       endNight(game);
       screens.hide();
-    });
+    }, adminTools);
   } else {
     screens.hide();
   }
 }
 
+/* ---------------- Admin: Testhilfen aus dem Pausenmenü ---------------- */
+
+/**
+ * Die Eingriffe, die den Spielfluss betreffen. Der Schaltzustand liegt in
+ * `systems/admin.js`; hier steht nur, was beim Druck auf den Knopf passiert.
+ */
+const adminTools = {
+  /** Direkt ins Briefing der gewaehlten Nacht - die laufende Schicht faellt weg. */
+  night(n) {
+    const number = adminPrepareNight(game.state, n);
+    game.paused = false;
+    game.tutorialWanted = false;
+    hud.hide();
+    screens.hide();
+    goBriefing();
+    return `Nacht ${number} vorbereitet.`;
+  },
+  money() {
+    adminAddMoney(game.state, 5000);
+    return `Geld: €${Math.round(game.state.money).toLocaleString('de-DE')}.`;
+  },
+  rep() {
+    adminSetReputation(game.state, 100);
+    return 'Ruf auf 100 gesetzt.';
+  },
+  unlockAll() {
+    adminUnlockAll(game.state);
+    hud.rebuild();
+    return 'Alle Kontrollen freigeschaltet.';
+  },
+  shorten() {
+    if (!game.state.night) return 'Keine laufende Schicht.';
+    const quota = adminShortenShift(game.state, 3);
+    return `Liste gekürzt: ${game.state.night.processed}/${quota}.`;
+  },
+  /** Uebergriff sofort ausloesen - zum Testen der Abwehr. */
+  attack() {
+    const night = game.state.night;
+    const station = night && Object.values(night.stations)
+      .find((s) => s.guest && !aggressionActive(s));
+    if (!station) return 'Niemand an der Kontrolle.';
+    startAggression(game, station, 'idle');
+    game.paused = false;
+    screens.hide();
+    return 'Übergriff läuft.';
+  },
+  endShift() {
+    if (!game.state.night?.running) return 'Keine laufende Schicht.';
+    game.paused = false;
+    addToast(game.state.night, 'ADMIN: SCHICHT BEENDET', 'info');
+    endNight(game);
+    screens.hide();
+    return 'Schicht beendet.';
+  }
+};
+
 window.addEventListener('pointerdown', () => audio.start(), { once: true });
 
 loop.start();
+restoreAdmin();
 applyMode('solo');
 goMenu();
 
