@@ -188,7 +188,7 @@ function beginNight(tutorial) {
   applyMode(game.state.mode);
   startNight(game, pendingEvent, artist, { tutorial });
   if (!tutorial) {
-    game.state.unlocks = { id: true, talk: true, scan: true, search: true, alcohol: true, calm: true };
+    game.state.unlocks = { id: true, talk: true, search: true, alcohol: true, calm: true };
   }
   screens.hide();
   hud.show();

@@ -13,7 +13,6 @@
 import { rolesFor, PATDOWN_KEYS, TUNING, AREA_CHECKS } from '../data/config.js';
 import { actionSpeed, addToast, addRadio, isSolo } from './state.js';
 import { requestId, markField, inspectionVerdict, idSummary } from './identity.js';
-import { scanGuest } from './scanner.js';
 import { startPatdown, openZone, pickItem, patdownResult, pendingZones } from './security.js';
 import { talkTo, alcoholTest } from './alcohol.js';
 import { admitGuest, rejectGuest, passGuest, coopVerification, soloVerification } from './decision.js';
@@ -179,11 +178,11 @@ export function tryAction(game, player, code, payload = {}) {
       const res = markField(checks.id, guest, payload.field);
       if (res.already) return null;
       if (res.correct) {
-        setResult(player, 'ok', `GEFUNDEN: ${res.reason}`);
-        addToast(night, `AUFFÄLLIGKEIT: ${res.reason}`, 'good', 3);
-        game.bus.emit('sfx', 'ok');
+        setResult(player, 'bad', `AUFFÄLLIG: ${res.reason}`);
+        addToast(night, `AUFFÄLLIG: ${res.reason}`, 'bad', 3);
+        game.bus.emit('sfx', 'alarm');
       } else {
-        setResult(player, 'deny', `${res.label}: NICHTS ZU BEANSTANDEN`);
+        setResult(player, 'ok', `${res.label}: in Ordnung`);
         player.flash = 0.4;
         game.bus.emit('sfx', 'beep');
       }
@@ -193,12 +192,6 @@ export function tryAction(game, player, code, payload = {}) {
 
     case 'talk':
       begin(game, player, 'ANSPRECHEN', 'talk', { guestId: guest.id });
-      return null;
-
-    case 'scan':
-      if (checks.scan) return deny(game, player, 'BEREITS GESCANNT');
-      begin(game, player, 'SCAN', 'scan', { guestId: guest.id });
-      game.bus.emit('sfx', 'scan');
       return null;
 
     case 'alcohol':
@@ -328,21 +321,13 @@ function completeAction(game, player, pending) {
       setResult(player, 'info', `SAGT: "${result.realName}" - ${result.hint}`);
       break;
     }
-    case 'scan': {
-      const result = scanGuest(state, guest);
-      checks.scan = result;
-      setResult(player, result.ok === false ? 'bad' : 'ok', result.text);
-      addRadio(night, 'SECURITY', result.text);
-      bus.emit('sfx', result.offline ? 'deny' : 'scan');
-      updateVerification(game, guest, station);
-      break;
-    }
     case 'alcohol': {
       const result = alcoholTest(state, guest);
       checks.alcohol = result;
-      setResult(player, result.overLimit ? 'bad' : 'ok', `${result.promille} ‰ — ${result.text}`);
-      addRadio(night, 'SECURITY', `Alkoholtest: ${result.promille} ‰`);
-      bus.emit('sfx', result.overLimit ? 'deny' : 'ok');
+      setResult(player, 'info', `MESSUNG LÄUFT — ${result.text}`);
+      addRadio(night, 'SECURITY', `Alkoholtest: ${result.promille.toFixed(1)} ‰`);
+      bus.emit('sfx', 'scan');
+      updateVerification(game, guest, station);
       break;
     }
     case 'bag':

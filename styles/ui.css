@@ -97,15 +97,16 @@ html, body {
 /* ---------- Notizzettel ---------- */
 
 .notepad {
-  position: absolute; top: 124px; right: 22px; width: 286px;
+  position: absolute; bottom: 116px; right: 30px; width: 282px; max-height: 60vh; overflow: hidden;
+  z-index: 2;
   padding: 16px 18px 20px;
   background:
     repeating-linear-gradient(180deg, transparent 0 25px, rgba(70, 90, 120, 0.16) 25px 26px),
     linear-gradient(160deg, #f6f1e2 0%, #efe8d6 55%, #e6ddc8 100%);
   color: #1e2732;
   font-family: var(--hand);
-  font-size: 20px;
-  line-height: 1.25;
+  font-size: 19px;
+  line-height: 1.2;
   transform: rotate(-1.1deg);
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55), inset 0 0 40px rgba(160, 140, 100, 0.18);
   border: 1px solid #cdbf9e;
@@ -113,7 +114,7 @@ html, body {
 }
 /* Klebestreifen oben */
 .notepad::before {
-  content: ""; position: absolute; top: -10px; left: 50%; transform: translateX(-50%) rotate(2deg);
+  content: ""; position: absolute; top: -10px; left: 46%; transform: translateX(-50%) rotate(2deg);
   width: 84px; height: 22px; background: rgba(226, 214, 178, 0.72);
   border: 1px solid rgba(180, 165, 125, 0.5); box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 }
@@ -188,27 +189,22 @@ html, body {
   width: 470px; height: 300px;
   pointer-events: none;
 }
-.idhand .hand { position: absolute; pointer-events: none; }
-.idhand .hand-back {
-  left: 34px; bottom: -56px; width: 210px; height: 145px; z-index: 1;
-  filter: drop-shadow(0 -8px 16px rgba(0, 0, 0, 0.6));
+/* Die haltende Hand ist bewusst nur ein Kreis - und liegt immer HINTER
+   dem, was sie hält, damit sie nie etwas verdeckt. */
+.holding-hand {
+  position: absolute; z-index: 0; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #d09a72 0%, #b9835e 62%, #97684a 100%);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
 }
-.idhand .hand-front {
-  left: 20px; bottom: 10px; width: 92px; height: 126px; z-index: 4;
-  transform: rotate(-16deg);
-  filter: drop-shadow(-3px -3px 7px rgba(0, 0, 0, 0.45));
-}
-.idhand .crease { fill: none; stroke: rgba(120, 78, 52, 0.5); stroke-width: 4; stroke-linecap: round; }
-.idhand .palm { fill: #c08a63; }
-.idhand .finger { fill: #b57e58; }
-.idhand .thumb { fill: #cd956d; }
-.idhand .nail { fill: #dcae8c; opacity: 0.85; }
+.idhand .holding-hand { left: 26px; bottom: -34px; width: 132px; height: 132px; }
+.notepad-hand { right: 6px; bottom: 86px; width: 116px; height: 116px; }
 
 .idcard {
   position: absolute; left: 44px; bottom: 58px;
   width: 400px;
   transform: rotate(-2.4deg);
-  z-index: 3;
+  z-index: 2;
   background: rgba(9, 11, 16, 0.95);
   border: 1px solid var(--line);
   padding: 10px 12px 12px;
@@ -252,14 +248,17 @@ html, body {
 .idc-row .age { font-size: 10px; color: #46505f; }
 .idc-row .age.bad { color: #b3121c; font-weight: 700; }
 
-.idc-row.hit, .idc-photo.hit { background: rgba(76, 224, 138, 0.35); border-color: #1f8a4d; }
-.idc-row.miss, .idc-photo.miss { background: rgba(255, 47, 60, 0.16); border-color: #a2222c; opacity: 0.75; }
+.idc-row.suspect, .idc-photo.suspect {
+  background: rgba(255, 47, 60, 0.3); border-color: #a2222c;
+  box-shadow: inset 0 0 0 1px rgba(162, 34, 44, 0.5);
+}
+.idc-row.fine, .idc-photo.fine { background: rgba(76, 224, 138, 0.3); border-color: #1f8a4d; }
 
 .idc-badge {
   font-size: 8px; letter-spacing: 2px; padding: 2px 5px; border: 1px solid currentColor;
 }
-.idc-badge.hit { color: #14683a; }
-.idc-badge.miss { color: #8c1620; }
+.idc-badge.suspect { color: #8c1620; font-weight: 700; }
+.idc-badge.fine { color: #14683a; }
 .idc-photo .idc-badge { position: absolute; top: 4px; left: 4px; background: rgba(255,255,255,0.85); }
 
 .digit-off {

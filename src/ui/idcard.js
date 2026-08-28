@@ -118,15 +118,19 @@ function birthMarkup(doc) {
   return `<span class="digit-off">${y}</span>-${m}-${d}`;
 }
 
+/**
+ * Die Farbe beschreibt das Feld, nicht den Klick:
+ * geprüft und in Ordnung -> grün, geprüft und auffällig -> rot.
+ */
 function mark(inspection, field) {
   const m = inspection.marks[field];
-  return m === 'hit' ? 'hit' : m === 'miss' ? 'miss' : '';
+  return m === 'hit' ? 'suspect' : m === 'miss' ? 'fine' : '';
 }
 
 function badge(inspection, field) {
   const m = inspection.marks[field];
-  if (m === 'hit') return '<span class="idc-badge hit">BEANSTANDET</span>';
-  if (m === 'miss') return '<span class="idc-badge miss">OK</span>';
+  if (m === 'hit') return '<span class="idc-badge suspect">NICHT KORREKT</span>';
+  if (m === 'miss') return '<span class="idc-badge fine">IN ORDNUNG</span>';
   return '';
 }
 

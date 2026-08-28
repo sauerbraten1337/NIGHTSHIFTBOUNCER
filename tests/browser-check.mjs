@@ -181,8 +181,7 @@ for (let i = 0; i < 24; i++) {
     const air = g.state.night.stations.airlock;
     if (door.guest && !door.checks.id) g.act('bouncer', 'id');
     else if (door.guest) g.act('bouncer', 'pass');
-    if (air.guest && !air.checks.scan) g.act('security', 'scan');
-    else if (air.guest && !air.patdown) g.act('security', 'search');
+    if (air.guest && !air.patdown) g.act('security', 'search');
     else if (air.guest && !air.patdown.complete) {
       const pat = air.patdown;
       const open = pat.active ? pat.zones[pat.active] : null;
@@ -230,11 +229,21 @@ for (let i = 0; i < 24; i++) {
 results.ui = await coop.evaluate(() => {
   const has = (sel) => !!document.querySelector(sel);
   const notepad = document.getElementById('notepad');
+  const box = notepad.getBoundingClientRect();
+  const hand = document.querySelector('#idhand .holding-hand');
+  const handStyle = hand ? getComputedStyle(hand) : null;
   return {
+    // Zettel gehört nach UNTEN rechts
+    notepadBottomRight: box.top > window.innerHeight * 0.35 && box.left > window.innerWidth * 0.5,
+    // Hand ist ein Kreis und liegt hinter dem, was sie hält
+    handIsCircle: !!handStyle && handStyle.borderRadius.startsWith('50%'),
+    handBehind: !!handStyle && Number(handStyle.zIndex || 0) <= 0,
+    handIsSvg: has('#idhand svg'),
+    scanAction: [...document.querySelectorAll('.act .name')].some((n) => /SCAN/i.test(n.textContent)),
     notepad: !!notepad && !notepad.classList.contains('hidden'),
     notepadHand: notepad ? getComputedStyle(notepad).fontFamily.toLowerCase() : '',
     decisions: document.querySelectorAll('#decisions .dec').length,
-    hand: has('#idhand .hand'),
+    hand: has('#idhand .holding-hand'),
     // Diese Anzeigen sollen aus dem Spiel-HUD verschwunden sein
     // (im Briefing/Shop bleibt die Kapazität als Management-Info stehen).
     hudText: document.getElementById('hud').textContent
@@ -291,8 +300,7 @@ for (let i = 0; i < 12; i++) {
   await guest.evaluate(() => {
     const g = window.NULLWERK;
     const air = g.state.night?.stations.airlock;
-    if (air?.guest && !air.checks.scan) g.act('security', 'scan');
-    else if (air?.guest) g.act('security', 'admit');
+    if (air?.guest) g.act('security', 'admit');
   });
   await host.waitForTimeout(600);
 }
@@ -327,7 +335,9 @@ console.log(`  Report/Shop           ${results.report}`);
 console.log(`  Kontrolltisch         ${results.trayShown === true} · max. ${results.trayCount ?? 0} Gegenstände` +
   ` · Icons gezeichnet ${results.trayPainted === true}`);
 console.log(`  Auswahl per Klick     verboten ${results.contrabandFound === true} · freigegeben ${results.clearedByClick === true}`);
-console.log(`  Notizzettel           ${results.ui.notepad} (${results.ui.notepadHand.split(',')[0]})`);
+console.log(`  Notizzettel           ${results.ui.notepad} (${results.ui.notepadHand.split(',')[0]}) · unten rechts ${results.ui.notepadBottomRight}`);
+console.log(`  Hand                  Kreis ${results.ui.handIsCircle} · hinter dem UI ${results.ui.handBehind} · kein SVG ${!results.ui.handIsSvg}`);
+console.log(`  Scan entfernt         ${!results.ui.scanAction}`);
 console.log(`  Entscheidungs-Buttons ${results.ui.decisions} · Hand am Ausweis ${results.ui.hand}`);
 console.log(`  Koop   Posten ${results.coop.players.join(' | ')}`);
 console.log(`  Koop   durchgelassen ${results.coop.stats.passed} · eingelassen ${results.coop.stats.admitted}` +
@@ -355,6 +365,10 @@ if (!results.ui.notepadHand.includes('caveat') && !results.ui.notepadHand.includ
 }
 if (results.ui.decisions < 2) fail('Entscheidungs-Buttons fehlen');
 if (!results.ui.hand) fail('Der Ausweis wird nicht von einer Hand gehalten');
+if (!results.ui.notepadBottomRight) fail('Notizzettel hängt nicht unten rechts');
+if (!results.ui.handIsCircle) fail('Die haltende Hand ist kein Kreis');
+if (!results.ui.handBehind) fail('Die Hand liegt über dem UI statt dahinter');
+if (results.ui.scanAction) fail('SCAN ist noch als Aktion vorhanden');
 if (/KAPAZITÄT/i.test(results.ui.hudText)) fail('Kapazitätsanzeige ist noch im HUD');
 if (/KELLERCLUB|STUFE \d/i.test(results.ui.hudText)) fail('Club-Stufe ist noch im HUD');
 if (results.online.passed < 1) fail('Online: Host konnte niemanden durchlassen');

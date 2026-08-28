@@ -27,7 +27,7 @@ export function createInitialState(mode = 'solo') {
     bookedArtist: null,
     tutorialDone: false,
     /** Freischaltungen: das Tutorial gibt Mechaniken nacheinander frei. */
-    unlocks: { id: true, talk: false, scan: false, search: false, alcohol: false, calm: false },
+    unlocks: { id: true, talk: false, search: false, alcohol: false, calm: false },
     lifetime: { guests: 0, admitted: 0, rejected: 0, revenue: 0, incidents: 0, nights: 0 },
     night: null,
     log: []
@@ -80,7 +80,6 @@ export function emptyChecks() {
   return {
     id: null,        // Inspection-Objekt (siehe identity.js)
     talk: null,      // { line, realName, hint, moodHint }
-    scan: null,      // { ok, risk, blacklisted, ... }
     search: null,    // { done, found, text }
     alcohol: null,   // { value, promille, overLimit }
     verified: false,

@@ -40,12 +40,12 @@ export function triggerRandomEvent(game, event) {
   switch (event.id) {
     case 'blackout':
       pushEffect(night, event, 16);
-      addRadio(night, 'TECHNIK', 'Strom weg. Scanner ist tot.');
+      addRadio(night, 'TECHNIK', 'Strom weg. Kein Licht, kein Prüfgerät.');
       bus.emit('sfx', 'alarm');
       break;
     case 'scannerFail':
       pushEffect(night, event, 25);
-      addRadio(night, 'TECHNIK', 'Scanner spinnt. Manuell weitermachen.');
+      addRadio(night, 'TECHNIK', 'Prüfgerät spinnt. Ohne Hinweise weitermachen.');
       bus.emit('sfx', 'beep');
       break;
     case 'rush':

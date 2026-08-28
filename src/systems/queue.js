@@ -112,7 +112,7 @@ function advanceStations(game) {
 
 function emptyStationChecks() {
   return {
-    id: null, talk: null, scan: null, search: null, alcohol: null,
+    id: null, talk: null, search: null, alcohol: null,
     verified: false, conflict: false
   };
 }

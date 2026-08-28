@@ -75,10 +75,9 @@ export function rolesFor(mode) {
       actions: [
         { key: 'Digit1', code: 'id', label: 'AUSWEIS' },
         { key: 'Digit2', code: 'talk', label: 'ANSPRECHEN' },
-        { key: 'Digit3', code: 'scan', label: 'SCAN' },
-        { key: 'Digit4', code: 'search', label: 'ABTASTEN' },
-        { key: 'Digit5', code: 'alcohol', label: 'ALKOTEST' },
-        { key: 'Digit6', code: 'calm', label: 'SCHLANGE' },
+        { key: 'Digit3', code: 'search', label: 'ABTASTEN' },
+        { key: 'Digit4', code: 'alcohol', label: 'ALKOTEST' },
+        { key: 'Digit5', code: 'calm', label: 'SCHLANGE' },
         { key: 'KeyE', code: 'admit', label: 'EINLASSEN' },
         { key: 'KeyX', code: 'reject', label: 'ABWEISEN' }
       ]
@@ -100,9 +99,8 @@ export function rolesFor(mode) {
       id: 'security', label: 'SECURITY', accent: '#39d7ff', area: 'airlock', solo: false,
       keys: KEYS_P2,
       actions: [
-        { key: 'Digit7', code: 'scan', label: 'SCAN' },
-        { key: 'Digit8', code: 'search', label: 'ABTASTEN' },
-        { key: 'Digit9', code: 'alcohol', label: 'ALKOTEST' },
+        { key: 'Digit7', code: 'search', label: 'ABTASTEN' },
+        { key: 'Digit8', code: 'alcohol', label: 'ALKOTEST' },
         { key: 'Enter', code: 'admit', label: 'EINLASSEN' },
         { key: 'Backspace', code: 'reject', label: 'ZURUECKSCHICKEN' }
       ]
@@ -113,7 +111,7 @@ export function rolesFor(mode) {
 /** Welche Kontrollen gehoeren zu welchem Bereich? */
 export const AREA_CHECKS = {
   outside: ['id', 'talk'],
-  airlock: ['scan', 'search', 'alcohol']
+  airlock: ['search', 'alcohol']
 };
 
 /** Das Spiel spielt an einem festen fiktiven Datum - Basis fuer Ablauf/Alter. */
@@ -323,11 +321,11 @@ export const ARTISTS = [
  */
 export const UPGRADES = [
   {
-    id: 'scanner', label: 'Ausweis-Scanner', max: 3, tier: 1,
+    id: 'scanner', label: 'Dokumenten-Prüfgerät', max: 3, tier: 1,
     group: 'Sicherheit',
-    desc: ['Digitaler Scanner: zeigt Ausweis-Fehler direkt an.',
-      'Schneller Scanner: halbe Prüfzeit.',
-      'High-Tech-Risikoanalyse: zeigt Risiko-Level und Blacklist.'],
+    desc: ['UV-Lampe: meldet, wenn am Dokument etwas nicht stimmt.',
+      'Schnellprüfung: alle Kontrollen laufen zügiger.',
+      'Feinanalyse: markiert das auffällige Feld auf dem Ausweis.'],
     cost: [450, 1200, 2800]
   },
   {
@@ -437,7 +435,7 @@ export const RANKS = [
 
 export const TALENTS = [
   { id: 'street', label: 'Street Smarts', max: 3, desc: 'Verdächtige Gäste zeigen frueher Warnzeichen.' },
-  { id: 'scanner', label: 'Scanner', max: 3, desc: 'Alle Kontrollen laufen schneller ab.' },
+  { id: 'scanner', label: 'Routine', max: 3, desc: 'Alle Kontrollen laufen schneller ab.' },
   { id: 'charisma', label: 'Charisma', max: 3, desc: 'Gäste warten geduldiger, CALM wirkt staerker.' },
   { id: 'reputation', label: 'Reputation', max: 3, desc: 'Mehr Ruf pro richtiger Entscheidung.' },
   { id: 'management', label: 'Management', max: 3, desc: 'Upgrades kosten weniger, Bar bringt mehr.' }
@@ -445,7 +443,7 @@ export const TALENTS = [
 
 export const RANDOM_EVENTS = [
   { id: 'blackout', label: 'STROMAUSFALL', desc: 'Licht und Scanner fallen kurz aus.', weight: 8 },
-  { id: 'scannerFail', label: 'SCANNER DEFEKT', desc: 'Der Ausweis-Scanner streikt.', weight: 10 },
+  { id: 'scannerFail', label: 'PRÜFGERÄT DEFEKT', desc: 'Das Dokumenten-Prüfgerät streikt.', weight: 10 },
   { id: 'rush', label: 'ANSTURM', desc: 'Eine grosse Gruppe trifft gleichzeitig ein.', weight: 14 },
   { id: 'celebrity', label: 'UNERWARTETER GAST', desc: 'Eine bekannte Person steht ploetzlich vorne.', weight: 8 },
   { id: 'complaint', label: 'BESCHWERDE', desc: 'Die Schlange wird unruhig.', weight: 12 },

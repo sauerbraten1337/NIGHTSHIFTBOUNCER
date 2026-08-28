@@ -280,23 +280,39 @@ function drawUnknown(ctx, s) {
   ctx.fillText('?', s * 0.5, s * 0.52);
 }
 
-/** Eine getragene Tasche an der Figur (Umhängetasche). */
-export function drawShoulderBag(ctx, x, y, w, h, color = '#2c3543') {
+/**
+ * Umhängetasche an der Figur.
+ * Der Riemen läuft von der gegenüberliegenden Schulter schräg über den Körper
+ * zur Tasche an der Hüfte - so, wie man sie wirklich trägt.
+ */
+export function drawShoulderBag(ctx, { x, y, w, h, strapX, strapY, color = '#3a4557' }) {
   ctx.save();
-  ctx.strokeStyle = '#1c222c';
-  ctx.lineWidth = Math.max(2, w * 0.09);
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.1, y - h * 1.5);
-  ctx.lineTo(x + w * 0.5, y);
-  ctx.stroke();
+  // Riemen
+  if (strapX !== undefined) {
+    ctx.strokeStyle = '#20262f';
+    ctx.lineWidth = Math.max(2.5, w * 0.11);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(strapX, strapY);
+    ctx.quadraticCurveTo((strapX + x + w * 0.5) / 2, (strapY + y) / 2 + h * 0.1, x + w * 0.5, y + h * 0.12);
+    ctx.stroke();
+  }
 
+  // Korpus
   ctx.fillStyle = color;
-  roundRect(ctx, x, y, w, h, w * 0.12);
+  roundRect(ctx, x, y, w, h, w * 0.14);
   ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  roundRect(ctx, x, y, w, h * 0.32, w * 0.12);
+  // Deckelklappe
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  roundRect(ctx, x, y, w, h * 0.42, w * 0.14);
   ctx.fill();
+  // Verschluss
   ctx.fillStyle = METAL_DARK;
-  ctx.fillRect(x + w * 0.42, y + h * 0.26, w * 0.16, h * 0.14);
+  roundRect(ctx, x + w * 0.4, y + h * 0.34, w * 0.2, h * 0.16, 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = 1.4;
+  roundRect(ctx, x, y, w, h, w * 0.14);
+  ctx.stroke();
   ctx.restore();
 }

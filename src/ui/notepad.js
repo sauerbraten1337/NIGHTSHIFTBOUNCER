@@ -8,13 +8,14 @@
 
 import { escapeHtml } from './hud.js';
 import { isSolo } from '../systems/state.js';
-import { idSummary } from '../systems/identity.js';
-import { scannerLabel } from '../systems/scanner.js';
+import { idSummary, docToolLabel } from '../systems/identity.js';
+
 import { upgradeLevel } from '../systems/state.js';
 import { visibleTells } from '../systems/guests.js';
 
 export function createNotepad(game, { root } = {}) {
   const el = root ?? document.getElementById('notepad');
+  const hand = document.getElementById('notepad-hand');
   let lastKey = '';
 
   function update() {
@@ -27,6 +28,7 @@ export function createNotepad(game, { root } = {}) {
       if (lastKey !== 'empty') {
         lastKey = 'empty';
         el.classList.remove('hidden');
+        hand?.classList.remove('hidden');
         el.innerHTML = `
           <div class="np-head">SCHICHTNOTIZEN</div>
           <div class="np-empty">${player?.area === 'airlock' ? 'Schleuse frei.' : 'Niemand an der Tür.'}</div>`;
@@ -40,6 +42,7 @@ export function createNotepad(game, { root } = {}) {
     lastKey = key;
 
     el.classList.remove('hidden');
+    hand?.classList.remove('hidden');
     el.innerHTML = `
       <div class="np-head">SCHICHTNOTIZEN</div>
       <div class="np-guest">${escapeHtml(guestName(station, guest))}</div>
@@ -110,12 +113,6 @@ function buildLines(game, station, guest, player) {
 
   if (!outside || solo) {
     // --- Kontrollseite ---
-    const level = upgradeLevel(game.state, 'scanner');
-    lines.push(check('Scan', checks.scan
-      ? (checks.scan.offline ? ['part', 'Gerät offline']
-        : checks.scan.ok === false ? ['bad', checks.scan.text] : ['ok', checks.scan.text])
-      : ['todo', scannerLabel(level).toLowerCase()]));
-
     const pat = station.patdown;
     if (!pat) {
       lines.push(check('Abtasten', ['todo', 'nicht begonnen']));

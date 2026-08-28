@@ -148,15 +148,29 @@ export function drawFigure(ctx, opts) {
 
   if (holdingId) drawHeldCard(ctx, shoulderW * 0.55, torsoTop + h * 0.145, h);
 
-  // Umhängetasche: normal an der Hüfte, beim Abtasten hochgehalten
+  // Umhängetasche: an der Hüfte getragen, beim Abtasten vor dem Körper hochgehalten
+  let bagCenter = null;
   if (bag) {
-    const bw = h * 0.21;
-    const bh = h * 0.15;
+    const bw = h * 0.19;
+    const bh = h * 0.14;
     if (bagOut) {
-      const lift = Math.min(1, Math.max(0, (Math.sin(t * 2.2) + 1) * 0.5)) * h * 0.01;
-      drawShoulderBag(ctx, -shoulderW * 1.6 - bw * 0.1, torsoTop + h * 0.02 - lift, bw, bh, '#3a4557');
+      // hochgehalten: vor dem Bauch, leicht wippend
+      const lift = Math.sin(t * 2.4) * h * 0.008;
+      const bx = -bw / 2;
+      const by = torsoTop + h * 0.1 + lift;
+      drawShoulderBag(ctx, {
+        x: bx, y: by, w: bw, h: bh,
+        strapX: -shoulderW * 0.75, strapY: torsoTop + h * 0.01
+      });
+      bagCenter = { x: bx + bw / 2, y: by + bh / 2 };
     } else {
-      drawShoulderBag(ctx, shoulderW * 0.72, hipY - h * 0.05, bw, bh, '#3a4557');
+      const bx = shoulderW * 0.62;
+      const by = hipY - h * 0.03;
+      drawShoulderBag(ctx, {
+        x: bx, y: by, w: bw, h: bh,
+        strapX: -shoulderW * 0.7, strapY: torsoTop + h * 0.005
+      });
+      bagCenter = { x: bx + bw / 2, y: by + bh / 2 };
     }
   }
 
@@ -172,6 +186,17 @@ export function drawFigure(ctx, opts) {
     ctx.fillRect(-shoulderW * 2, y - h * 1.1, shoulderW * 4, h * 1.15);
   }
   ctx.restore();
+
+  // Ankerpunkte in Weltkoordinaten - die Abtast-Ringe sitzen genau dort,
+  // wo die jeweilige Stelle wirklich gezeichnet wurde.
+  const shift = x + sway * 0.4;
+  return {
+    jacket: { x: shift, y: torsoTop + h * 0.09, rx: shoulderW * 0.95, ry: h * 0.075 },
+    pockets: { x: shift, y: hipY + h * 0.03, rx: shoulderW * 0.85, ry: h * 0.06 },
+    bag: bagCenter
+      ? { x: shift + bagCenter.x, y: bagCenter.y, rx: h * 0.13, ry: h * 0.1 }
+      : null
+  };
 }
 
 function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t, signs = []) {

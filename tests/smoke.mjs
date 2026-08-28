@@ -26,7 +26,7 @@ import { difficultyProfile } from '../src/systems/difficulty.js';
 function makeGame(mode, seed = 1234) {
   const state = createInitialState(mode);
   // Für die Simulation ist alles freigeschaltet (das Tutorial testet Schritt 5).
-  state.unlocks = { id: true, talk: true, scan: true, search: true, alcohol: true, calm: true };
+  state.unlocks = { id: true, talk: true, search: true, alcohol: true, calm: true };
   return {
     state,
     rng: createRng(seed),
@@ -64,7 +64,6 @@ function driveStation(game, player, input) {
 
   // --- Security-Aufgaben (Schleuse bzw. solo) ---
   if (!outside || solo) {
-    if (!checks.scan && can('scan')) { tryAction(game, player, 'scan'); return; }
     if (can('search')) {
       const pat = station.patdown;
       if (!pat) { tryAction(game, player, 'search'); return; }
@@ -96,7 +95,6 @@ function decide(station, doorOnly) {
   const c = station.checks;
   if (c.id && c.id.found.length > 0) return true;
   if (doorOnly) return false;
-  if (c.scan && c.scan.ok === false) return true;
   if (c.search && c.search.found) return true;
   // Das Gerät zeigt nur den Wert - der Grenzwert steht auf dem Gehäuse.
   if (c.alcohol && c.alcohol.promille >= c.alcohol.limit) return true;
@@ -158,14 +156,14 @@ assert.ok(cn.stats.correct > cn.stats.mistakes,
 const bouncer = playerByRole(coop, 'bouncer');
 const security = playerByRole(coop, 'security');
 coop.state.night.running = true;
-assert.ok(tryAction(coop, bouncer, 'scan'), 'Bouncer darf nicht scannen');
+assert.ok(tryAction(coop, bouncer, 'search'), 'Bouncer darf nicht abtasten');
 assert.ok(tryAction(coop, security, 'id'), 'Security darf keinen Ausweis verlangen');
 assert.ok(tryAction(coop, bouncer, 'admit'), 'Bouncer darf nicht in den Club einlassen');
 
 /* ---------- Test 3: Tutorial läuft durch und schaltet frei ---------- */
 
 const tut = makeGame('solo', 777);
-tut.state.unlocks = { id: true, talk: false, scan: false, search: false, alcohol: false, calm: false };
+tut.state.unlocks = { id: true, talk: false, search: false, alcohol: false, calm: false };
 let tutEnded = false;
 tut.bus.on('nightEnd', () => { tutEnded = true; });
 startNight(tut, pickNightEvent(tut.rng, tut.state), null, { tutorial: true });
@@ -190,6 +188,7 @@ assert.ok(seenSteps.has('photo'), 'Tutorial: Fotovergleich erklärt');
 assert.ok(seenSteps.has('done'), `Tutorial vollständig durchlaufen (${seenSteps.size} Schritte)`);
 assert.equal(tut.state.tutorialDone, true, 'Tutorial als abgeschlossen markiert');
 assert.ok(Object.values(tut.state.unlocks).every(Boolean), 'Am Ende ist alles freigeschaltet');
+assert.equal('scan' in tut.state.unlocks, false, 'Der Scan ist als Feature entfernt');
 assert.ok(tutEnded, 'Tutorial-Nacht regulär beendet');
 
 /* ---------- Test 4: manuelle Ausweisprüfung ---------- */
@@ -347,7 +346,7 @@ const line = (label, s) =>
   ` · Fänge ${s.catches} · Bewertung ${s.rating ?? ''}`;
 
 console.log('SIMULATION');
-console.log(`  TUT    ${seenSteps.size} Schritte durchlaufen · Freischaltungen ${Object.values(tut.state.unlocks).filter(Boolean).length}/6`);
+console.log(`  TUT    ${seenSteps.size} Schritte durchlaufen · Freischaltungen ${Object.values(tut.state.unlocks).filter(Boolean).length}/5`);
 console.log(line('SOLO', { ...sn.stats, rating: `${sn.rating}/5` }));
 console.log(line('KOOP', { ...cn.stats, rating: `${cn.rating}/5` }));
 console.log('\nAlle Smoketests bestanden.');

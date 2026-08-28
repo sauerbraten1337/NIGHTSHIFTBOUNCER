@@ -206,7 +206,6 @@ function updateActionBars(game, el) {
 
     const done = checks && (
       (code === 'id' && checks.id) ||
-      (code === 'scan' && checks.scan) ||
       (code === 'alcohol' && checks.alcohol) ||
       (code === 'search' && station.patdown?.complete)
     );

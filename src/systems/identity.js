@@ -75,7 +75,8 @@ export function faultyFields(guest) {
 
 /** Der Gast reicht den Ausweis herüber. */
 export function requestId(state, guest) {
-  const scanner = upgradeLevel(state, 'scanner');
+  const offline = toolOffline(state.night);
+  const scanner = offline ? 0 : upgradeLevel(state, 'scanner');
   const street = state.talents.street;
   const faults = faultyFields(guest);
 
@@ -97,6 +98,7 @@ export function requestId(state, guest) {
     wrong: 0,           // Fehlgriffe
     hint,               // null | 'any' | Feld-Id
     hintLevel,
+    toolOffline: offline,
     closed: false,
     /** Wahrheit, erst nach der Entscheidung fuer die Auswertung genutzt. */
     faults: [...faults]
@@ -156,6 +158,16 @@ export function idSummary(inspection) {
   if (!inspection) return 'NICHT GEPRÜFT';
   if (inspection.found.length === 0) return 'KEINE AUFFÄLLIGKEIT MARKIERT';
   return inspection.found.map(fieldLabel).join(' / ');
+}
+
+/** Bezeichnung des Prüfgeräts (früher der Scanner). */
+export function docToolLabel(level) {
+  return ['SICHTPRÜFUNG', 'UV-LAMPE', 'SCHNELLPRÜFUNG', 'FEINANALYSE'][level] ?? 'SICHTPRÜFUNG';
+}
+
+/** Fällt das Gerät gerade aus? */
+export function toolOffline(night) {
+  return !!night?.activeEffects?.some((e) => e.id === 'scannerFail' || e.id === 'blackout');
 }
 
 export function issueLabel(id) {

@@ -17,25 +17,30 @@ import { TUNING } from '../data/config.js';
 import { chance } from '../core/rng.js';
 
 /**
- * Koop-Verifikation: das Urteil des Bouncers (Ausweisprüfung) gegen den Befund
- * der Security (Scan/Abtasten).
+ * Koop-Verifikation: das Urteil der Tür (Ausweisprüfung) gegen den Befund der
+ * Schleuse (Abtasten und Alkoholtest). Zwei Augenpaare, ein Ergebnis.
  */
 export function coopVerification(guest, airlockChecks) {
   const doorVerdict = guest?.doorVerdict;
-  if (!doorVerdict || !airlockChecks?.scan) return { state: 'none' };
-  if (airlockChecks.scan.offline || airlockChecks.scan.ok === null) return { state: 'none' };
-  const securityClean = airlockChecks.scan.ok !== false && !airlockChecks.search?.found;
+  if (!doorVerdict || !doorVerdict.checked) return { state: 'none' };
+  // Die Schleuse hat erst dann ein belastbares Urteil, wenn sie fertig ist.
+  const searched = airlockChecks?.search?.done;
+  const tested = !!airlockChecks?.alcohol;
+  if (!searched || !tested) return { state: 'none' };
+
+  const securityClean = !airlockChecks.search.found
+    && airlockChecks.alcohol.promille < airlockChecks.alcohol.limit;
   if (doorVerdict.clean === securityClean) return { state: 'verified', clean: securityClean };
   return { state: 'conflict', doorClean: doorVerdict.clean, securityClean };
 }
 
-/** Solo-Variante: ID-Prüfung und Scan an derselben Station. */
+/**
+ * Solo: Es gibt kein zweites Augenpaar. Wer aber wirklich alles prüft -
+ * Ausweis, alle Zonen, Alkoholtest - arbeitet nachweislich gründlich.
+ */
 export function soloVerification(checks) {
-  if (!checks.id || !checks.scan) return { state: 'none' };
-  if (checks.scan.offline || checks.scan.ok === null) return { state: 'none' };
-  const idClean = inspectionVerdict(checks.id).clean;
-  const scanClean = checks.scan.ok !== false;
-  return idClean === scanClean ? { state: 'verified', clean: idClean } : { state: 'conflict' };
+  if (!checks.id || !checks.search?.done || !checks.alcohol) return { state: 'none' };
+  return { state: 'verified', clean: inspectionVerdict(checks.id).clean };
 }
 
 /* ------------------------------------------------------------------ */
@@ -209,7 +214,7 @@ function clearStation(station) {
   station.guest = null;
   station.patdown = null;
   station.checks = {
-    id: null, talk: null, scan: null, search: null, alcohol: null,
+    id: null, talk: null, search: null, alcohol: null,
     verified: false, conflict: false
   };
 }

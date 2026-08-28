@@ -186,15 +186,15 @@ const STEPS = [
     id: 'security',
     title: (game) => isSolo(game.state) ? 'KONTROLLE' : 'DIE SCHLEUSE',
     body: (game) => isSolo(game.state)
-      ? 'Ein sauberer Ausweis heisst nicht, dass alles sauber ist. Scanne den Gast (3) und ' +
-        'taste ihn ab (4). Dann Zone wählen: J Jacke, K Hosentaschen, L Tasche - ' +
-        'er holt sie hervor und leert sie aus. Klick auf das, was nicht reindarf. ' +
-        'Der Alkotest (5) zeigt nur den Wert; den Grenzwert liest du am Gerät ab.'
+      ? 'Ein sauberer Ausweis heisst nicht, dass alles sauber ist. Taste den Gast ab (3) und ' +
+        'wähle eine Zone: J Jacke, K Hosentaschen, L Tasche - er holt sie hervor und leert sie aus. ' +
+        'Klick auf das, was nicht reindarf. Der Alkotest (4) zeigt nur den Wert; ' +
+        'den Grenzwert liest du am Gerät ab.'
       : 'Alles, was du durchlässt, landet in der Schleuse - innen, aber noch nicht im Club. ' +
-        'Dort scannt die Security (7), tastet ab (8, Zonen J/K/L) und testet auf Alkohol (9). ' +
+        'Dort tastet die Security ab (7, Zonen J/K/L) und testet auf Alkohol (8). ' +
         'Was aus einer Zone kommt, liegt gross auf dem Tisch: anklicken, was nicht reindarf. ' +
         'Erst die Security entscheidet mit ENTER über den Einlass.',
-    unlock: ['scan', 'search', 'alcohol'],
+    unlock: ['search', 'alcohol'],
     setup(game) {
       insertGuest(game, scripted(game, {
         id: 'contraband', personality: 'nervous', bag: true,
@@ -236,7 +236,7 @@ const STEPS = [
       'VIPs, Zwischenfälle. Verdiene Geld, halte den Ruf hoch - und bau den Laden aus.',
     setup(game) {
       const state = game.state;
-      state.unlocks = { id: true, talk: true, scan: true, search: true, alcohol: true, calm: true };
+      state.unlocks = { id: true, talk: true, search: true, alcohol: true, calm: true };
       state.tutorialDone = true;
       state.night.tutorial.blockSpawns = false;
       addRadio(state.night, 'CHEF', 'Läuft. Ab jetzt bist du dran.');
@@ -255,7 +255,7 @@ export function startTutorial(game) {
     finished: false,
     step: null
   };
-  game.state.unlocks = { id: true, talk: false, scan: false, search: false, alcohol: false, calm: false };
+  game.state.unlocks = { id: true, talk: false, search: false, alcohol: false, calm: false };
   advance(game);
 }
 

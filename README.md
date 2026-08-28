@@ -55,8 +55,8 @@ nicht nur behauptet.
 ```
 Strasse → [ TÜR — draussen ]        → [ SCHLEUSE — innen ]        → Club
            Bouncer:                     Security:
-           Ausweis, Gespräch,           Scanner, Abtasten,
-           Schlange beruhigen           Alkoholtest
+           Ausweis, Gespräch,           Abtasten, Alkoholtest,
+           Schlange beruhigen           Gegenstände prüfen
            DURCHLASSEN / ABWEISEN       EINLASSEN / ZURÜCKSCHICKEN
 ```
 
@@ -66,20 +66,22 @@ erst sie öffnet die Tür zum Floor. Im Solo-Modus entfällt die Schleuse komple
 
 Daraus entsteht das eigentliche Koop-Gefühl: eine **zweite Verteidigungslinie**.
 Was der Bouncer übersieht, kann die Security noch fangen — das gibt einen **guten Fang**
-(Bonus fürs Team) statt einer Strafe. Stimmen Türurteil und Scan überein, gibt es
-**SECURITY VERIFIED** (+15 % Eintritt, mehr Ruf); widersprechen sie sich: **CHECK AGAIN**.
+(Bonus fürs Team) statt einer Strafe. Stimmt das Urteil der Tür mit dem Befund der Schleuse
+(Abtasten + Alkoholtest) überein, gibt es **SECURITY VERIFIED** (+15 % Eintritt, mehr Ruf);
+widersprechen sie sich: **CHECK AGAIN**. Solo zählt stattdessen, ob wirklich alles
+geprüft wurde.
 
 ## Steuerung
 
 **Solo**
-`1` Ausweis · `2` Ansprechen · `3` Scan · `4` Abtasten · `5` Alkotest · `6` Schlange ·
+`1` Ausweis · `2` Ansprechen · `3` Abtasten · `4` Alkotest · `5` Schlange ·
 `E` Einlassen · `X` Abweisen · Zonen `J` `K` `L` · Gegenstand: anklicken oder `1`–`6`, `0` = Zone freigeben
 
 **Koop — Spieler 1 (Bouncer, draussen)**
 `1` Ausweis · `2` Ansprechen · `3` Schlange · `E` Durchlassen · `X` Abweisen
 
 **Koop — Spieler 2 (Security, Schleuse)**
-`7` Scan · `8` Abtasten (`J` Jacke / `K` Taschen / `L` Beutel) · `9` Alkotest ·
+`7` Abtasten (Zonen `J` Jacke / `K` Hosentaschen / `L` Tasche) · `8` Alkotest ·
 `ENTER` Einlassen · `BACKSPACE` Zurückschicken
 
 System: `ESC` Pause · `M` Ton · `H` Hilfe
@@ -101,9 +103,10 @@ Das Spiel verrät nichts von selbst — du musst hinsehen:
 | **Gültig bis** | Gegen das heutige Datum oben auf der Karte. |
 | **Merkmale** | Drei Hologramm-Marken. Matt oder fehlend = gefälscht. |
 
-Ein Fehlgriff kostet Zeit und wird als „nichts zu beanstanden" markiert — genaues Hinsehen
-lohnt sich also. Scanner-Upgrades und das Talent *Street Smarts* geben Hinweise
-(„Dokument prüfen", später auch welches Feld), nehmen dir die Prüfung aber nie ab.
+Geprüfte Felder färben sich nach ihrem Befund: **grün, wenn sie in Ordnung sind, rot, wenn
+etwas nicht stimmt.** Das Dokumenten-Prüfgerät (Upgrade) und das Talent *Street Smarts* geben
+Hinweise („Dokument prüfen", später auch welches Feld), nehmen dir die Prüfung aber nie ab.
+Fällt der Strom aus, hilft dir gar kein Gerät mehr.
 
 ### Abtasten und Gegenstände
 
@@ -118,8 +121,9 @@ war harmlos. Freigegeben, obwohl etwas drin war, steht später im Bericht.
 
 ### Alkohol und Zustand
 
-Der Alkoholtest legt ein Gerät auf den Tisch. Es zeigt **nur den Wert** — der Grenzwert
-steht daneben aufs Gehäuse gedruckt. Die Bewertung machst du.
+Der Alkoholtest legt ein Gerät auf den Tisch. Der Wert **zählt von 0 hoch**, während gemessen
+wird, und bleibt dann stehen. Das Gerät zeigt **nur die Zahl** — der Grenzwert steht daneben
+aufs Gehäuse gedruckt. Die Bewertung machst du.
 
 Und ein niedriger Promillewert heisst nicht, dass jemand nüchtern ist: ab der vierten
 Nacht kommen Gäste, die anders auffallen — weite Pupillen, Schweiss auf der Stirn,
@@ -128,7 +132,7 @@ Das siehst du der Person an oder eben nicht.
 
 ### Der Notizzettel
 
-Rechts hängt kein HUD-Panel, sondern ein handgeschriebener Zettel: was du geprüft hast
+Unten rechts hängt kein HUD-Panel, sondern ein handgeschriebener Zettel: was du geprüft hast
 (durchgestrichen und abgehakt), was noch offen ist, und hingekritzelte Bemerkungen.
 Belegung des Clubs, Ausbaustufe und die alte Übersichtskarte gibt es im Spiel nicht mehr —
 während der Schicht zählt nur, was auf dem Zettel steht.
@@ -155,7 +159,7 @@ Zusätzlich liegen später mehr harmlose Gegenstände zur Ablenkung dabei.
 Eine ruhige erste Schicht in **12 Schritten**, die jede Mechanik mit genau einem passenden
 Gast einführt — und sie erst dann freischaltet: erster Gast → Ausweis verlangen → selbst prüfen →
 entscheiden → abgelaufenes Dokument → zu jung → *Ansprechen* freigeschaltet (Namensabgleich) →
-Fotovergleich → Hologramm → Scanner/Abtasten/Alkotest (bzw. die Schleuse im Koop) →
+Fotovergleich → Hologramm → Abtasten/Alkotest (bzw. die Schleuse im Koop) →
 Schlange beruhigen → freier Betrieb. Abwählbar im Menü.
 
 ---
@@ -168,13 +172,13 @@ Schlange beruhigen → freier Betrieb. Abwählbar im Menü.
   Bussgelder, Zwischenfallkosten, Gagen.
 * **Reputation 0–100** steuert Andrang, Preise, VIP-Anteil und verfügbare Acts.
 * **13 Upgrades** in 5 Bereichen und 7 Club-Stufen. Der Ausbau zeigt sich dort, wo du stehst:
-  breitere Tür, hellere Neonschrift, Scannerbogen in der Schleuse, Kameras, VIP-Eingang.
+  breitere Tür, hellere Neonschrift, Detektorbogen in der Schleuse, Kameras, VIP-Eingang.
 * **Nacht-Events** (Rave, VIP Night, Artist Night, Sold Out, Inspection, Chaos) und
-  **Zufallsereignisse** (Stromausfall, Scannerdefekt, Ansturm, viraler Post, falscher Backstage-Pass …).
+  **Zufallsereignisse** (Stromausfall, defektes Prüfgerät, Ansturm, viraler Post, falscher Backstage-Pass …).
 * **Acts buchen** — fiktive Künstler; auch der Headliner braucht einen Ausweis.
 * **Night Report**, 6 Ränge, 5 Talente, Save-System (`localStorage`).
 * **Prozeduraler Techno** (WebAudio, kein Asset), dessen Intensität Nachtphase und
-  Schlangenlänge folgt, plus Scanner-, Funk- und Türsounds.
+  Schlangenlänge folgt, plus Mess-, Funk- und Türsounds.
 
 ---
 
@@ -190,7 +194,7 @@ src/main.js           Modi, Spielfluss, Eingaben, Host/Gast-Verdrahtung
 
 src/core/             rng · bus · input · loop · audio
 src/data/             config (Modi, Rollen, Balancing) · dialogue
-src/systems/          state · guests · queue · identity · scanner · security · alcohol
+src/systems/          state · guests · queue · identity · security · alcohol
                       decision · economy · reputation · upgrades · artists · randomEvents
                       nightcycle · progression · difficulty · tutorial · coop · save
 src/render/           layout · palette · sprites · figure (grosse Frontfiguren)
@@ -215,8 +219,9 @@ Fast alles Spürbare steht in `src/data/config.js`: `TUNING` (Nachtlänge, Aktio
 Preise, Mindestalter), `rolesFor(mode)` (Tastenbelegung und Bereiche), `GAME_DATE` (das Datum,
 gegen das geprüft wird), `ARCHETYPES`, `ITEMS`, `NIGHT_EVENTS`, `UPGRADES`, `ARTISTS`,
 `RANKS`, `TALENTS`, `ITEMS` (was Gäste dabeihaben), `ZONES` (Abtast-Zonen),
-`DIFFICULTY_STEPS` (wann welche Auffälligkeit dazukommt), `IMPAIRMENT_SIGNS` und
-`ALCOHOL_LIMIT_PROMILLE`. Der Clubname ist eine Konstante (`CLUB_NAME`).
+`ALCOHOL_LIMIT_PROMILLE` (der aufgedruckte Grenzwert),
+`DIFFICULTY_STEPS` (wann welche Auffälligkeit dazukommt) und `IMPAIRMENT_SIGNS`.
+Der Clubname ist eine Konstante (`CLUB_NAME`).
 
 ## Nächste Schritte
 
