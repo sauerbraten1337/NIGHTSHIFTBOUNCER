@@ -37,6 +37,8 @@ export function createRenderer(canvas) {
   let viewRects = [];
   /** Anklickbare Abtast-Ringe (Weltkoordinaten) - fürs Zeigen mit der Maus. */
   let zoneHits = [];
+  /** Anklickbare Abwehr-Tasten waehrend eines Uebergriffs. */
+  let keyHits = [];
 
   function render(game, dt) {
     const { state } = game;
@@ -61,6 +63,7 @@ export function createRenderer(canvas) {
     // Titelbildschirm: eigene Schauszene mit Club, Schlange und Türsteher.
     if (!night || state.phase !== 'night') {
       zoneHits = [];
+      keyHits = [];
       viewRects = [];
       drawTitleScene(ctx, WORLD.width, WORLD.height, time, pulse);
       vignette(ctx, WORLD.width, WORLD.height, 0.55);
@@ -74,8 +77,9 @@ export function createRenderer(canvas) {
     viewRects = views;
 
     const hits = [];
+    const keys = [];
     for (const view of views) {
-      const zones = drawStationView(ctx, game, {
+      const drawn = drawStationView(ctx, game, {
         rect: view.rect,
         area: view.area,
         station: view.station,
@@ -85,11 +89,15 @@ export function createRenderer(canvas) {
         pulse,
         dark
       });
-      for (const z of zones ?? []) {
+      for (const z of drawn?.zones ?? []) {
         hits.push({ ...z, x: z.x + view.rect.x, y: z.y + view.rect.y, role: view.role });
+      }
+      for (const k of drawn?.keys ?? []) {
+        keys.push({ ...k, x: k.x + view.rect.x, y: k.y + view.rect.y, role: view.role });
       }
     }
     zoneHits = hits;
+    keyHits = keys;
 
     // Trennlinie im Splitscreen
     if (views.length === 2) {
@@ -176,6 +184,7 @@ export function createRenderer(canvas) {
     toScreen,
     get views() { return viewRects; },
     get zoneHits() { return zoneHits; },
+    get keyHits() { return keyHits; },
     get beat() { return beatTime % 1; }
   };
 }

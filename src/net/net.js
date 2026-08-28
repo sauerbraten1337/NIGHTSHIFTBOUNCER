@@ -185,7 +185,13 @@ function viewGuest(guest) {
     patienceMax: guest.patienceMax,
     doorVerdict: guest.doorVerdict ?? null,
     // Nur, was man sehen kann - keine versteckten Verstösse.
-    truth: { drunk: guest.truth.drunk, vip: guest.truth.vip }
+    truth: {
+      drunk: guest.truth.drunk,
+      vip: guest.truth.vip,
+      hasBag: guest.truth.hasBag,
+      // Sichtbare Anzeichen gehören zum Bild, nicht zur versteckten Wahrheit.
+      impairmentSigns: guest.truth.impairmentSigns ?? []
+    }
   };
 }
 
@@ -197,7 +203,9 @@ function viewStation(station) {
     // Die Wahrheit ueber das Dokument bleibt auf dem Host.
     checks: checks.id ? { ...checks, id: { ...checks.id, faults: undefined } } : checks,
     patdown: station.patdown,
-    notes: station.notes
+    notes: station.notes,
+    // Übergriff: der Gast am anderen Rechner muss dieselben Tasten sehen.
+    aggro: station.aggro
   };
 }
 

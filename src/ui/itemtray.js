@@ -30,7 +30,8 @@ export function createItemTray(game, { root, roleId = 'security' } = {}) {
     const zoneId = pat?.active;
     const zone = zoneId ? pat.zones[zoneId] : null;
 
-    if (!zone || zone.state !== 'open') {
+    // Bei einem Uebergriff hat niemand Zeit fuer den Kontrolltisch.
+    if (!zone || zone.state !== 'open' || station?.aggro) {
       if (renderedKey) {
         el.classList.add('hidden');
         el.innerHTML = '';

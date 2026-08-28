@@ -198,7 +198,9 @@ function updateActionBars(game, el) {
       (code === 'alcohol' && checks.alcohol) ||
       (code === 'search' && station.patdown?.complete)
     );
-    const locked = game.state.unlocks[code] === false;
+    // Waehrend eines Uebergriffs ist alles gesperrt - es zaehlt nur die Abwehr.
+    const attacked = !!station?.aggro;
+    const locked = game.state.unlocks[code] === false || attacked;
     node.classList.toggle('locked', !!locked);
     node.classList.toggle('done', !!done);
     node.classList.toggle('ready', hasGuest && !done && !locked);
@@ -211,7 +213,7 @@ function updateDecisions(game, el) {
     const station = game.stationFor(btn.dataset.role);
     const guest = station?.guest;
     const open = !!station?.patdown?.active;
-    btn.classList.toggle('disabled', !guest || open);
+    btn.classList.toggle('disabled', !guest || open || !!station?.aggro);
   }
 }
 

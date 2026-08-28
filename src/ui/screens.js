@@ -3,7 +3,7 @@
 import { escapeHtml } from './hud.js';
 import { renderReport } from './report.js';
 import { renderShop } from './shop.js';
-import { CLUB_NAME, MODES, rolesFor } from '../data/config.js';
+import { CLUB_NAME, MODES, rolesFor, DEFENSE_KEYS } from '../data/config.js';
 import { clubTier, capacity, rank } from '../systems/state.js';
 import { hasSave, clearSave } from '../systems/save.js';
 import { repBand } from '../systems/reputation.js';
@@ -292,6 +292,14 @@ export function createScreens(game) {
           <div class="ctl-row"><kbd>Maus</kbd><span>Ring am Gast anklicken</span></div>
           <div class="ctl-row"><kbd>1</kbd><kbd>…</kbd><span>Gegenstand beanstanden</span></div>
           <div class="ctl-row"><kbd>0</kbd><span>Zone freigeben</span></div>
+        </div>
+        <div class="ctl-group">
+          <div class="ctl-head">ABWEHR</div>
+          <div class="ctl-row">
+            <kbd>${DEFENSE_KEYS.map((k) => escapeHtml(k.label)).join('</kbd><kbd>')}</kbd>
+            <span>Geht jemand auf dich los, erscheinen diese Tasten der Reihe nach — schnell drücken</span>
+          </div>
+          <div class="ctl-row"><kbd>Maus</kbd><span>Taste im Bild anklicken</span></div>
         </div>
         <div class="ctl-group">
           <div class="ctl-head">SYSTEM</div>

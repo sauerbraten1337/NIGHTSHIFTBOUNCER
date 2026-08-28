@@ -33,6 +33,7 @@ export function difficultyProfile(nightNumber) {
     items: hasFeature(n, 'items'),
     alcohol: hasFeature(n, 'alcohol'),
     impaired: hasFeature(n, 'impaired'),
+    aggression: hasFeature(n, 'aggression'),
     subtleId: hasFeature(n, 'subtleId'),
     blacklist: hasFeature(n, 'blacklist'),
     multi: hasFeature(n, 'multi'),

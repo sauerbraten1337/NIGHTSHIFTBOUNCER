@@ -83,7 +83,9 @@ export function createNightState(event, artist, seed, mode = 'solo', quota = TUN
       revenue: 0, entry: 0, bar: 0, incidents: 0, vips: 0,
       correct: 0, mistakes: 0, verified: 0, catches: 0, fines: 0, artistFee: 0,
       /** Selbst gefundene Unregelmaessigkeiten (Ausweis, Sachen, Alkohol). */
-      findings: 0, falseAlarms: 0, overlooked: 0, findingPay: 0
+      findings: 0, falseAlarms: 0, overlooked: 0, findingPay: 0,
+      /** Uebergriffe: versucht, abgewehrt, durchgekommen. */
+      attacks: 0, defended: 0, attacksLanded: 0, defensePay: 0
     },
     repDelta: 0,
     toasts: []
@@ -91,7 +93,12 @@ export function createNightState(event, artist, seed, mode = 'solo', quota = TUN
 }
 
 export function newStation(id) {
-  return { id, guest: null, checks: emptyChecks(), patdown: null, notes: emptyNotes() };
+  return {
+    id, guest: null, checks: emptyChecks(), patdown: null, notes: emptyNotes(),
+    /** Laufender Uebergriff (siehe systems/aggression.js). */
+    aggro: null,
+    aggroCooldown: 2
+  };
 }
 
 export function emptyChecks() {

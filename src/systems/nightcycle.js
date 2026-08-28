@@ -11,6 +11,7 @@ import { nightRating, changeReputation } from './reputation.js';
 import { weightedPick, clamp } from '../core/rng.js';
 import { resetGuestSerial } from './guests.js';
 import { startTutorial, updateTutorial } from './tutorial.js';
+import { updateAggression } from './aggression.js';
 
 /**
  * Phasen der Nacht - jetzt am Schichtfortschritt festgemacht ("at" ist der
@@ -82,6 +83,7 @@ export function updateNight(game, dt) {
 
   updateTutorial(game, dt);
   updateQueue(game, dt, minutes);
+  updateAggression(game, dt);
   if (!night.tutorial && FEATURES.randomEvents) updateRandomEvents(game, dt, minutes);
   tickInsideRevenue(state, minutes);
   updateInside(game, dt, minutes);

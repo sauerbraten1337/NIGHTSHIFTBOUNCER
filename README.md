@@ -94,6 +94,9 @@ geprüft wurde.
 `7` Abtasten (Zonen `J` Jacke / `K` Hosentaschen / `L` Tasche, oder Ring anklicken) · `8` Alkotest ·
 `ENTER` Einlassen · `BACKSPACE` Zurückschicken
 
+Abwehr (wenn jemand auf dich losgeht): `Q` `W` `E` `R` `A` `S` `D` `F` — es erscheint immer
+genau die Taste, die als Nächstes sitzen muss; anklicken geht auch.
+
 System: `ESC` Pause · `M` Ton · `H` Hilfe
 
 Einlassen und Abweisen liegen als grosse Buttons unten in der Bildmitte — Maus oder Taste.
@@ -133,17 +136,28 @@ Eine Tasche gibt es nur, wenn der Gast wirklich eine dabei hat — dann siehst d
 seiner Schulter, und er holt sie erst hervor, bevor der Prüfring erscheint.
 
 Der Inhalt kommt gross auf den Kontrolltisch: Kaugummi, Schlüssel, Ladekabel — und
-vielleicht eine Glasflasche, ein Reizgas oder eine Klinge. **Du** markierst, was nicht in
-den Club darf (nochmal klicken nimmt die Markierung zurück), und schliesst die Zone dann ab.
-Ob du richtig lagst, sagt dir hier niemand — das steht erst im Bericht.
+vielleicht ein Schlagring, ein Briefchen ohne Beschriftung oder eine Bengalfackel. **Du**
+markierst, was nicht in den Club darf (nochmal klicken nimmt die Markierung zurück), und
+schliesst die Zone dann ab. Ob du richtig lagst, sagt dir hier niemand — das steht erst
+im Bericht.
+
+Es gibt rund 50 verschiedene Sachen, gut die Hälfte davon verboten: allein bei den Waffen
+liegen mal ein Klappmesser, mal ein Butterflymesser, mal ein Schlagring, ein Elektroschocker
+oder ein Teleskopschlagstock auf dem Tisch. Ein paar Paare sind mit Absicht knapp
+auseinander: beschriftete Schmerztabletten sind in Ordnung, das Döschen mit losen Pillen
+nicht; ein Deoroller ja, Reizgasspray nein; ein Feuerzeug ja, Wunderkerzen nein.
 
 ### Die Hausordnung
 
 Am linken Bildrand klebt ein Pfeil. Fährst du mit der Maus darüber, klappt die Hausordnung
 aus: ein amtliches Schreiben mit Briefkopf, Aktenzeichen und Stempel, das Paragraph für
-Paragraph auflistet, welche Gegenstände nicht in den Club dürfen, welche Stufe sie haben
-und was zu tun ist. Sie sagt, **was** verboten ist — ob der Gast davon etwas dabei hat,
-entscheidest weiterhin du.
+Paragraph auflistet, was nicht in den Club darf, welche Stufe es hat und was zu tun ist.
+
+Sie nennt dabei **nur Gruppen** — Waffen, Pyrotechnik, unklare Substanzen, Werkzeug, Glas
+und mitgebrachte Getränke, professionelle Aufnahmetechnik, Blendlicht — und ausdrücklich
+keine einzelnen Gegenstände. Ob der Schlagring in der Hosentasche eine Waffe ist und ob
+das Fläschchen ohne Etikett unter "unklare Substanzen" fällt, entscheidest du. Abgelesen
+werden kann die Kontrolle nicht.
 
 ### Alkohol und Zustand
 
@@ -152,9 +166,30 @@ wird, und bleibt dann stehen. Das Gerät zeigt **nur die Zahl** — der Grenzwer
 aufs Gehäuse gedruckt. Die Bewertung machst du.
 
 Und ein niedriger Promillewert heisst nicht, dass jemand nüchtern ist: ab der vierten
-Nacht kommen Gäste, die anders auffallen — weite Pupillen, Schweiss auf der Stirn,
-mahlender Kiefer, zittrige Hände, abwesender Blick. Das steht in keiner Anzeige.
-Das siehst du der Person an oder eben nicht.
+Nacht kommen Gäste, denen man es **von aussen ansieht** — gerötete Augen, weite Pupillen,
+ein glasiger Blick, dunkle Augenringe, fahle Haut, Schweiss auf der Stirn, mahlender
+Kiefer, zittrige Hände, jemand, der keine Sekunde stillsteht. Alles davon wird an der
+Figur wirklich gezeichnet, auch schon in der Schlange: wer hinsieht, weiss vorher, wer
+gleich vor ihm steht. Das steht in keiner Anzeige — das siehst du der Person an oder eben
+nicht. Später werden die Anzeichen subtiler.
+
+### Wenn jemand ausrastet
+
+Selten — bei etwa jedem vierzigsten Gast, ab Nacht 5 — nimmt jemand ein "Nein" nicht hin.
+Er kommt auf dich zu, wird im Bild gross, und mitten auf dem Schirm erscheinen
+nacheinander Tasten (`Q` `W` `E` `R` `A` `S` `D` `F`), jede mit einem schrumpfenden
+Zeitring. Drei bis fünf davon musst du treffen, bevor die Zeit abläuft; zwei Fehlgriffe
+verzeiht die Abwehr, den dritten nicht. Wer lieber mit der Maus spielt, klickt die
+eingeblendete Taste an — beides zählt gleich.
+
+Solange das läuft, ist alles andere gesperrt: keine Kontrolle, keine Entscheidung, nur
+Reaktion. Gelingt die Abwehr, fliegt er raus, es gibt Ruf und eine Prämie. Gelingt sie
+nicht, kostet das Geld und Ruf, und du stehst danach zwei Sekunden benommen da. Abgewiesen
+wird er in beiden Fällen — wer handgreiflich wird, hat dir die Entscheidung abgenommen.
+
+Ob jemand ausrastet, hängt an ihm: betrunken, unter Einfluss, gereizt und riskant heisst
+deutlich explosiver als ein entspannter Stammgast. Der Bericht zählt am Ende der Nacht,
+wie oft es passiert ist und wie oft du es abgewehrt hast.
 
 ### Der Notizzettel — zwei Seiten, beide deine
 
@@ -186,7 +221,8 @@ kündigt das Briefing vorher an:
 | 1 | Ausweis | Foto, Name, Geburtsdatum, Gültigkeit, Hologramm |
 | 2 | Gegenstände | Beim Abtasten kommt alles auf den Tisch |
 | 3 | Alkohol | Das Gerät zeigt den Wert, den Grenzwert liest du ab |
-| 4 | Zustand | Anzeichen für Substanzeinfluss |
+| 4 | Zustand | Sichtbare Anzeichen für Substanzeinfluss |
+| 5 | Übergriffe | Manche gehen auf dich los — Tasten treffen |
 | 6 | Feine Fälschungen | Subtilere Manipulationen |
 | 8 | Hausverbote | Bekannte Gesichter versuchen es erneut |
 | 10 | Mehrfache Mängel | Es kommt oft mehreres zusammen |
@@ -236,6 +272,7 @@ src/data/             config (Modi, Rollen, Balancing) · dialogue
 src/systems/          state · guests · queue · identity · security · alcohol · notes
                       decision · economy · reputation · upgrades · artists · randomEvents
                       nightcycle · progression · difficulty · tutorial · coop · save
+                      aggression (Übergriffe und Tastenabwehr)
 src/render/           layout · palette · sprites · figure (grosse Frontfiguren)
                       items (gezeichnete Gegenstände) · scene (Tür-/Schleusenansicht,
                       Abtast-Ringe, Alkoholtestgerät) · title (Titelbildschirm)
@@ -259,9 +296,12 @@ Die versteckte Wahrheit über Gäste bleibt beim Host und wird nie mitgeschickt.
 Fast alles Spürbare steht in `src/data/config.js`: `TUNING` (Nachtlänge, Aktionsdauern, Geduld,
 Preise, Mindestalter), `rolesFor(mode)` (Tastenbelegung und Bereiche), `GAME_DATE` (das Datum,
 gegen das geprüft wird), `ARCHETYPES`, `ITEMS`, `NIGHT_EVENTS`, `UPGRADES`, `ARTISTS`,
-`RANKS`, `TALENTS`, `ITEMS` (was Gäste dabeihaben), `ZONES` (Abtast-Zonen),
+`RANKS`, `TALENTS`, `ITEMS` (was Gäste dabeihaben) samt `ITEM_CATEGORIES` (die Gruppen,
+die in der Hausordnung stehen), `ZONES` (Abtast-Zonen),
 `ALCOHOL_LIMIT_PROMILLE` (der aufgedruckte Grenzwert),
-`DIFFICULTY_STEPS` (wann welche Auffälligkeit dazukommt) und `IMPAIRMENT_SIGNS`.
+`DIFFICULTY_STEPS` (wann welche Auffälligkeit dazukommt), `IMPAIRMENT_SIGNS`
+(die sichtbaren Anzeichen) sowie `AGGRESSION` und `DEFENSE_KEYS` (Häufigkeit, Zeitfenster
+und Tasten der Abwehr).
 Der Clubname ist eine Konstante (`CLUB_NAME`).
 
 ## Nächste Schritte

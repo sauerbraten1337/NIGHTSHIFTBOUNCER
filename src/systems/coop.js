@@ -10,7 +10,7 @@
  * Netzwerk-Kommandos denselben Weg nehmen.
  */
 
-import { rolesFor, PATDOWN_KEYS, TUNING, AREA_CHECKS } from '../data/config.js';
+import { rolesFor, PATDOWN_KEYS, TUNING, AREA_CHECKS, DEFENSE_KEYS } from '../data/config.js';
 import { actionSpeed, addToast, isSolo } from './state.js';
 import { requestId, toggleField, fieldLabel, inspectionVerdict, idSummary } from './identity.js';
 import { startPatdown, openZone, pickItem, closeZone, patdownResult, pendingZones } from './security.js';
@@ -20,6 +20,7 @@ import { admitGuest, rejectGuest, passGuest, coopVerification, soloVerification 
 import { calmQueue, airlockFull } from './queue.js';
 import { guestLine } from './guests.js';
 import { resolveArtistDecision } from './artists.js';
+import { aggressionActive, defend, maybeAggression } from './aggression.js';
 
 export function createPlayers(mode = 'solo') {
   return rolesFor(mode).map((role, index) => ({
@@ -57,6 +58,23 @@ export function updatePlayers(game, dt, input) {
   for (const player of game.players) {
     player.idlePhase += dt;
     if (player.flash > 0) player.flash -= dt;
+
+    // Angriff: alles andere ruht, es zählt nur noch die richtige Taste.
+    const attacked = stationOf(game, player);
+    if (aggressionActive(attacked)) {
+      // Der Angriff unterbricht die laufende Kontrolle - man hat die Hände voll.
+      if (player.busy > 0) {
+        player.busy = 0;
+        player.busyLabel = '';
+        player.pending = null;
+      }
+      if (input && !player.remote) {
+        for (const entry of DEFENSE_KEYS) {
+          if (input.justPressed(entry.key)) tryAction(game, player, 'defend', { key: entry.key });
+        }
+      }
+      continue;
+    }
 
     if (player.busy > 0) {
       player.busy -= dt;
@@ -142,10 +160,22 @@ export function tryAction(game, player, code, payload = {}) {
   const { state } = game;
   const night = state.night;
   if (!night || !night.running) return 'KEINE SCHICHT';
-  if (player.busy > 0) return 'BESCHÄFTIGT';
 
   const station = stationOf(game, player);
   const guest = station?.guest;
+
+  // Solange jemand auf einen losgeht, geht nichts anderes.
+  if (aggressionActive(station)) {
+    if (code !== 'defend') return deny(game, player, 'ERST ABWEHREN');
+    const res = defend(game, station, payload.key);
+    if (res) {
+      player.flash = res.hit ? 0.2 : 0.45;
+      setResult(player, res.hit ? 'ok' : 'deny', res.hit ? 'GETROFFEN' : 'DANEBEN');
+    }
+    return null;
+  }
+  if (code === 'defend') return null;
+  if (player.busy > 0) return 'BESCHÄFTIGT';
 
   if (code === 'calm') {
     if (!canDo(game, player, 'calm')) return deny(game, player, 'NUR DER BOUNCER KANN DIE SCHLANGE BERUHIGEN');
@@ -385,6 +415,11 @@ function completeAction(game, player, pending) {
       break;
     }
     case 'reject': {
+      // Manche nehmen ein "Nein" nicht hin - dann geht es erst richtig los.
+      if (maybeAggression(game, station, 'reject')) {
+        setResult(player, 'deny', 'ER RASTET AUS');
+        break;
+      }
       const isArtist = guest.isArtist;
       rejectGuest(game, guest, station);
       if (isArtist) resolveArtistDecision(game, guest, false);
