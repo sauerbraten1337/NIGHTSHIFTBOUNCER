@@ -3,13 +3,13 @@
 Die Godot-Portierung liegt im Unterordner `godot/`. Die Web-Version in `src/`
 bleibt unangetastet, solange die Portierung läuft.
 
-Geprüft mit **Godot 4.6-stable** (ohne .NET/C#).
+Geprüft mit **Godot 4.7.1-stable** (ohne .NET/C#).
 
 ---
 
 ## 1. Godot herunterladen
 
-<https://godotengine.org/download> → Godot 4.6 für dein Betriebssystem, die
+<https://godotengine.org/download> → Godot 4.7 für dein Betriebssystem, die
 Standard-Variante (nicht ".NET"). Godot braucht keine Installation, die
 entpackte Datei wird direkt gestartet.
 
