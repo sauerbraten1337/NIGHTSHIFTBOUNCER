@@ -28,6 +28,11 @@ func _run_all() -> void:
 	_test_identity_dates()
 	_test_guest_generation()
 	_test_notes()
+	_test_night_solo()
+	_test_night_coop()
+	_test_area_limits()
+	_test_upgrades_and_talents()
+	_test_save_roundtrip()
 
 # ---------- Pruefhelfer ----------
 
@@ -207,3 +212,277 @@ func _test_notes() -> void:
 		Notes.checklist_for("outside", true).size(), Config.CHECKLIST.size(),
 		"Solo sieht alle Punkte"
 	)
+
+# ---------- Nachtsimulation ----------
+#
+# Portierung des Bot-Treibers aus tests/smoke.mjs: ein Tuersteher, der die
+# Wahrheit kennt und so handelt, wie es ein perfekter Spieler mit gutem Auge
+# taete. Er prueft damit den ganzen Fluss - Schlange, Stationen, Kontrollen,
+# Entscheidungen, Wirtschaft, Schichtende.
+
+func _make_game(mode: String, game_seed: int = 1234) -> Dictionary:
+	var state := GameState.create_initial_state(mode)
+	# Fuer die Simulation ist alles freigeschaltet (das Tutorial hat eigene Tests).
+	state["unlocks"] = {"id": true, "talk": true, "search": true, "alcohol": true, "calm": true}
+	return {
+		"state": state,
+		"rng": Rng.new(game_seed),
+		"bus": Bus.new(),
+		"players": Coop.create_players(mode),
+	}
+
+func _drive_station(game: Dictionary, player: Dictionary) -> void:
+	var station: Variant = Coop.station_of(game, player)
+	if station == null:
+		return
+	# Uebergriff: der Bot wehrt sich, solange er die Tastenfolge sieht.
+	if station["aggro"] != null:
+		var a: Dictionary = station["aggro"]
+		if a["phase"] == "defend":
+			var keys: Array = a["keys"]
+			var idx := int(a["index"])
+			if idx < keys.size():
+				Coop.try_action(game, player, "defend", {"key": (keys[idx] as Dictionary)["key"]})
+		return
+
+	var guest: Variant = station["guest"]
+	if guest == null or float(player["busy"]) > 0.0:
+		return
+	var checks: Dictionary = station["checks"]
+	var solo := GameState.is_solo(game["state"])
+	var outside: bool = player["area"] == "outside"
+	var unlocks: Dictionary = (game["state"] as Dictionary)["unlocks"]
+
+	# --- Bouncer-Aufgaben (draussen bzw. solo) ---
+	if outside:
+		if checks["id"] == null and unlocks["id"] != false:
+			Coop.try_action(game, player, "id")
+			return
+		if checks["talk"] == null and unlocks["talk"] != false:
+			Coop.try_action(game, player, "talk")
+			return
+		# Ausweisfelder von Hand als "nicht korrekt" vermerken (ein Klick
+		# genuegt, weil der Zyklus mit "nicht korrekt" beginnt).
+		for field: String in Identity.faulty_fields(guest):
+			if (checks["id"] as Dictionary)["marks"].get(field, null) != "suspect":
+				Coop.try_action(game, player, "mark", {"field": field})
+				return
+
+	# --- Security-Aufgaben (Schleuse bzw. solo) ---
+	if not outside or solo:
+		if unlocks["search"] != false:
+			var pat: Variant = station["patdown"]
+			if pat == null:
+				Coop.try_action(game, player, "search")
+				return
+			if not bool(pat["complete"]):
+				var open: Variant = null
+				if pat["active"] != null:
+					open = (pat["zones"] as Dictionary)[pat["active"]]
+				if open != null:
+					# Alles ansehen, das Verbotene beanstanden, dann die Zone
+					# abschliessen.
+					var bad: Variant = null
+					for i: Dictionary in (open["items"] as Array):
+						if bool(i["forbidden"]) and not (open["flagged"] as Array).has(i["id"]):
+							bad = i
+							break
+					if bad != null:
+						Coop.try_action(game, player, "pick", {
+							"zone": open["id"], "itemId": bad["id"],
+						})
+					else:
+						Coop.try_action(game, player, "closezone", {"zone": open["id"]})
+					return
+				for key: String in (pat["zones"] as Dictionary):
+					if (pat["zones"] as Dictionary)[key]["state"] == "closed":
+						Coop.try_action(game, player, "zone", {"zone": key})
+						return
+		if checks["alcohol"] == null and unlocks["alcohol"] != false:
+			Coop.try_action(game, player, "alcohol")
+			return
+		# Der Befund kommt auf den eigenen Notizzettel - das Spiel traegt
+		# nichts ein.
+		if checks["alcohol"] != null:
+			var alc: Dictionary = checks["alcohol"]
+			var noted: bool = (station["notes"] as Dictionary)["topics"].get("alcohol", null) == "bad"
+			if float(alc["promille"]) >= float(alc["limit"]) and not noted:
+				Coop.try_action(game, player, "note", {"topic": "alcohol"})
+				return
+
+	# --- Entscheidung ---
+	var suspicious := _decide(station, outside and not solo)
+	if outside and not solo:
+		Coop.try_action(game, player, "reject" if suspicious else "pass")
+	else:
+		Coop.try_action(game, player, "reject" if suspicious else "admit")
+
+func _decide(station: Dictionary, door_only: bool) -> bool:
+	var c: Dictionary = station["checks"]
+	if c["id"] != null and not Identity.claimed_faults(c["id"]).is_empty():
+		return true
+	if door_only:
+		return false
+	if c["search"] != null and not ((c["search"] as Dictionary)["flagged"] as Array).is_empty():
+		return true
+	# Das Geraet zeigt nur den Wert - der Grenzwert steht auf dem Gehaeuse.
+	if c["alcohol"] != null:
+		var alc: Dictionary = c["alcohol"]
+		if float(alc["promille"]) >= float(alc["limit"]):
+			return true
+	return false
+
+func _run_night(game: Dictionary) -> Dictionary:
+	var ended := {"value": false}
+	(game["bus"] as Bus).on("nightEnd", func(_p: Variant) -> void: ended["value"] = true)
+	var event := NightCycle.pick_night_event(game["rng"], game["state"])
+	NightCycle.start_night(game, event, null)
+	var dt := 1.0 / 60.0
+	var frames := 0
+	while (game["state"] as Dictionary)["phase"] == "night" and frames < 60 * 60 * 12:
+		for p: Dictionary in (game["players"] as Array):
+			_drive_station(game, p)
+		Coop.update_players(game, dt, null)
+		NightCycle.update_night(game, dt)
+		frames += 1
+	return {"ended": ended["value"], "night": (game["state"] as Dictionary)["night"], "frames": frames}
+
+func _test_night_solo() -> void:
+	print("nacht solo")
+	var game := _make_game("solo")
+	var money_before := float((game["state"] as Dictionary)["money"])
+	var run := _run_night(game)
+	var night: Dictionary = run["night"]
+	var stats: Dictionary = night["stats"]
+	var state: Dictionary = game["state"]
+
+	check(bool(run["ended"]), "Solo: Nacht regulär beendet")
+	check_eq(state["phase"], "report", "Solo: Report erreicht")
+	check_eq((game["players"] as Array).size(), 1, "Solo: nur ein Spieler")
+	check(
+		int(stats["arrived"]) >= int(night["quota"]),
+		"Solo: genug Gäste erschienen (%d/%d)" % [stats["arrived"], night["quota"]]
+	)
+	check_eq(night["processed"], night["quota"], "Solo: Schicht endet bei der Quote")
+	check(int(stats["admitted"]) > 0, "Solo: Gäste eingelassen")
+	check(int(stats["rejected"]) > 0, "Solo: Gäste abgewiesen")
+	check_eq(stats["passed"], 0, "Solo: keine Schleuse, also kein Durchlassen")
+	check((night["airlockQueue"] as Array).is_empty(), "Solo: Schleuse bleibt leer")
+	check(float(state["money"]) > money_before, "Solo: Geld gestiegen")
+	check(
+		int(stats["correct"]) > int(stats["mistakes"]),
+		"Solo: mehr richtig als falsch (%d/%d)" % [stats["correct"], stats["mistakes"]]
+	)
+
+func _test_night_coop() -> void:
+	print("nacht koop")
+	var game := _make_game("local", 4321)
+	var run := _run_night(game)
+	var night: Dictionary = run["night"]
+	var stats: Dictionary = night["stats"]
+
+	check(bool(run["ended"]), "Koop: Nacht regulär beendet")
+	check_eq((game["players"] as Array).size(), 2, "Koop: zwei Spieler")
+	check_eq(
+		Coop.player_by_role(game, "bouncer")["area"], "outside", "Bouncer arbeitet draussen"
+	)
+	check_eq(
+		Coop.player_by_role(game, "security")["area"], "airlock",
+		"Security arbeitet in der Schleuse"
+	)
+	check(int(stats["passed"]) > 0, "Koop: Gäste in die Schleuse durchgelassen")
+	check(int(stats["admitted"]) > 0, "Koop: Gäste in den Club eingelassen")
+	check(
+		int(stats["admitted"]) <= int(stats["passed"]),
+		"Koop: es kommt nur rein, wer durchgelassen wurde"
+	)
+	check(
+		int(stats["correct"]) > int(stats["mistakes"]),
+		"Koop: mehr richtig als falsch (%d/%d)" % [stats["correct"], stats["mistakes"]]
+	)
+
+func _test_area_limits() -> void:
+	print("bereichsgrenzen")
+	var game := _make_game("local", 99)
+	NightCycle.start_night(game, NightCycle.pick_night_event(game["rng"], game["state"]), null)
+	var night: Dictionary = (game["state"] as Dictionary)["night"]
+	night["running"] = true
+
+	var bouncer := Coop.player_by_role(game, "bouncer")
+	var security := Coop.player_by_role(game, "security")
+
+	# Der Bouncer darf nicht abtasten, die Security nicht am Ausweis arbeiten.
+	check(Coop.try_action(game, bouncer, "search") != null, "Bouncer darf nicht abtasten")
+	check(Coop.try_action(game, security, "id") != null, "Security darf keinen Ausweis verlangen")
+	check(Coop.try_action(game, bouncer, "admit") != null, "Bouncer lässt nicht in den Club")
+	check(not Coop.can_do(game, bouncer, "alcohol"), "Alkotest gehört in die Schleuse")
+	check(Coop.can_do(game, bouncer, "reject"), "Abweisen dürfen beide")
+	check(Coop.can_do(game, security, "reject"), "Abweisen dürfen beide (Security)")
+
+func _test_upgrades_and_talents() -> void:
+	print("ausbau und talente")
+	var state := GameState.create_initial_state("solo")
+	state["money"] = 100000.0
+
+	check_eq(GameState.club_tier(state)["level"], 1, "Start auf Club-Stufe 1")
+	var before := GameState.capacity(state)
+	var res := Upgrades.buy_upgrade(state, "floor")
+	check(bool(res["ok"]), "Tanzfläche gekauft")
+	check_eq(state["upgrades"]["floor"], 1, "Stufe erhöht")
+	check(GameState.capacity(state) > before, "Kapazität gestiegen")
+
+	# Bis zum Maximum kaufen, dann muss es abgelehnt werden.
+	Upgrades.buy_upgrade(state, "floor")
+	Upgrades.buy_upgrade(state, "floor")
+	check_eq(state["upgrades"]["floor"], 3, "Maximalstufe erreicht")
+	check(not bool(Upgrades.buy_upgrade(state, "floor")["ok"]), "über Maximum wird abgelehnt")
+	check(Upgrades.next_cost(state, "floor") == null, "kein Preis mehr über Maximum")
+
+	# Ohne Geld geht nichts.
+	var broke := GameState.create_initial_state("solo")
+	broke["money"] = 0.0
+	check(not bool(Upgrades.buy_upgrade(broke, "bar")["ok"]), "ohne Geld kein Ausbau")
+
+	# Talente
+	var t := GameState.create_initial_state("solo")
+	check_eq(t["talentPoints"], 1, "ein Talentpunkt zum Start")
+	check(bool(Progression.buy_talent(t, "scanner")["ok"]), "Talent gekauft")
+	check_eq(t["talents"]["scanner"], 1, "Talentstufe erhöht")
+	check(not bool(Progression.buy_talent(t, "scanner")["ok"]), "keine Punkte mehr")
+	check(not bool(Progression.buy_talent(t, "gibtsnicht")["ok"]), "unbekanntes Talent")
+
+	# Routine macht die Kontrollen schneller.
+	var fast := GameState.create_initial_state("solo")
+	var normal_speed := GameState.action_speed(fast)
+	(fast["talents"] as Dictionary)["scanner"] = 3
+	check(GameState.action_speed(fast) < normal_speed, "Routine beschleunigt Kontrollen")
+
+func _test_save_roundtrip() -> void:
+	print("spielstand")
+	var path := "user://test_save.json"
+	SaveGame.clear_save(path)
+	check(not SaveGame.has_save(path), "vorher kein Spielstand")
+
+	var state := GameState.create_initial_state("solo")
+	state["money"] = 4711.0
+	state["reputation"] = 77.0
+	state["xp"] = 950
+	(state["upgrades"] as Dictionary)["bar"] = 2
+	(state["talents"] as Dictionary)["charisma"] = 3
+	(state["character"] as Dictionary)["name"] = "TESTER"
+	check(SaveGame.save_game(state, path), "gespeichert")
+	check(SaveGame.has_save(path), "Spielstand liegt vor")
+
+	var fresh := GameState.create_initial_state("solo")
+	check(SaveGame.load_game(fresh, path), "geladen")
+	check_eq(fresh["money"], 4711.0, "Geld übernommen")
+	check_eq(fresh["reputation"], 77.0, "Ruf übernommen")
+	check_eq(fresh["xp"], 950, "XP übernommen")
+	check_eq(fresh["upgrades"]["bar"], 2, "Ausbau übernommen")
+	check_eq(fresh["talents"]["charisma"], 3, "Talent übernommen")
+	check_eq(fresh["character"]["name"], "TESTER", "Charakter übernommen")
+	# Die laufende Nacht gehört NICHT in den Spielstand.
+	check(fresh["night"] == null, "keine laufende Nacht im Spielstand")
+
+	SaveGame.clear_save(path)
+	check(not SaveGame.has_save(path), "gelöscht")

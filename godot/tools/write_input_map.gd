@@ -29,6 +29,12 @@ const BINDINGS := {
 	"act_5": KEY_5,
 	"act_admit": KEY_E,
 	"act_reject": KEY_X,
+	# Ziffern 6, 9 und 0: im Solo greifen die Zifferntasten direkt in die
+	# geoeffnete Abtast-Zone (siehe Coop.update_players), darum muessen alle
+	# neun plus die Null belegt sein.
+	"act_6": KEY_6,
+	"act_9": KEY_9,
+	"act_close_zone": KEY_0,
 	# Aktionen Security
 	"act_7": KEY_7,
 	"act_8": KEY_8,
