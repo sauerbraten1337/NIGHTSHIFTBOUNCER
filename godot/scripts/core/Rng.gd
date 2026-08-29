@@ -62,6 +62,21 @@ func weighted_pick(arr: Array, weight_key: String = "weight") -> Variant:
 			return item
 	return arr[arr.size() - 1]
 
+## Gewichtete Auswahl mit freier Gewichtsfunktion - das Gegenstueck zum
+## `weightOf`-Argument der JS-Fassung (Archetypen, Aussagen, Personality).
+func weighted_pick_fn(arr: Array, fn: Callable) -> Variant:
+	var total := 0.0
+	for item: Variant in arr:
+		total += maxf(0.0, float(fn.call(item)))
+	if total <= 0.0:
+		return pick(arr)
+	var roll := next() * total
+	for item: Variant in arr:
+		roll -= maxf(0.0, float(fn.call(item)))
+		if roll <= 0.0:
+			return item
+	return arr[arr.size() - 1]
+
 static func _weight_of(item: Variant, weight_key: String) -> float:
 	if item is Dictionary and (item as Dictionary).has(weight_key):
 		return float((item as Dictionary)[weight_key])
