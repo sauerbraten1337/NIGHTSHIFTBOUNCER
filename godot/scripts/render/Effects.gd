@@ -135,7 +135,7 @@ static func additive_material() -> CanvasItemMaterial:
 #
 # Alle Funktionen hier gehoeren auf ein CanvasItem mit additive_material().
 
-func draw_fog(ci: CanvasItem, intensity: float = 1.0) -> void:
+func draw_fog(ci: Variant, intensity: float = 1.0) -> void:
 	var tex := radial_soft()
 	for f: Dictionary in fog:
 		var r := float(f["r"]) * (1.0 + sin(float(f["p"])) * 0.08)
@@ -145,7 +145,7 @@ func draw_fog(ci: CanvasItem, intensity: float = 1.0) -> void:
 			tex, Rect2(float(f["x"]) - r, float(f["y"]) - r, r * 2.0, r * 2.0), false, color
 		)
 
-func draw_dust(ci: CanvasItem) -> void:
+func draw_dust(ci: Variant) -> void:
 	var base := Color("cfe3ff")
 	for d: Dictionary in dust:
 		var color := base
@@ -153,7 +153,7 @@ func draw_dust(ci: CanvasItem) -> void:
 		var r := float(d["r"])
 		ci.draw_rect(Rect2(float(d["x"]), float(d["y"]), r, r), color)
 
-func draw_sparks(ci: CanvasItem) -> void:
+func draw_sparks(ci: Variant) -> void:
 	for s: Dictionary in sparks:
 		var color: Color = s["color"]
 		color.a = maxf(0.0, float(s["life"]))
@@ -161,7 +161,7 @@ func draw_sparks(ci: CanvasItem) -> void:
 
 ## Weicher Lichtkegel / Glow.
 static func glow(
-	ci: CanvasItem, x: float, y: float, radius: float, color: Color, alpha: float = 0.5
+	ci: Variant, x: float, y: float, radius: float, color: Color, alpha: float = 0.5
 ) -> void:
 	var tint := color
 	tint.a = alpha
@@ -175,7 +175,7 @@ static func glow(
 ## durchsichtig - dasselbe Ergebnis wie der lineare Verlauf der Vorlage,
 ## ohne Textur.
 static func beam(
-	ci: CanvasItem, x: float, y: float, angle: float, length: float,
+	ci: Variant, x: float, y: float, angle: float, length: float,
 	spread: float, color: Color, alpha: float = 0.22
 ) -> void:
 	var top := color

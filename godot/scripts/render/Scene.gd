@@ -20,7 +20,7 @@ extends RefCounted
 ## Rueckgabe: { zones: [], keys: [] } - anklickbare Abtast-Ringe und
 ## Abwehr-Tasten in Ansichtskoordinaten.
 static func draw_station_view(
-	ci: CanvasItem, fx_layer: CanvasItem, game: Dictionary, opts: Dictionary
+	ci: CanvasItem, fx_layer: Variant, game: Dictionary, opts: Dictionary
 ) -> Dictionary:
 	if opts["area"] == "outside":
 		_draw_outside(ci, fx_layer, game, opts)
@@ -33,7 +33,7 @@ static func draw_station_view(
 # ----------------------------------------------------------------
 
 static func _draw_outside(
-	ci: CanvasItem, fx_layer: CanvasItem, game: Dictionary, opts: Dictionary
+	ci: CanvasItem, fx_layer: Variant, game: Dictionary, opts: Dictionary
 ) -> void:
 	var size: Vector2 = opts["size"]
 	var t := float(opts["t"])
@@ -215,7 +215,7 @@ static func _draw_queue_depth(ci: CanvasItem, opts: Dictionary, horizon: float) 
 # ----------------------------------------------------------------
 
 static func _draw_airlock(
-	ci: CanvasItem, fx_layer: CanvasItem, game: Dictionary, opts: Dictionary
+	ci: CanvasItem, fx_layer: Variant, game: Dictionary, opts: Dictionary
 ) -> void:
 	var size: Vector2 = opts["size"]
 	var t := float(opts["t"])
@@ -367,7 +367,7 @@ static func _draw_camera(ci: CanvasItem, x: float, y: float, t: float, level: in
 # ----------------------------------------------------------------
 
 static func _draw_guest_at_station(
-	ci: CanvasItem, fx_layer: CanvasItem, game: Dictionary, opts: Dictionary
+	ci: CanvasItem, fx_layer: Variant, game: Dictionary, opts: Dictionary
 ) -> Dictionary:
 	var size: Vector2 = opts["size"]
 	var station: Variant = opts.get("station", null)
@@ -476,7 +476,7 @@ static func _draw_guest_at_station(
 ## Gibt die Tastenfelder zurueck, damit man sie auch anklicken kann - wer
 ## lieber mit der Maus spielt, soll nicht wehrlos sein.
 static func _draw_defense_overlay(
-	ci: CanvasItem, fx_layer: CanvasItem, aggro: Dictionary,
+	ci: CanvasItem, fx_layer: Variant, aggro: Dictionary,
 	w: float, h: float, t: float
 ) -> Array:
 	var hits: Array = []
@@ -613,7 +613,7 @@ const ZONE_LABEL := {
 ## Suchbogen fuer die offene Zone, Haekchen fuer erledigt, Ausrufezeichen fuer
 ## Fund. Gibt die Ringe zurueck, damit man sie auch mit der Maus anklicken kann.
 static func _draw_patdown_overlay(
-	ci: CanvasItem, fx_layer: CanvasItem, station: Dictionary, t: float, anchors: Dictionary
+	ci: CanvasItem, fx_layer: Variant, station: Dictionary, t: float, anchors: Dictionary
 ) -> Array:
 	var pat: Dictionary = station["patdown"]
 	var hits: Array = []

@@ -1,6 +1,6 @@
-[gd_scene format=3 uid="uid://ofhthe8ohc7j"]
+[gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" uid="uid://cfbpbriybmdit" path="res://scripts/Main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/Game.gd" id="1_game"]
 
-[node name="Main" type="Node2D" unique_id=2002463388]
-script = ExtResource("1_main")
+[node name="Game" type="Node2D"]
+script = ExtResource("1_game")
