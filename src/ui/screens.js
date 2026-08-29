@@ -327,7 +327,8 @@ export function createScreens(game) {
   }
 
   function report(onContinue) { show(renderReport(game, onContinue), { wide: true }); }
-  function shop(onNext) { show(renderShop(game, onNext)); }
+  /** Der Laptop: randlos, damit der Desktop den ganzen Bildschirm füllt. */
+  function shop(onNext) { show(renderShop(game, onNext), { full: true }); }
 
   /** Das Büro am Tag: Schrank, Laptop, Tür. */
   function office(handlers) { show(renderOffice(game, handlers), { full: true }); }

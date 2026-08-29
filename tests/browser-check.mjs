@@ -369,7 +369,11 @@ if (results.report) {
   await solo.click('.office-hit[data-spot="laptop"]');
   await solo.waitForSelector('#shop-next', { timeout: 5000 });
   results.office.laptop = true;
-  if (shots) await solo.screenshot({ path: 'docs/shot-shop.png' });
+  // Der Startbildschirm von NIGHT//OS laeuft kurz - erst danach lohnt das Bild.
+  if (shots) {
+    await sleep(1800);
+    await solo.screenshot({ path: 'docs/shot-shop.png' });
+  }
   await solo.click('#shop-next');
   await solo.waitForSelector('.office-hit[data-spot="door"]', { timeout: 5000 });
 

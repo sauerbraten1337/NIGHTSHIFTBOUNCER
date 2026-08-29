@@ -55,7 +55,12 @@ export function upgradeList(state) {
       max: def.max,
       cost,
       maxed: level >= def.max,
+      /** Was die naechste Stufe bringt (bei MAX: die letzte Stufe). */
       nextDesc: level < def.max ? def.desc[level] : def.desc[def.max - 1],
+      /** Was gerade schon gebaut ist - null, solange nichts gekauft wurde. */
+      currentDesc: level > 0 ? def.desc[level - 1] : null,
+      /** Ausbaupunkte pro Stufe: zaehlt auf die sichtbare Club-Stufe ein. */
+      tierWeight: def.tier ?? 1,
       affordable: cost !== null && state.money >= cost
     };
   });

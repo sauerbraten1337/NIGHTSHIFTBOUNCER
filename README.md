@@ -146,10 +146,33 @@ Danach ist Tag, und du sitzt im **Büro des Clubleiters**. Drei Stellen sind ank
 | Stelle | Was passiert |
 |---|---|
 | **Kleiderschrank** | Charaktereditor — Aussehen und Name ändern. |
-| **Laptop** | Upgrades, Talente und Acts (der bisherige Shop). |
+| **Laptop** | **NIGHT//OS** — der Desktop mit Ausbau, Talenten, Booking und Clubakte. |
 | **Tür** | Raus in die nächste Nacht. |
 
 ![Büro](docs/shot-office.png)
+
+### NIGHT//OS — der Laptop
+
+Der Laptop ist kein Formular, sondern ein kleines Betriebssystem: Gehäuse, animiertes
+Wallpaper (Neon-Raster über der Stadt, dessen Farbe der Club-Stufe folgt), Menüleiste mit
+Geld, Ruf, Stufe und Talentpunkten, ein Dock links und ein Fenster rechts. Vier Programme,
+umschaltbar per Klick oder mit <kbd>1</kbd>–<kbd>4</kbd>; <kbd>ESC</kbd> führt zurück ins Büro.
+
+| Programm | Inhalt |
+|---|---|
+| **AUSBAU** | Alle Upgrades — nach Bereich gebündelt, filter- und durchsuchbar. |
+| **TALENTE** | Talentpunkte, Rangfortschritt, was du selbst besser kannst. |
+| **BOOKING** | Acts buchen (braucht den Backstage-Bereich). |
+| **AKTE** | Club-Stufen als Zeitstrahl, Kennzahlen und Fortschritt je Bereich. |
+
+Die Upgrades sind sortiert statt aufgelistet: Reiter je Bereich (Sicherheit, Eingang,
+Technik, Innenbereich, Komfort) mit der Zahl der offenen Ausbauten, dazu Suche, ein Schalter
+**nur bezahlbar** und vier Sortierungen — **empfohlen** (was du dir jetzt leisten kannst
+zuerst, das Günstigste oben, MAX ans Ende), **Preis**, **Fortschritt**, **Name**. Jede Karte
+zeigt Stufe als Segmentbalken, was bereits gebaut ist, was die nächste Stufe bringt,
+den Preis und wie viele Ausbaupunkte sie auf die nächste Club-Stufe einzahlt.
+
+![Laptop](docs/shot-shop.png)
 
 ## Die Kontrolle
 
@@ -376,14 +399,14 @@ src/render/           layout · palette · sprites · figure (grosse Frontfigure
                       items (gezeichnete Gegenstände) · scene (Tür-/Schleusenansicht,
                       Abtast-Ringe, Alkoholtestgerät) · title (Titelbildschirm)
                       office (Büro am Tag, samt anklickbarer Stellen)
-                      effects · renderer
+                      desktop (Wallpaper des Laptops) · effects · renderer
 src/ui/               hud (inkl. Entscheidungs-Buttons) · notepad (Block mit zwei Seiten)
                       screens: Menü, Gegenstands-Katalog, Lobby, Briefing, Pause
                       idcard (Ausweis in der Hand) · itemtray (Kontrolltisch)
                       rulebook (ausfahrende Hausordnung am linken Rand)
                       adminhud (Röntgenblick auf die Wahrheit des Gastes)
                       character (Charaktereditor) · office (Büro am Tag)
-                      report · shop · screens
+                      report · shop (NIGHT//OS auf dem Laptop) · screens
 src/net/net.js        Räume, Schnappschüsse, Aktionen
 server/index.js       Statischer Server + WebSocket-Raumvermittlung
 tests/                smoke.mjs (headless) · browser-check.mjs (Chromium, alle drei Modi)
