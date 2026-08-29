@@ -252,13 +252,19 @@ for (let i = 0; i < 30; i++) {
 }
 
 // ANSPRECHEN per Klick - und der Gast nennt dabei seinen Namen.
-await solo.waitForFunction(
-  () => !!window.NULLWERK.state.night?.stations.door.guest, null, { timeout: 15000 }
-).catch(() => {});
-await solo.click('.act[data-code="talk"]').catch(() => {});
-await solo.waitForFunction(
-  () => !!window.NULLWERK.state.night?.stations.door.checks.talk, null, { timeout: 6000}
-).catch(() => {});
+// Der Gast muss dafuer wirklich vorne stehen: waehrend der Vorgaenger noch
+// abgeht, laeuft ein Klick ins Leere. Darum bis zu drei Versuche.
+for (let attempt = 0; attempt < 3; attempt++) {
+  await solo.waitForFunction(
+    () => !!window.NULLWERK.state.night?.stations.door.guest, null, { timeout: 15000 }
+  ).catch(() => {});
+  await solo.click('.act[data-code="talk"]').catch(() => {});
+  const talked = await solo.waitForFunction(
+    () => !!window.NULLWERK.state.night?.stations.door.checks.talk, null, { timeout: 6000 }
+  ).then(() => true).catch(() => false);
+  if (talked) break;
+  await solo.waitForTimeout(600);
+}
 results.talk = await solo.evaluate(() => {
   const st = window.NULLWERK.state.night.stations.door;
   return {
@@ -369,7 +375,11 @@ if (results.report) {
   await solo.click('.office-hit[data-spot="laptop"]');
   await solo.waitForSelector('#shop-next', { timeout: 5000 });
   results.office.laptop = true;
-  if (shots) await solo.screenshot({ path: 'docs/shot-shop.png' });
+  // Der Startbildschirm von NIGHT//OS laeuft kurz - erst danach lohnt das Bild.
+  if (shots) {
+    await sleep(1800);
+    await solo.screenshot({ path: 'docs/shot-shop.png' });
+  }
   await solo.click('#shop-next');
   await solo.waitForSelector('.office-hit[data-spot="door"]', { timeout: 5000 });
 
