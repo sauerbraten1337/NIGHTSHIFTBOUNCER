@@ -10,16 +10,17 @@
  * Netzwerk-Kommandos denselben Weg nehmen.
  */
 
-import { rolesFor, PATDOWN_KEYS, TUNING, AREA_CHECKS } from '../data/config.js';
-import { actionSpeed, addToast, addRadio, isSolo } from './state.js';
-import { requestId, markField, inspectionVerdict, idSummary } from './identity.js';
-import { scanGuest } from './scanner.js';
-import { startPatdown, patZone, patdownResult } from './security.js';
+import { rolesFor, PATDOWN_KEYS, TUNING, AREA_CHECKS, DEFENSE_KEYS } from '../data/config.js';
+import { actionSpeed, addToast, isSolo } from './state.js';
+import { requestId, toggleField, fieldLabel, inspectionVerdict, idSummary } from './identity.js';
+import { startPatdown, openZone, pickItem, closeZone, patdownResult, pendingZones } from './security.js';
+import { toggleCheck, toggleTopic, flipPage, topicLabel } from './notes.js';
 import { talkTo, alcoholTest } from './alcohol.js';
 import { admitGuest, rejectGuest, passGuest, coopVerification, soloVerification } from './decision.js';
 import { calmQueue, airlockFull } from './queue.js';
 import { guestLine } from './guests.js';
 import { resolveArtistDecision } from './artists.js';
+import { aggressionActive, defend, maybeAggression } from './aggression.js';
 
 export function createPlayers(mode = 'solo') {
   return rolesFor(mode).map((role, index) => ({
@@ -58,6 +59,23 @@ export function updatePlayers(game, dt, input) {
     player.idlePhase += dt;
     if (player.flash > 0) player.flash -= dt;
 
+    // Angriff: alles andere ruht, es zählt nur noch die richtige Taste.
+    const attacked = stationOf(game, player);
+    if (aggressionActive(attacked)) {
+      // Der Angriff unterbricht die laufende Kontrolle - man hat die Hände voll.
+      if (player.busy > 0) {
+        player.busy = 0;
+        player.busyLabel = '';
+        player.pending = null;
+      }
+      if (input && !player.remote) {
+        for (const entry of DEFENSE_KEYS) {
+          if (input.justPressed(entry.key)) tryAction(game, player, 'defend', { key: entry.key });
+        }
+      }
+      continue;
+    }
+
     if (player.busy > 0) {
       player.busy -= dt;
       if (player.busy <= 0) {
@@ -75,13 +93,26 @@ export function updatePlayers(game, dt, input) {
     for (const action of player.role.actions) {
       if (input.justPressed(action.key)) tryAction(game, player, action.code);
     }
-    // Abtast-Zonen: nur an der Station, an der abgetastet wird.
+    // Abtast-Zonen: nur Zonen, die dieser Gast überhaupt hat.
     const station = stationOf(game, player);
-    if (station?.patdown && !station.patdown.complete && canDo(game, player, 'search')) {
+    const pat = station?.patdown;
+    if (pat && !pat.complete && canDo(game, player, 'search')) {
       for (const zoneKey of PATDOWN_KEYS) {
+        if (!pat.zones[zoneKey.zone]) continue;
         if (input.justPressed(zoneKey.key)) {
           tryAction(game, player, 'zone', { zone: zoneKey.zone, label: zoneKey.label });
         }
+      }
+      // Solo: Ziffern greifen direkt in die offene Zone (kein Konflikt, weil
+      // gerade nichts anderes ansteht). Im Koop läuft die Auswahl per Maus.
+      const open = pat.active ? pat.zones[pat.active] : null;
+      if (open && isSolo(game.state)) {
+        if (input.justPressed('Digit0')) tryAction(game, player, 'pick', { zone: open.id, itemId: null });
+        (open.items ?? []).forEach((item, index) => {
+          if (index < 9 && input.justPressed(`Digit${index + 1}`)) {
+            tryAction(game, player, 'pick', { zone: open.id, itemId: item.id });
+          }
+        });
       }
     }
   }
@@ -129,10 +160,22 @@ export function tryAction(game, player, code, payload = {}) {
   const { state } = game;
   const night = state.night;
   if (!night || !night.running) return 'KEINE SCHICHT';
-  if (player.busy > 0) return 'BESCHÄFTIGT';
 
   const station = stationOf(game, player);
   const guest = station?.guest;
+
+  // Solange jemand auf einen losgeht, geht nichts anderes.
+  if (aggressionActive(station)) {
+    if (code !== 'defend') return deny(game, player, 'ERST ABWEHREN');
+    const res = defend(game, station, payload.key);
+    if (res) {
+      player.flash = res.hit ? 0.2 : 0.45;
+      setResult(player, res.hit ? 'ok' : 'deny', res.hit ? 'GETROFFEN' : 'DANEBEN');
+    }
+    return null;
+  }
+  if (code === 'defend') return null;
+  if (player.busy > 0) return 'BESCHÄFTIGT';
 
   if (code === 'calm') {
     if (!canDo(game, player, 'calm')) return deny(game, player, 'NUR DER BOUNCER KANN DIE SCHLANGE BERUHIGEN');
@@ -160,32 +203,52 @@ export function tryAction(game, player, code, payload = {}) {
       game.bus.emit('sfx', 'beep');
       return null;
 
+    // Der Spieler schaltet den Status eines Ausweisfeldes um. Das Spiel sagt
+    // ihm NICHT, ob er richtig liegt - er trägt seine eigene Einschätzung ein.
     case 'mark': {
       if (!checks.id) return deny(game, player, 'ERST DEN AUSWEIS VERLANGEN');
       if (checks.id.guestId !== guest.id) return deny(game, player, 'ANDERER GAST');
-      const res = markField(checks.id, guest, payload.field);
-      if (res.already) return null;
-      if (res.correct) {
-        setResult(player, 'ok', `GEFUNDEN: ${res.reason}`);
-        addToast(night, `AUFFÄLLIGKEIT: ${res.reason}`, 'good', 3);
-        game.bus.emit('sfx', 'ok');
-      } else {
-        setResult(player, 'deny', `${res.label}: NICHTS ZU BEANSTANDEN`);
-        player.flash = 0.4;
-        game.bus.emit('sfx', 'beep');
-      }
-      game.bus.emit('idMark', { field: payload.field, correct: res.correct });
+      const res = toggleField(checks.id, payload.field);
+      if (!res) return null;
+      setResult(player, 'info', res.state === 'suspect'
+        ? `${res.label}: als nicht korrekt notiert`
+        : res.state === 'fine'
+          ? `${res.label}: als in Ordnung notiert`
+          : `${res.label}: Eintrag gelöscht`);
+      game.bus.emit('sfx', 'beep');
+      game.bus.emit('idMark', { field: payload.field, state: res.state });
       return null;
     }
 
-    case 'talk':
-      begin(game, player, 'ANSPRECHEN', 'talk', { guestId: guest.id });
+    // Notizzettel Seite 1: Haken setzen/entfernen.
+    case 'check': {
+      const res = toggleCheck(station.notes, payload.item);
+      if (!res) return null;
+      game.bus.emit('sfx', 'beep');
+      game.bus.emit('noteCheck', res);
+      return null;
+    }
+
+    // Notizzettel Seite 2: Befund umschalten (entspricht der Norm / nicht).
+    case 'note': {
+      const res = toggleTopic(station.notes, payload.topic);
+      if (!res) return null;
+      setResult(player, 'info', res.state === 'bad'
+        ? `${topicLabel(res.id)}: entspricht nicht`
+        : res.state === 'ok'
+          ? `${topicLabel(res.id)}: entspricht der Norm`
+          : `${topicLabel(res.id)}: Eintrag gelöscht`);
+      game.bus.emit('sfx', 'beep');
+      game.bus.emit('noteTopic', res);
+      return null;
+    }
+
+    case 'page':
+      flipPage(station.notes, payload.page);
       return null;
 
-    case 'scan':
-      if (checks.scan) return deny(game, player, 'BEREITS GESCANNT');
-      begin(game, player, 'SCAN', 'scan', { guestId: guest.id });
-      game.bus.emit('sfx', 'scan');
+    case 'talk':
+      begin(game, player, 'ANSPRECHEN', 'talk', { guestId: guest.id });
       return null;
 
     case 'alcohol':
@@ -201,16 +264,61 @@ export function tryAction(game, player, code, payload = {}) {
         guest.said = guestLine(game.rng, guest, 'search');
         guest.saidTimer = 3;
         game.bus.emit('sfx', 'radio');
-        if (station.patdown.autoResolved) finishPatdown(game, player, station);
-        else addToast(night, 'ABTASTEN: J / K / L', 'info', 3);
+        const keys = Object.keys(station.patdown.zones)
+          .map((z) => ({ jacket: 'J', pockets: 'K', bag: 'L' }[z])).join(' / ');
+        addToast(night, `ZONE WÄHLEN: ${keys}`, 'info', 3.5);
       }
       return null;
 
     case 'zone': {
-      if (!station.patdown || station.patdown.complete) return null;
-      if (station.patdown.zones[payload.zone] !== null) return null;
-      begin(game, player, `ABTASTEN: ${payload.label ?? payload.zone.toUpperCase()}`, 'search',
+      const pat = station.patdown;
+      if (!pat || pat.complete) return null;
+      const zone = pat.zones[payload.zone];
+      if (!zone || zone.state === 'done') return null;
+      if (pat.active && pat.active !== payload.zone) {
+        return deny(game, player, 'ERST DEN AKTUELLEN INHALT KLÄREN');
+      }
+      if (zone.state === 'open') return null;
+      const label = payload.zone === 'bag' ? 'TASCHE HERVORHOLEN' : `ABTASTEN: ${zone.label}`;
+      begin(game, player, label, payload.zone === 'bag' ? 'bag' : 'search',
         { zone: payload.zone, guestId: guest.id });
+      game.bus.emit('sfx', 'radio');
+      return null;
+    }
+
+    // Gegenstand beanstanden oder Beanstandung zurücknehmen. Ob der
+    // Gegenstand wirklich verboten ist, erfährt der Spieler hier nicht.
+    case 'pick': {
+      const pat = station.patdown;
+      const zone = pat?.zones[payload.zone ?? pat?.active];
+      if (!pat || !zone || zone.state !== 'open') return null;
+      if (payload.itemId == null) return tryAction(game, player, 'closezone', { zone: zone.id });
+
+      const res = pickItem(pat, guest, zone.id, payload.itemId);
+      if (!res) return null;
+      setResult(player, 'info', res.flagged
+        ? `${res.item.label}: beanstandet`
+        : `${res.item.label}: Beanstandung zurückgenommen`);
+      station.checks.search = patdownResult(pat);
+      game.bus.emit('sfx', 'beep');
+      game.bus.emit('itemPicked', res);
+      return null;
+    }
+
+    // Zone abschliessen - mit oder ohne Beanstandung.
+    case 'closezone': {
+      const pat = station.patdown;
+      const zone = pat?.zones[payload.zone ?? pat?.active];
+      if (!pat || !zone || zone.state !== 'open') return null;
+      const res = closeZone(pat, zone.id);
+      if (!res) return null;
+      setResult(player, 'info', res.flaggedIds.length
+        ? `${zone.label}: ${res.flaggedIds.length} beanstandet`
+        : `${zone.label}: abgeschlossen`);
+      station.checks.search = patdownResult(pat);
+      if (pat.complete) updateVerification(game, guest, station);
+      game.bus.emit('sfx', 'ok');
+      game.bus.emit('zoneClosed', res);
       return null;
     }
 
@@ -257,56 +365,42 @@ function completeAction(game, player, pending) {
     case 'id': {
       checks.id = requestId(state, guest);
       setResult(player, 'info', 'AUSWEIS LIEGT VOR - SELBST PRÜFEN');
-      if (checks.id.hint === 'any') addToast(night, 'GERÄT MELDET: DOKUMENT PRÜFEN', 'warn', 3);
-      else if (checks.id.hint) {
-        addToast(night, `GERÄT MARKIERT: ${checks.id.hint.toUpperCase()}`, 'warn', 3);
-      }
       bus.emit('sfx', 'beep');
       break;
     }
     case 'talk': {
-      const result = talkTo(rng, state, guest);
+      // Jede weitere Ansprache lockt die naechste Aussage heraus.
+      const result = talkTo(rng, state, guest, checks.talk);
       checks.talk = result;
       guest.said = result.line;
       guest.saidTimer = 3.6;
-      setResult(player, 'info', `SAGT: "${result.realName}" - ${result.hint}`);
-      break;
-    }
-    case 'scan': {
-      const result = scanGuest(state, guest);
-      checks.scan = result;
-      setResult(player, result.ok === false ? 'bad' : 'ok', result.text);
-      addRadio(night, 'SECURITY', result.text);
-      bus.emit('sfx', result.offline ? 'deny' : 'scan');
-      updateVerification(game, guest, station);
+      const last = result.said[result.said.length - 1];
+      setResult(player, 'info', last
+        ? `SAGT: "${last.text}"${result.moreToSay ? ' (redet noch)' : ''}`
+        : `SAGT: "${result.realName}" - ${result.hint}`);
       break;
     }
     case 'alcohol': {
       const result = alcoholTest(state, guest);
       checks.alcohol = result;
-      setResult(player, result.overLimit ? 'bad' : 'ok', `${result.promille} ‰ — ${result.text}`);
-      addRadio(night, 'SECURITY', `Alkoholtest: ${result.promille} ‰`);
-      bus.emit('sfx', result.overLimit ? 'deny' : 'ok');
+      setResult(player, 'info', `MESSUNG LÄUFT — ${result.text}`);
+        bus.emit('sfx', 'scan');
+      updateVerification(game, guest, station);
       break;
     }
+    case 'bag':
     case 'search': {
       if (!station.patdown) break;
-      patZone(station.patdown, guest, pending.zone);
-      const res = patdownResult(station.patdown);
-      checks.search = res;
-      if (station.patdown.found) {
-        setResult(player, 'bad', res.text);
-        addRadio(night, 'SECURITY', res.text);
-        addToast(night, res.text, 'bad', 4);
-        bus.emit('sfx', 'alarm');
-      } else if (station.patdown.complete) {
-        setResult(player, 'ok', 'KEINE AUFFÄLLIGKEITEN');
-        bus.emit('sfx', 'ok');
-      } else {
-        setResult(player, 'info', res.text);
-        bus.emit('sfx', 'beep');
+      const zone = openZone(station.patdown, guest, pending.zone);
+      if (!zone) break;
+      checks.search = patdownResult(station.patdown);
+      setResult(player, 'info', `${zone.label}: ${zone.items.length} GEGENSTÄNDE`);
+      if (!station.patdown.hintShown) {
+        station.patdown.hintShown = true;
+        addToast(night, 'WAS DAVON DARF NICHT REIN? SELBST ENTSCHEIDEN.', 'info', 3);
       }
-      updateVerification(game, guest, station);
+      bus.emit('sfx', 'beep');
+      bus.emit('zoneOpened', { zone: zone.id, items: zone.items });
       break;
     }
     case 'admit': {
@@ -325,6 +419,11 @@ function completeAction(game, player, pending) {
       break;
     }
     case 'reject': {
+      // Manche nehmen ein "Nein" nicht hin - dann geht es erst richtig los.
+      if (maybeAggression(game, station, 'reject')) {
+        setResult(player, 'deny', 'ER RASTET AUS');
+        break;
+      }
       const isArtist = guest.isArtist;
       rejectGuest(game, guest, station);
       if (isArtist) resolveArtistDecision(game, guest, false);
@@ -335,14 +434,6 @@ function completeAction(game, player, pending) {
     default:
       break;
   }
-}
-
-function finishPatdown(game, player, station) {
-  const res = patdownResult(station.patdown);
-  station.checks.search = res;
-  setResult(player, res.found ? 'bad' : 'ok', res.text);
-  addToast(game.state.night, `METALLDETEKTOR: ${res.text}`, res.found ? 'bad' : 'good', 4);
-  game.bus.emit('sfx', res.found ? 'alarm' : 'ok');
 }
 
 /** SECURITY VERIFIED / CHECK AGAIN auswerten. */
@@ -360,7 +451,6 @@ function updateVerification(game, guest, station) {
   } else if (verify.state === 'conflict' && !checks.conflict) {
     checks.conflict = true;
     addToast(night, 'CHECK AGAIN — BEFUNDE WIDERSPRECHEN SICH', 'warn', 4);
-    addRadio(night, 'FUNK', 'Das passt nicht zusammen. Nochmal prüfen.');
     game.bus.emit('sfx', 'alarm');
   }
 }

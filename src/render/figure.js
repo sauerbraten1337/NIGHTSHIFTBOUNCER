@@ -6,6 +6,7 @@
 
 import { SKIN, OUTFIT, HAIR, PAL, withAlpha } from './palette.js';
 import { roundRect } from './sprites.js';
+import { drawShoulderBag } from './items.js';
 
 const MOOD_FACE = {
   polite: { brow: 0, mouth: 0.35, eye: 1 },
@@ -13,7 +14,12 @@ const MOOD_FACE = {
   drunk: { brow: -0.1, mouth: 0.15, eye: 0.5 },
   arrogant: { brow: -0.3, mouth: -0.15, eye: 0.8 },
   aggressive: { brow: -0.9, mouth: -0.7, eye: 1.1 },
-  nervous: { brow: 0.5, mouth: -0.2, eye: 1.15 }
+  nervous: { brow: 0.5, mouth: -0.2, eye: 1.15 },
+  // Stimmungen des eigenen Charakters nach der Nacht.
+  happy: { brow: 0.25, mouth: 0.95, eye: 1 },
+  proud: { brow: 0.1, mouth: 0.6, eye: 0.95 },
+  tired: { brow: 0.15, mouth: -0.15, eye: 0.6 },
+  sad: { brow: 0.75, mouth: -0.95, eye: 0.85 }
 };
 
 /**
@@ -24,16 +30,28 @@ const MOOD_FACE = {
 export function drawFigure(ctx, opts) {
   const {
     x, y, h = 300, look = {}, personality = 'polite', t = 0,
-    drunk = 0, holdingId = false, accent = null, dim = 0, vip = false
+    drunk = 0, holdingId = false, accent = null, dim = 0, vip = false,
+    bag = false, bagOut = false, signs = [], rage = 0, pose = 'idle'
   } = opts;
 
-  const skin = SKIN[(look.skin ?? 0) % SKIN.length];
+  // Fahle Haut ist eines der Anzeichen, die man von aussen sieht.
+  const baseSkin = SKIN[(look.skin ?? 0) % SKIN.length];
+  const skin = signs.includes('pale') ? mix(baseSkin, '#b9c0cb', 0.4) : baseSkin;
   const outfit = OUTFIT[(look.outfit ?? 0) % OUTFIT.length];
   const hair = HAIR[(look.hair ?? 0) % HAIR.length];
   const bulk = look.bulk ?? 1;
 
-  const sway = Math.sin(t * (0.9 + drunk * 2.2)) * (1.5 + drunk * 9);
+  const shaky = signs.includes('shake') ? Math.sin(t * 22) * 1.6 : 0;
+  // Wer nicht stillstehen kann, tritt sichtbar von einem Bein aufs andere.
+  const restless = signs.includes('restless') ? Math.sin(t * 4.5) * 4 : 0;
+  const sway = Math.sin(t * (0.9 + drunk * 2.2)) * (1.5 + drunk * 9) + shaky + restless;
   const breath = Math.sin(t * 1.6) * 0.006 * h;
+
+  // Haltung: jubeln (Hüpfer, Arme hoch) oder hängen lassen (Schultern runter).
+  const cheer = pose === 'cheer' ? Math.abs(Math.sin(t * 3.1)) : 0;
+  const slump = pose === 'slump' ? 1 : 0;
+  // Der Körper hebt beim Hüpfen ab und sackt beim Hängenlassen zusammen.
+  const shift = slump * h * 0.03 - cheer * h * 0.055;
 
   const headR = h * 0.095 * bulk;
   const headY = y - h + headR;
@@ -45,11 +63,13 @@ export function drawFigure(ctx, opts) {
   ctx.translate(x, 0);
   ctx.translate(sway * 0.4, 0);
 
-  // Schatten
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  // Schatten - bleibt am Boden, auch wenn die Figur abhebt.
+  ctx.fillStyle = `rgba(0,0,0,${0.5 - cheer * 0.2})`;
   ctx.beginPath();
-  ctx.ellipse(0, y, shoulderW * 1.5, h * 0.022, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, y, shoulderW * (1.5 - cheer * 0.35), h * 0.022, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  ctx.translate(0, shift);
 
   // Beine
   ctx.strokeStyle = shade(outfit, -0.35);
@@ -113,53 +133,108 @@ export function drawFigure(ctx, opts) {
   const armSwing = Math.sin(t * 1.1) * h * 0.006;
   ctx.strokeStyle = outfit;
   ctx.lineWidth = h * 0.042 * bulk;
+  // Beim Übergriff greift er nach vorn - die Hände kommen auf einen zu.
+  const reach = rage > 0 ? Math.sin(t * 9) * h * 0.02 : 0;
+  const handL = cheer || slump
+    ? posedHand(-1)
+    : rage > 0
+      ? { x: -shoulderW * 0.92, y: torsoTop + h * 0.11 + reach }
+      : holdingId
+        ? { x: -shoulderW * 1.1, y: torsoTop + h * 0.13 + armSwing }
+        : { x: -shoulderW * 1.02, y: hipY + armSwing };
+  const handR = cheer || slump
+    ? posedHand(1)
+    : rage > 0
+      ? { x: shoulderW * 0.92, y: torsoTop + h * 0.11 - reach }
+      : holdingId
+        ? { x: shoulderW * 0.55, y: torsoTop + h * 0.14 }
+        : { x: shoulderW * 1.02, y: hipY - armSwing };
+
+  /** Jubel reisst die Arme hoch, Enttäuschung lässt sie nach unten fallen. */
+  function posedHand(side) {
+    if (slump) {
+      return { x: side * shoulderW * 0.86, y: hipY + h * 0.09 + Math.sin(t * 1.2 + side) * h * 0.004 };
+    }
+    return {
+      x: side * shoulderW * (1.05 + cheer * 0.16),
+      y: torsoTop - h * (0.03 + cheer * 0.09) + Math.sin(t * 3.1 + side * 0.4) * h * 0.006
+    };
+  }
+
   ctx.beginPath();
   ctx.moveTo(-shoulderW * 0.9, torsoTop + h * 0.03);
-  if (holdingId) {
-    ctx.lineTo(-shoulderW * 1.1, torsoTop + h * 0.13 + armSwing);
-  } else {
-    ctx.lineTo(-shoulderW * 1.02, hipY + armSwing);
-  }
+  ctx.lineTo(handL.x, handL.y);
   ctx.stroke();
 
   ctx.beginPath();
   ctx.moveTo(shoulderW * 0.9, torsoTop + h * 0.03);
-  if (holdingId) {
-    // Ausweis wird nach vorn gehalten
-    ctx.lineTo(shoulderW * 0.55, torsoTop + h * 0.14);
-  } else {
-    ctx.lineTo(shoulderW * 1.02, hipY - armSwing);
-  }
+  ctx.lineTo(handR.x, handR.y);
   ctx.stroke();
 
-  // Hände
+  // Hände (beim Übergriff zu Fäusten geballt und deutlich grösser, weil nah)
   ctx.fillStyle = skin;
+  const handR2 = h * (rage > 0 ? 0.03 : 0.021);
   ctx.beginPath();
-  ctx.arc(holdingId ? -shoulderW * 1.1 : -shoulderW * 1.02,
-    holdingId ? torsoTop + h * 0.13 + armSwing : hipY + armSwing, h * 0.021, 0, Math.PI * 2);
+  ctx.arc(handL.x, handL.y, handR2, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(holdingId ? shoulderW * 0.55 : shoulderW * 1.02,
-    holdingId ? torsoTop + h * 0.14 : hipY - armSwing, h * 0.021, 0, Math.PI * 2);
+  ctx.arc(handR.x, handR.y, handR2, 0, Math.PI * 2);
   ctx.fill();
 
-  if (holdingId) drawHeldCard(ctx, shoulderW * 0.55, torsoTop + h * 0.145, h);
+  if (holdingId && rage <= 0) drawHeldCard(ctx, shoulderW * 0.55, torsoTop + h * 0.145, h);
+
+  // Umhängetasche: an der Hüfte getragen, beim Abtasten vor dem Körper hochgehalten
+  let bagCenter = null;
+  if (bag) {
+    const bw = h * 0.19;
+    const bh = h * 0.14;
+    if (bagOut) {
+      // hochgehalten: vor dem Bauch, leicht wippend
+      const lift = Math.sin(t * 2.4) * h * 0.008;
+      const bx = -bw / 2;
+      const by = torsoTop + h * 0.1 + lift;
+      drawShoulderBag(ctx, {
+        x: bx, y: by, w: bw, h: bh,
+        strapX: -shoulderW * 0.75, strapY: torsoTop + h * 0.01
+      });
+      bagCenter = { x: bx + bw / 2, y: by + bh / 2 };
+    } else {
+      const bx = shoulderW * 0.62;
+      const by = hipY - h * 0.03;
+      drawShoulderBag(ctx, {
+        x: bx, y: by, w: bw, h: bh,
+        strapX: -shoulderW * 0.7, strapY: torsoTop + h * 0.005
+      });
+      bagCenter = { x: bx + bw / 2, y: by + bh / 2 };
+    }
+  }
 
   // Hals
   ctx.fillStyle = shade(skin, -0.2);
   ctx.fillRect(-headR * 0.35, headY + headR * 0.6, headR * 0.7, headR * 0.9);
 
   // Kopf
-  drawHead(ctx, 0, headY - breath, headR, skin, hair, look, personality, drunk, t);
+  drawHead(ctx, 0, headY - breath, headR, skin, hair, look, personality, drunk, t, signs, rage);
 
   if (dim > 0) {
     ctx.fillStyle = `rgba(4,6,10,${dim})`;
     ctx.fillRect(-shoulderW * 2, y - h * 1.1, shoulderW * 4, h * 1.15);
   }
   ctx.restore();
+
+  // Ankerpunkte in Weltkoordinaten - die Abtast-Ringe sitzen genau dort,
+  // wo die jeweilige Stelle wirklich gezeichnet wurde.
+  const anchorX = x + sway * 0.4;
+  return {
+    jacket: { x: anchorX, y: torsoTop + h * 0.09 + shift, rx: shoulderW * 0.95, ry: h * 0.075 },
+    pockets: { x: anchorX, y: hipY + h * 0.03 + shift, rx: shoulderW * 0.85, ry: h * 0.06 },
+    bag: bagCenter
+      ? { x: anchorX + bagCenter.x, y: bagCenter.y + shift, rx: h * 0.13, ry: h * 0.1 }
+      : null
+  };
 }
 
-function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t) {
+function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t, signs = [], rage = 0) {
   const face = MOOD_FACE[personality] ?? MOOD_FACE.polite;
 
   // Kopfform
@@ -175,18 +250,70 @@ function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t) {
 
   // Augen (blinzeln, bei Betrunkenen halb geschlossen)
   const blink = (Math.sin(t * 0.7) > 0.985 || Math.sin(t * 1.9 + 2) > 0.99) ? 0.12 : 1;
-  const open = Math.max(0.12, face.eye * (1 - drunk * 0.55)) * blink;
+  const wide = signs.includes('pupils');
+  const absent = signs.includes('absent');
+  // Gerötete Augen sieht man schon aus zwei Metern - bei Rausch wie bei Alkohol.
+  const redEyes = signs.includes('redEyes') || drunk > 0.7;
+  const glassy = signs.includes('glassy');
+  const rings = signs.includes('rings');
+  const open = Math.max(0.12, face.eye * (1 - drunk * 0.55) * (wide ? 1.25 : 1)) * blink;
   const eyeY = y - r * 0.05;
   const eyeDx = r * 0.34;
+
+  // Dunkle Augenringe liegen unter dem Auge, also zuerst.
+  if (rings) {
+    ctx.fillStyle = withAlpha('#3a2a3d', 0.5);
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(x + side * eyeDx, eyeY + r * 0.13, r * 0.17, r * 0.09, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   for (const side of [-1, 1]) {
-    ctx.fillStyle = '#f2f4f8';
+    const ex = x + side * eyeDx;
+    // Deutlich rot: das ist das Anzeichen, das man auf Distanz erkennen soll.
+    ctx.fillStyle = redEyes ? '#efaeae' : '#f2f4f8';
     ctx.beginPath();
-    ctx.ellipse(x + side * eyeDx, eyeY, r * 0.155, r * 0.105 * open, 0, 0, Math.PI * 2);
+    ctx.ellipse(ex, eyeY, r * 0.155, r * 0.105 * open, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // Geplatzte Äderchen: zwei feine rote Striche im Weissen.
+    if (redEyes && open > 0.4) {
+      ctx.strokeStyle = withAlpha('#c22626', 0.95);
+      ctx.lineWidth = Math.max(0.8, r * 0.03);
+      for (const dir of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(ex + dir * r * 0.14, eyeY - r * 0.02 * dir);
+        ctx.lineTo(ex + dir * r * 0.05, eyeY + r * 0.03 * dir);
+        ctx.stroke();
+      }
+    }
+
+    // Gereizter Rand rund ums Auge
+    if (redEyes) {
+      ctx.strokeStyle = withAlpha('#c04545', 0.55);
+      ctx.lineWidth = Math.max(0.8, r * 0.025);
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY, r * 0.175, r * 0.125 * Math.max(0.5, open), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     ctx.fillStyle = '#151a22';
     ctx.beginPath();
-    ctx.arc(x + side * eyeDx + Math.sin(t * 0.5) * r * 0.025, eyeY, r * 0.062 * Math.max(0.4, open), 0, Math.PI * 2);
+    // Weite Pupillen sind das deutlichste sichtbare Anzeichen.
+    const pupil = r * (wide ? 0.105 : 0.062) * Math.max(0.4, open);
+    const drift = absent ? Math.sin(t * 0.35) * r * 0.05 : Math.sin(t * 0.5) * r * 0.025;
+    ctx.arc(ex + drift, eyeY, pupil, 0, Math.PI * 2);
     ctx.fill();
+
+    // Glasiger Blick: nasser Glanz auf dem Auge.
+    if (glassy && open > 0.4) {
+      ctx.fillStyle = withAlpha('#ffffff', 0.8);
+      ctx.beginPath();
+      ctx.arc(ex + drift - pupil * 0.4, eyeY - pupil * 0.4, Math.max(0.8, pupil * 0.42), 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // Augenbrauen
@@ -214,14 +341,26 @@ function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t) {
   ctx.strokeStyle = shade(skin, -0.55);
   ctx.lineWidth = Math.max(1, r * 0.07);
   ctx.beginPath();
-  const mouthY = y + r * 0.5;
+  const jaw = signs.includes('jaw') ? Math.abs(Math.sin(t * 7)) * r * 0.12 : 0;
+  const mouthY = y + r * 0.5 + jaw;
   ctx.moveTo(x - r * 0.2, mouthY);
   ctx.quadraticCurveTo(x, mouthY + face.mouth * r * 0.18, x + r * 0.2, mouthY);
   ctx.stroke();
 
-  // Haare
+  // Schweiss auf der Stirn
+  if (signs.includes('sweat')) {
+    ctx.fillStyle = withAlpha('#bfe6ff', 0.75);
+    for (let i = 0; i < 3; i++) {
+      const dropY = y - r * 0.55 + ((t * 22 + i * 30) % 40) * r * 0.012;
+      ctx.beginPath();
+      ctx.ellipse(x + (i - 1) * r * 0.42, dropY, r * 0.045, r * 0.075, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Haare - der eigene Charakter bestimmt die Frisur unabhängig von der Farbe.
   ctx.fillStyle = hair;
-  const style = (look.hair ?? 0) % 4;
+  const style = (look.hairStyle ?? (look.hair ?? 0)) % 4;
   ctx.beginPath();
   if (style === 0) {
     ctx.ellipse(x, y - r * 0.28, r * 0.92, r * 0.75, 0, Math.PI, Math.PI * 2);
@@ -240,10 +379,18 @@ function drawHead(ctx, x, y, r, skin, hair, look, personality, drunk, t) {
   }
 
   // Bartschatten
-  if ((look.outfit ?? 0) % 3 === 0) {
+  if (look.beard ?? ((look.outfit ?? 0) % 3 === 0)) {
     ctx.fillStyle = withAlpha(shade(hair, -0.45), 0.2);
     ctx.beginPath();
     ctx.ellipse(x, y + r * 0.66, r * 0.5, r * 0.22, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Übergriff: das Gesicht läuft rot an.
+  if (rage > 0) {
+    ctx.fillStyle = withAlpha('#c8232c', 0.16 + rage * 0.14);
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * 0.86, r, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -297,14 +444,29 @@ export function drawPortrait(ctx, look, w, h, seed = 0) {
   ctx.restore();
 }
 
-export function shade(hex, amount) {
-  const h = hex.replace('#', '');
+/** Mischt zwei Farben - für fahle Haut und ähnliche Zwischentöne. */
+export function mix(hexA, hexB, t) {
+  const a = rgbOf(hexA);
+  const b = rgbOf(hexB);
+  const f = (i) => Math.round(a[i] + (b[i] - a[i]) * t);
+  return `rgb(${f(0)},${f(1)},${f(2)})`;
+}
+
+function rgbOf(color) {
+  const text = String(color);
+  // `mix()` gibt rgb(...) zurück - das muss hier wieder hereinkommen können.
+  if (text.startsWith('rgb')) {
+    const parts = text.match(/\d+/g) ?? [];
+    return [Number(parts[0]) || 0, Number(parts[1]) || 0, Number(parts[2]) || 0];
+  }
+  const h = text.replace('#', '');
   const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
   const num = parseInt(full, 16);
-  let r = (num >> 16) & 255;
-  let g = (num >> 8) & 255;
-  let b = num & 255;
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
+export function shade(color, amount) {
+  const [r0, g0, b0] = rgbOf(color);
   const f = (v) => Math.max(0, Math.min(255, Math.round(amount >= 0 ? v + (255 - v) * amount : v * (1 + amount))));
-  r = f(r); g = f(g); b = f(b);
-  return `rgb(${r},${g},${b})`;
+  return `rgb(${f(r0)},${f(g0)},${f(b0)})`;
 }

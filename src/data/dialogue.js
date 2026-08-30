@@ -56,6 +56,19 @@ export const LINES = {
   }
 };
 
+/**
+ * Wie sich ein Gast vorstellt, wenn man ihn anspricht. `{name}` wird durch
+ * den echten Namen ersetzt - genau den vergleicht der Spieler mit dem Ausweis.
+ */
+export const NAME_LINES = {
+  polite: ['Ich bin {name}.', 'Mein Name ist {name}.', '{name}, guten Abend.'],
+  annoyed: ['{name}. Steht auch im Ausweis.', 'Ich heisse {name}, wie letzte Woche.'],
+  drunk: ['{name}. Bruder. {name}!', 'Ich bin... {name}. Glaub ich.', '{name}, ganz sicher.'],
+  arrogant: ['{name}. Sagt Ihnen das nichts?', 'Mein Name ist {name}.', '{name}. Der {name}.'],
+  aggressive: ['{name}. Zufrieden?', 'Ich heisse {name}.', '{name}, und jetzt?'],
+  nervous: ['Ich? {name}. Ja, {name}.', 'Äh, {name}.', '{name}, genau.']
+};
+
 /** Künstler am Hintereingang - der Running Gag. */
 export const ARTIST_LINES = [
   ['Bro, ich spiele hier.', 'Ausweis.', 'Ich BIN der Act.', 'Ausweis.'],

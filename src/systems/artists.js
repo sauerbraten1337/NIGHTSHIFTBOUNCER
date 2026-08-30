@@ -4,7 +4,7 @@
  */
 
 import { ARTISTS } from '../data/config.js';
-import { upgradeLevel, addToast, addRadio } from './state.js';
+import { upgradeLevel, addToast } from './state.js';
 import { changeReputation } from './reputation.js';
 import { createGuest } from './guests.js';
 import { insertGuest } from './queue.js';
@@ -51,6 +51,12 @@ export function arriveArtist(game) {
   guest.truth.spend = 0;
   guest.truth.contraband = null;
   guest.truth.contrabandZone = null;
+  guest.truth.impaired = 0;
+  guest.truth.impairmentSigns = [];
+  guest.truth.statements = [];
+  for (const zone of Object.keys(guest.truth.carried ?? {})) {
+    guest.truth.carried[zone] = guest.truth.carried[zone].filter((i) => !i.forbidden);
+  }
   guest.truth.underage = false;
   guest.truth.age = Math.max(24, guest.truth.age);
   guest.truth.idIssues = [];
@@ -68,7 +74,6 @@ export function arriveArtist(game) {
   night.artistArrived = true;
   night.artistGuestId = guest.id;
   addToast(night, `${night.artist.name} IST DA`, 'good', 5);
-  addRadio(night, 'BACKSTAGE', `${night.artist.name} steht am Hintereingang.`);
   game.bus.emit('sfx', 'radio');
   return guest;
 }
@@ -84,11 +89,9 @@ export function resolveArtistDecision(game, guest, admitted) {
     changeReputation(state, rep, 'Act spielt');
     night.artistPlaying = true;
     addToast(night, `${night.artist.name} SPIELT HEUTE`, 'good', 5);
-    addRadio(night, 'FLOOR', 'Der Floor dreht durch.');
   } else {
     changeReputation(state, -6, 'Act abgewiesen');
     addToast(night, 'DU HAST DEN HEADLINER ABGEWIESEN', 'bad', 6);
-    addRadio(night, 'BOOKING', 'Das war der Act. Der Act. Ernsthaft?');
   }
 }
 

@@ -4,7 +4,7 @@ const KEY = 'nullwerk.save.v1';
 
 const PERSISTED = [
   'version', 'money', 'reputation', 'xp', 'talentPoints', 'talents', 'upgrades',
-  'nightIndex', 'clubsOwned', 'expandUnlocked', 'lifetime'
+  'nightIndex', 'clubsOwned', 'expandUnlocked', 'lifetime', 'character'
 ];
 
 export function saveGame(state, storage = safeStorage()) {
@@ -51,6 +51,29 @@ export function hasSave(storage = safeStorage()) {
     return storage.getItem(KEY) !== null;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Kurzer Blick in den Spielstand, ohne ihn zu laden - das Hauptmenü zeigt
+ * damit an, wo die Karriere steht.
+ */
+export function peekSave(storage = safeStorage()) {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object') return null;
+    return {
+      nightIndex: Number(data.nightIndex) || 0,
+      money: Number(data.money) || 0,
+      reputation: Number(data.reputation) || 0,
+      name: data.character?.name ?? null,
+      savedAt: Number(data.savedAt) || 0
+    };
+  } catch {
+    return null;
   }
 }
 

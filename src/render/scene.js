@@ -15,7 +15,9 @@ import { upgradeLevel } from '../systems/state.js';
 
 /**
  * @param {object} opts { rect:{x,y,w,h}, area:'outside'|'airlock', station,
- *                        queue:[], t, beat, pulse, dark, label }
+ *                        queue:[], t, beat, pulse, dark }
+ * @returns {{zones: Array, keys: Array}} anklickbare Abtast-Ringe und
+ *          Abwehr-Tasten in Ansichtskoordinaten
  */
 export function drawStationView(ctx, game, opts) {
   const { rect, area } = opts;
@@ -28,9 +30,9 @@ export function drawStationView(ctx, game, opts) {
   if (area === 'outside') drawOutside(ctx, game, opts);
   else drawAirlock(ctx, game, opts);
 
-  drawGuestAtStation(ctx, game, opts);
-  drawViewFrame(ctx, game, opts);
+  const result = drawGuestAtStation(ctx, game, opts);
   ctx.restore();
+  return result;
 }
 
 /* ---------------------------------------------------------------- */
@@ -106,18 +108,6 @@ function drawOutside(ctx, game, opts) {
   spill.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = spill;
   ctx.fillRect(0, 0, w, h);
-  ctx.restore();
-
-  // Leuchtreklame auf der anderen Strassenseite (der Club liegt hinter uns)
-  const flicker = Math.sin(t * 9) > 0.6 ? 0.45 : 1;
-  ctx.save();
-  ctx.font = `${Math.round(h * 0.028)}px "Archivo Black", "Arial Black", sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.letterSpacing = '4px';
-  ctx.shadowColor = PAL.cyan;
-  ctx.shadowBlur = 18 * flicker * light;
-  ctx.fillStyle = withAlpha('#bff0ff', 0.5 * flicker * light);
-  ctx.fillText('SPÄTI 24H', w * 0.19, horizon - 54);
   ctx.restore();
 
   // Absperrgitter
@@ -242,6 +232,9 @@ function drawQueueDepth(ctx, game, opts, horizon) {
       t: t + guest.swayPhase,
       drunk: guest.truth.drunk,
       vip: guest.truth.vip,
+      // Auffälligkeiten sieht man schon in der Schlange - wer hinsieht, weiss
+      // vorher, was gleich vor ihm steht.
+      signs: guest.truth.impairmentSigns ?? [],
       dim: 0.25 + depth * 0.45
     });
   }
@@ -319,7 +312,7 @@ function drawAirlock(ctx, game, opts) {
   glow(ctx, w * 0.895, horizon * 0.7, 110 + pulse * 50, PAL.red, (0.16 + pulse * 0.16) * light);
 
   // Scanner-Bogen hinter dem Gast
-  drawScannerArch(ctx, w, horizon, h, t, light, upgradeLevel(state, 'scanner'));
+  drawScannerArch(ctx, w, horizon, h, t, light, upgradeLevel(state, 'detector'));
 
   // Kamera
   drawCamera(ctx, w * 0.5, 22, t, light, upgradeLevel(state, 'cameras'));
@@ -342,6 +335,7 @@ function drawAirlock(ctx, game, opts) {
       personality: g.personality,
       t: t + g.swayPhase,
       drunk: g.truth.drunk,
+      signs: g.truth.impairmentSigns ?? [],
       dim: 0.35 + i * 0.08
     });
   }
@@ -391,7 +385,7 @@ function drawScannerArch(ctx, w, horizon, h, t, light, level) {
   ctx.fillStyle = withAlpha(PAL.grey, 0.7 * light);
   ctx.textAlign = 'center';
   ctx.letterSpacing = '2px';
-  ctx.fillText(level >= 1 ? `SCANNER LV.${level}` : 'SCANNER: KEINER', cx, top + 4);
+  ctx.fillText(level >= 1 ? `METALLDETEKTOR LV.${level}` : 'KEIN DETEKTOR', cx, top + 4);
   ctx.restore();
 }
 
@@ -428,27 +422,55 @@ function drawGuestAtStation(ctx, game, opts) {
     ctx.letterSpacing = '4px';
     ctx.fillText(area === 'outside' ? 'NIEMAND AN DER TÜR' : 'SCHLEUSE FREI', w / 2, h * 0.62);
     ctx.restore();
-    return;
+    return { zones: [], keys: [] };
   }
 
-  const holding = !!station.checks.id;
-  const figureH = guestHeight(w, h);
-  drawFigure(ctx, {
-    x: w / 2,
-    y: baseY,
+  // Bei einem Übergriff kommt der Gast auf einen zu: er wird gross, er wackelt.
+  const aggro = station.aggro;
+  const near = aggro ? Math.pow(aggro.approach ?? 0, 0.8) : 0;
+  const rattle = aggro
+    ? Math.sin(t * 30) * (2 + (aggro.shake ?? 0) * 6 + (aggro.missFlash > 0 ? 5 : 0))
+    : 0;
+
+  const holding = !!station.checks.id && !aggro;
+  const figureH = guestHeight(w, h) * (1 + near * 0.55);
+  const anchors = drawFigure(ctx, {
+    x: w / 2 + rattle,
+    y: baseY + near * h * 0.06,
     h: figureH,
     look: guest.look,
-    personality: guest.personality,
+    personality: aggro ? 'aggressive' : guest.personality,
     t: t + guest.swayPhase,
     drunk: guest.truth.drunk,
     holdingId: holding,
     vip: guest.truth.vip,
+    bag: !!guest.truth.hasBag && !aggro,
+    bagOut: !!station.patdown?.bagOut,
+    signs: guest.truth.impairmentSigns ?? [],
+    rage: aggro ? Math.max(0.35, near) : 0,
     accent: guest.isArtist ? PAL.amber : guest.truth.vip ? PAL.purple : null
   });
 
-  // Abtast-Zonen einblenden
+  // Angriff: Tastenfolge statt Kontrolle - alles andere hat jetzt Pause.
+  if (aggro) {
+    const keys = drawDefenseOverlay(ctx, aggro, w, h, t);
+    if (guest.said && guest.saidTimer > 0) {
+      // Die Figur ragt jetzt über den Bildrand hinaus - die Blase bleibt im Bild.
+      drawSpeech(ctx, w / 2, Math.max(h * 0.14, baseY - figureH - 26),
+        guest.said, PAL.red, Math.min(320, w * 0.62));
+    }
+    return { zones: [], keys };
+  }
+
+  // Abtast-Zonen einblenden - die Ringe sitzen auf den echten Körperstellen
+  let zones = [];
   if (station.patdown && !station.patdown.complete) {
-    drawPatdownOverlay(ctx, station, w, h, baseY, t, figureH);
+    zones = drawPatdownOverlay(ctx, station, w, t, anchors);
+  }
+
+  // Alkoholtestgerät liegt auf dem Tisch, sobald gemessen wurde
+  if (station.checks.alcohol) {
+    drawBreathalyzer(ctx, w, h, t, station.checks.alcohol, `${station.id}:${guest.id}`);
   }
 
   // Sprechblase
@@ -466,74 +488,312 @@ function drawGuestAtStation(ctx, game, opts) {
     ctx.fillText(guest.isArtist ? 'ACT' : 'VIP', w / 2, baseY - figureH - 34);
     ctx.restore();
   }
+
+  return { zones, keys: [] };
 }
 
-const ZONE_POS = {
-  jacket: { dy: 0.42, label: 'JACKE', key: 'J' },
-  pockets: { dy: 0.26, label: 'TASCHEN', key: 'K' },
-  bag: { dy: 0.16, label: 'BEUTEL', key: 'L' }
-};
+/* ---------------------------------------------------------------- */
+/* Übergriff: die Tasten, die jetzt sitzen müssen                     */
+/* ---------------------------------------------------------------- */
+
+/**
+ * Zeichnet Warnrahmen, Tastenfolge und Zeitfenster.
+ * Gibt die Tastenfelder zurück, damit man sie auch anklicken kann - wer
+ * lieber mit der Maus spielt, soll nicht wehrlos sein.
+ */
+function drawDefenseOverlay(ctx, aggro, w, h, t) {
+  const hits = [];
+  const danger = aggro.phase === 'fail' ? 0.55
+    : aggro.phase === 'win' ? 0.1
+      : 0.2 + (aggro.approach ?? 0) * 0.25 + (aggro.missFlash > 0 ? 0.25 : 0);
+
+  // Roter Rahmen, der mit jedem Fehlgriff aufblitzt
+  ctx.save();
+  const edge = ctx.createLinearGradient(0, 0, 0, h);
+  edge.addColorStop(0, withAlpha(PAL.red, danger));
+  edge.addColorStop(0.45, 'rgba(0,0,0,0)');
+  edge.addColorStop(1, withAlpha(PAL.red, danger));
+  ctx.fillStyle = edge;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+
+  // Feste Höhe auf Brusthöhe: die Tasten sollen immer an derselben Stelle
+  // stehen, egal wie nah der Gast schon ist.
+  const cx = w / 2;
+  const cy = h * 0.5;
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  if (aggro.phase === 'charge') {
+    ctx.font = '20px "Archivo Black", "Arial Black", sans-serif';
+    ctx.fillStyle = PAL.red;
+    ctx.letterSpacing = '4px';
+    ctx.fillText('ER KOMMT AUF DICH ZU', cx, cy);
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.fillStyle = withAlpha(PAL.white, 0.8);
+    ctx.fillText('TASTEN DRÜCKEN, SOBALD SIE ERSCHEINEN', cx, cy + 26);
+    ctx.restore();
+    return hits;
+  }
+
+  if (aggro.phase === 'win' || aggro.phase === 'fail') {
+    const won = aggro.phase === 'win';
+    ctx.font = '26px "Archivo Black", "Arial Black", sans-serif';
+    ctx.fillStyle = won ? PAL.green : PAL.red;
+    ctx.letterSpacing = '5px';
+    ctx.fillText(won ? 'ABGEWEHRT' : 'ERWISCHT', cx, cy);
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.fillStyle = withAlpha(PAL.white, 0.75);
+    ctx.letterSpacing = '2px';
+    ctx.fillText(won ? 'ER FLIEGT RAUS' : 'DAS TEAM ZIEHT IHN WEG', cx, cy + 28);
+    ctx.restore();
+    return hits;
+  }
+
+  // --- laufende Tastenfolge ---
+  const size = Math.min(64, w * 0.075);
+  const gap = size * 0.42;
+  const total = aggro.keys.length;
+  const startX = cx - ((total - 1) * (size + gap)) / 2;
+
+  for (let i = 0; i < total; i++) {
+    const entry = aggro.keys[i];
+    const x = startX + i * (size + gap);
+    const done = i < aggro.index;
+    const current = i === aggro.index;
+    const scale = current ? 1 + Math.sin(t * 9) * 0.04 + (aggro.hitFlash > 0 ? 0.06 : 0) : 0.78;
+    const box = size * scale;
+    const color = done ? PAL.green : current ? PAL.white : PAL.grey;
+
+    if (current) {
+      glow(ctx, x, cy, box * 2.4, aggro.missFlash > 0 ? PAL.red : PAL.cyan, 0.35);
+      hits.push({ key: entry.key, x, y: cy, rx: box * 0.8, ry: box * 0.8 });
+    }
+
+    ctx.fillStyle = withAlpha('#0b0e14', done ? 0.6 : 0.9);
+    roundRect(ctx, x - box / 2, cy - box / 2, box, box, box * 0.18);
+    ctx.fill();
+    ctx.strokeStyle = withAlpha(color, done ? 0.5 : 1);
+    ctx.lineWidth = current ? 3 : 2;
+    roundRect(ctx, x - box / 2, cy - box / 2, box, box, box * 0.18);
+    ctx.stroke();
+
+    ctx.fillStyle = withAlpha(color, done ? 0.5 : 1);
+    ctx.font = `${Math.round(box * 0.5)}px "Archivo Black", "Arial Black", sans-serif`;
+    ctx.fillText(entry.label, x, cy + box * 0.03);
+
+    // Zeitfenster als schrumpfender Ring um die aktuelle Taste
+    if (current) {
+      const left = Math.max(0, aggro.keyLeft / aggro.keyTime);
+      ctx.strokeStyle = left > 0.4 ? PAL.cyan : PAL.red;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(x, cy, box * 0.78, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
+      ctx.stroke();
+    }
+  }
+
+  // Fehlversuche
+  ctx.font = '11px "IBM Plex Mono", monospace';
+  ctx.letterSpacing = '3px';
+  ctx.fillStyle = withAlpha(PAL.white, 0.8);
+  ctx.fillText(`ABWEHR ${aggro.index}/${total}`, cx, cy - size * 1.15);
+  const left = Math.max(0, aggro.maxStrikes - aggro.strikes + 1);
+  ctx.fillStyle = left > 1 ? withAlpha(PAL.amber, 0.9) : PAL.red;
+  ctx.fillText(`${'●'.repeat(left)}${'○'.repeat(Math.max(0, aggro.maxStrikes + 1 - left))}`, cx, cy + size * 1.2);
+
+  ctx.restore();
+  return hits;
+}
 
 /** Höhe der Figur: nie breiter als die (im Splitscreen halbe) Ansicht. */
 function guestHeight(w, h) {
   return Math.min(h * 0.56, w * 0.62);
 }
 
-function drawPatdownOverlay(ctx, station, w, h, baseY, t, figureH) {
-  for (const [zone, cfg] of Object.entries(ZONE_POS)) {
-    const y = baseY - figureH * cfg.dy;
-    const status = station.patdown.zones[zone];
-    const hinted = station.patdown.hint === zone;
-    const pulse = 0.5 + Math.sin(t * 6) * 0.5;
-    const color = status === 'hit' ? PAL.red
-      : status === 'clear' ? PAL.green
-        : hinted ? PAL.amber : PAL.cyan;
+const ZONE_LABEL = {
+  jacket: { label: 'JACKE', key: 'J' },
+  pockets: { label: 'HOSENTASCHEN', key: 'K' },
+  bag: { label: 'TASCHE', key: 'L' }
+};
+
+/**
+ * Abtast-Zonen: ruhiger Ring auf der tatsächlichen Körperstelle, umlaufender
+ * Suchbogen für die offene Zone, Häkchen für erledigt, Ausrufezeichen für Fund.
+ * Gibt die Ringe zurück, damit man sie auch mit der Maus anklicken kann.
+ */
+function drawPatdownOverlay(ctx, station, w, t, anchors) {
+  const pat = station.patdown;
+  const hits = [];
+
+  for (const zone of Object.values(pat.zones)) {
+    const anchor = anchors?.[zone.id];
+    const cfg = ZONE_LABEL[zone.id];
+    if (!anchor || !cfg) continue;
+
+    const cx = anchor.x;
+    const cy = anchor.y;
+    const radiusX = anchor.rx;
+    const radiusY = anchor.ry;
+    const open = zone.state === 'open';
+    const done = zone.state === 'done';
+    if (!done) hits.push({ zone: zone.id, x: cx, y: cy, rx: radiusX, ry: radiusY });
+    // Nur die Angabe des SPIELERS färbt den Ring - nicht die Wahrheit.
+    const flagged = (zone.flagged ?? []).length > 0;
+    const color = done ? (flagged ? PAL.amber : PAL.green) : PAL.cyan;
+    const pulse = 0.5 + Math.sin(t * (open ? 5 : 2.2) + radiusY) * 0.5;
+
     ctx.save();
-    ctx.strokeStyle = withAlpha(color, status ? 0.9 : 0.35 + pulse * 0.35);
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash(status ? [] : [4, 4]);
+    if (open) glow(ctx, cx, cy, radiusX * 2, color, 0.1 + pulse * 0.12);
+
+    ctx.strokeStyle = withAlpha(color, done ? 0.85 : 0.4 + pulse * 0.3);
+    ctx.lineWidth = done ? 2.5 : 2;
     ctx.beginPath();
-    ctx.ellipse(w / 2, y, figureH * 0.14, figureH * 0.075, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, radiusX, radiusY, 0, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.font = '10px "IBM Plex Mono", monospace';
+
+    ctx.strokeStyle = withAlpha(color, 0.16);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, radiusX * 0.72, radiusY * 0.72, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = withAlpha(color, 0.55);
+    ctx.lineWidth = 1.5;
+    for (const a of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      const sx = cx + Math.cos(a) * radiusX;
+      const sy = cy + Math.sin(a) * radiusY;
+      ctx.beginPath();
+      ctx.moveTo(sx + Math.cos(a) * 3, sy + Math.sin(a) * 3);
+      ctx.lineTo(sx + Math.cos(a) * 9, sy + Math.sin(a) * 9);
+      ctx.stroke();
+    }
+
+    if (open) {
+      const start = (t * 2.4) % (Math.PI * 2);
+      ctx.strokeStyle = withAlpha(color, 0.95);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, radiusX, radiusY, 0, start, start + Math.PI * 0.55);
+      ctx.stroke();
+    }
+
+    if (done) {
+      ctx.font = `${Math.round(radiusY * 1.3)}px "IBM Plex Mono", monospace`;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(flagged ? '!' : '✓', cx, cy);
+    }
+
+    // Die Beschriftung sitzt IMMER rechts vom Ring. Früher wechselte sie die
+    // Seite, sobald sich der Gast (und damit der Ring) bewegte - das flackerte.
+    ctx.font = '11px "IBM Plex Mono", monospace';
     ctx.fillStyle = withAlpha(color, 0.95);
     ctx.textAlign = 'left';
-    ctx.textAlign = 'right';
-    ctx.fillText(`[${cfg.key}] ${cfg.label}${status === 'hit' ? ' — TREFFER' : status === 'clear' ? ' — FREI' : ''}`,
-      w / 2 - figureH * 0.17, y + 4);
+    ctx.textBaseline = 'middle';
+    const note = done
+      ? (flagged ? `${(zone.flagged ?? []).length} BEANSTANDET` : 'ABGESCHLOSSEN')
+      : open ? 'AUSGELEERT' : `[${cfg.key}] ODER KLICKEN`;
+    const text = `${cfg.label} · ${note}`;
+    ctx.fillText(text, cx + radiusX + 12, cy);
     ctx.restore();
   }
+
+  return hits;
 }
 
-/* ---------------------------------------------------------------- */
+/**
+ * Alkoholtestgerät auf dem Tisch: zeigt nur den Wert und den aufgedruckten
+ * Grenzwert. Die Bewertung macht der Spieler.
+ */
+/** Startzeit je Messung, damit der Wert von 0 hochzählen kann. */
+const alcoAnim = new Map();
 
-function drawViewFrame(ctx, game, opts) {
-  const { rect, label, accent = PAL.red, sub } = opts;
-  const w = rect.w;
+function measuredValue(key, target, t) {
+  if (!alcoAnim.has(key)) alcoAnim.set(key, t);
+  if (alcoAnim.size > 40) alcoAnim.delete(alcoAnim.keys().next().value);
+  const elapsed = t - alcoAnim.get(key);
+  const dur = 1.8;
+  if (elapsed >= dur) return { value: target, running: false };
+  // Weiches Hochzählen mit leichtem Zittern, wie bei einem echten Gerät.
+  const p = elapsed / dur;
+  const eased = 1 - Math.pow(1 - p, 2.2);
+  const jitter = (1 - p) * 0.06 * Math.sin(t * 34);
+  return { value: Math.max(0, target * eased + jitter), running: true };
+}
 
-  // Kopfzeile der Ansicht (unter der HUD-Leiste)
-  const top = 74;
+function drawBreathalyzer(ctx, w, h, t, result, key) {
+  const dw = Math.min(220, w * 0.25);
+  const dh = dw * 0.5;
+  const x = Math.min(w * 0.62, w - dw - 24);
+  const y = h * 0.9 - dh - 4;
+
   ctx.save();
-  ctx.fillStyle = 'rgba(6,8,12,0.72)';
-  ctx.fillRect(0, top, w, 24);
-  ctx.font = '10px "IBM Plex Mono", monospace';
-  ctx.letterSpacing = '3px';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = accent;
-  ctx.textAlign = 'left';
-  ctx.fillText(label ?? '', 12, top + 12);
-  if (sub) {
-    ctx.fillStyle = withAlpha(PAL.grey, 0.9);
-    ctx.textAlign = 'right';
-    ctx.fillText(sub, w - 12, top + 12);
-  }
-  ctx.strokeStyle = withAlpha(accent, 0.35);
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, top + 24.5);
-  ctx.lineTo(w, top + 24.5);
+  // Gehäuse
+  ctx.fillStyle = '#232a35';
+  roundRect(ctx, x, y, dw, dh, 8);
+  ctx.fill();
+  ctx.strokeStyle = '#39414f';
+  ctx.lineWidth = 2;
+  roundRect(ctx, x, y, dw, dh, 8);
   ctx.stroke();
+
+  // Mundstück
+  ctx.fillStyle = '#c9d2df';
+  roundRect(ctx, x + dw * 0.42, y - dh * 0.22, dw * 0.16, dh * 0.24, 3);
+  ctx.fill();
+
+  // Display - der Wert läuft von 0 auf das Messergebnis hoch
+  const shown = measuredValue(key, result.promille, t);
+  const over = !shown.running && result.promille >= result.limit;
+  const dx = x + dw * 0.08;
+  const dy = y + dh * 0.2;
+  const dwi = dw * 0.56;
+  const dhi = dh * 0.6;
+  ctx.fillStyle = '#0b1410';
+  roundRect(ctx, dx, dy, dwi, dhi, 4);
+  ctx.fill();
+  ctx.strokeStyle = '#101c16';
+  ctx.stroke();
+
+  ctx.font = `${Math.round(dhi * 0.62)}px "Archivo Black", "Arial Black", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const live = shown.running;
+  ctx.fillStyle = live ? '#ffd479' : over ? '#ff6b6b' : '#7dffb0';
+  ctx.shadowColor = live ? PAL.amber : over ? PAL.red : PAL.green;
+  ctx.shadowBlur = 12;
+  ctx.fillText(shown.value.toFixed(1), dx + dwi * 0.46, dy + dhi * 0.52);
+  ctx.shadowBlur = 0;
+  ctx.font = `${Math.round(dhi * 0.26)}px "IBM Plex Mono", monospace`;
+  ctx.fillStyle = withAlpha('#7dffb0', 0.7);
+  ctx.fillText('‰', dx + dwi * 0.86, dy + dhi * 0.62);
+
+  // Aufgedruckter Grenzwert + Statuslampe
+  ctx.textAlign = 'left';
+  ctx.font = '9px "IBM Plex Mono", monospace';
+  ctx.fillStyle = PAL.grey;
+  ctx.fillText('GRENZWERT', x + dw * 0.68, y + dh * 0.3);
+  ctx.font = '13px "IBM Plex Mono", monospace';
+  ctx.fillStyle = PAL.amber;
+  ctx.fillText(`${result.limit.toFixed(1)} ‰`, x + dw * 0.68, y + dh * 0.5);
+
+  const blink = Math.sin(t * 6) > 0;
+  ctx.fillStyle = live
+    ? withAlpha(PAL.amber, blink ? 1 : 0.3)
+    : over
+      ? withAlpha(PAL.red, blink ? 1 : 0.35)
+      : withAlpha(PAL.green, 0.9);
+  ctx.beginPath();
+  ctx.arc(x + dw * 0.73, y + dh * 0.74, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = '8px "IBM Plex Mono", monospace';
+  ctx.fillStyle = PAL.grey;
+  ctx.fillText(live ? 'MESSUNG …' : 'ALCO-CHECK 4', x + dw * 0.8, y + dh * 0.77);
+
   ctx.restore();
 }
 

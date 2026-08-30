@@ -142,13 +142,14 @@ export function serializeState(game) {
     xp: state.xp,
     night: night ? {
       clock: night.clock,
+      quota: night.quota,
+      processed: night.processed,
       running: night.running,
       event: night.event,
       artist: night.artist,
       stats: night.stats,
       activeEffects: night.activeEffects,
       toasts: night.toasts,
-      radio: night.radio,
       queueLength: night.queue.length,
       queue: night.queue.slice(0, 9).map(viewGuest),
       airlockQueue: night.airlockQueue.map(viewGuest),
@@ -184,17 +185,40 @@ function viewGuest(guest) {
     patienceMax: guest.patienceMax,
     doorVerdict: guest.doorVerdict ?? null,
     // Nur, was man sehen kann - keine versteckten Verstösse.
-    truth: { drunk: guest.truth.drunk, vip: guest.truth.vip }
+    truth: {
+      drunk: guest.truth.drunk,
+      vip: guest.truth.vip,
+      hasBag: guest.truth.hasBag,
+      // Sichtbare Anzeichen gehören zum Bild, nicht zur versteckten Wahrheit.
+      impairmentSigns: guest.truth.impairmentSigns ?? []
+    }
   };
 }
 
 function viewStation(station) {
+  const checks = viewChecks(station.checks);
   return {
     id: station.id,
     guest: viewGuest(station.guest),
-    checks: station.checks,
-    patdown: station.patdown
+    checks,
+    patdown: station.patdown,
+    notes: station.notes,
+    // Übergriff: der Gast am anderen Rechner muss dieselben Tasten sehen.
+    aggro: station.aggro
   };
+}
+
+/**
+ * Die Wahrheit bleibt auf dem Host: weder die echten Ausweisfehler noch die
+ * Information, welche Aussage gelogen war, gehen ueber die Leitung.
+ */
+function viewChecks(checks) {
+  const out = { ...checks };
+  if (checks.id) out.id = { ...checks.id, faults: undefined };
+  if (checks.talk) {
+    out.talk = { ...checks.talk, said: (checks.talk.said ?? []).map((s) => ({ id: s.id, text: s.text })) };
+  }
+  return out;
 }
 
 /**
@@ -220,13 +244,14 @@ export function applySnapshot(shadow, data) {
   const n = data.night;
   shadow.state.night = {
     clock: n.clock,
+    quota: n.quota,
+    processed: n.processed,
     running: n.running,
     event: n.event,
     artist: n.artist,
     stats: n.stats,
     activeEffects: n.activeEffects,
     toasts: n.toasts,
-    radio: n.radio,
     queue: n.queue,
     queueLength: n.queueLength,
     airlockQueue: n.airlockQueue,

@@ -5,10 +5,13 @@
  */
 
 import {
-  ARCHETYPES, ITEMS, ID_ISSUES, TUNING, FIRST_NAMES, LAST_NAMES, GAME_DATE
+  ARCHETYPES, ITEMS, ID_ISSUES, TUNING, FIRST_NAMES, LAST_NAMES, GAME_DATE,
+  ZONES, IMPAIRMENT_SIGNS
 } from '../data/config.js';
-import { LINES, PERSONALITIES } from '../data/dialogue.js';
+import { difficultyProfile } from './difficulty.js';
+import { LINES, NAME_LINES, PERSONALITIES } from '../data/dialogue.js';
 import { randRange, randInt, pick, weightedPick, chance, clamp } from '../core/rng.js';
+import { buildStatements } from './statements.js';
 
 let guestSerial = 0;
 
@@ -44,17 +47,59 @@ export function createGuest(rng, ctx = {}) {
     if (!idIssues.includes(issue)) idIssues.push(issue);
   }
 
-  // Gegenstaende
-  const items = [];
-  if (chance(rng, 0.75)) items.push(pick(rng, ITEMS.filter((i) => !i.forbidden)));
+  const profile = difficultyProfile(nightIndex);
+
+  // --- Gepäck: nur wer eine Tasche dabei hat, hat auch eine Zone dafür ---
+  const hasBag = chance(rng, archetype.id === 'crew' ? 0.8 : 0.42);
+  const zoneIds = ZONES.filter((z) => !z.needsBag || hasBag).map((z) => z.id);
+
+  // --- Verbotener Gegenstand (höchstens einer pro Gast) ---
   const contrabandChance = archetype.contrabandChance * (event?.trouble ?? 1) + risk * 0.15;
   let contraband = null;
+  let contrabandZone = null;
   if (chance(rng, clamp(contrabandChance, 0, 0.85))) {
-    const pool = ITEMS.filter((i) => i.forbidden && i.severity <= (risk > 0.6 ? 3 : 2));
-    contraband = weightedPick(rng, pool, (i) => 4 - i.severity);
-    items.push(contraband);
+    const maxSeverity = risk > 0.6 ? 3 : 2;
+    const pool = ITEMS.filter((i) => i.forbidden && i.severity <= maxSeverity
+      && i.zones.some((z) => zoneIds.includes(z)));
+    if (pool.length) {
+      contraband = weightedPick(rng, pool, (i) => 4 - i.severity);
+      contrabandZone = pick(rng, contraband.zones.filter((z) => zoneIds.includes(z)));
+    }
   }
-  const zone = pick(rng, ['jacket', 'pockets', 'bag']);
+
+  // --- Was in jeder Zone steckt (harmloses Zeug als Ablenkung) ---
+  const carried = {};
+  const used = new Set();
+  for (const zone of ZONES) {
+    if (!zoneIds.includes(zone.id)) continue;
+    // Niemand hat zwei Feuerzeuge dabei: pro Gast jedes Ding nur einmal.
+    const harmless = ITEMS.filter(
+      (i) => !i.forbidden && i.zones.includes(zone.id) && !used.has(i.id));
+    const count = Math.min(
+      harmless.length,
+      randInt(rng, zone.capacity[0], zone.capacity[1]) + profile.decoyBonus);
+    const picked = [];
+    for (let i = 0; i < count; i++) {
+      const pool = harmless.filter((it) => !picked.includes(it));
+      if (!pool.length) break;
+      const item = pick(rng, pool);
+      used.add(item.id);
+      picked.push(item);
+    }
+    if (contraband && contrabandZone === zone.id) {
+      picked.splice(randInt(rng, 0, picked.length), 0, contraband);
+    }
+    carried[zone.id] = picked;
+  }
+  const items = Object.values(carried).flat();
+
+  // --- Substanzeinfluss: ab der vierten Nacht ein eigenes Thema ---
+  const impaired = chance(rng, profile.impairedChance * (1 + risk))
+    ? clamp(randRange(rng, 0.45, 1) * (archetype.id === 'trouble' ? 1.1 : 1), 0, 1)
+    : 0;
+  const signs = IMPAIRMENT_SIGNS
+    .filter((sign) => impaired >= sign.min && chance(rng, profile.signClarity))
+    .map((sign) => sign.id);
 
   const vip = chance(rng, archetype.vip * (event?.vip ?? 1) * 0.6) || archetype.id === 'vip';
   const spendBase = randRange(rng, archetype.spend[0], archetype.spend[1]);
@@ -108,8 +153,17 @@ export function createGuest(rng, ctx = {}) {
       vip,
       spend,
       items,
+      carried,
+      hasBag,
+      zoneIds,
       contraband,
-      contrabandZone: contraband ? zone : null,
+      contrabandZone,
+      impaired,
+      impairmentSigns: signs,
+      /** Wird erst wahr, wenn der Gast tatsächlich handgreiflich wird. */
+      aggressive: false,
+      /** Was er behauptet, wenn man ihn anspricht (siehe statements.js). */
+      statements: [],
       repValue: archetype.rep
     },
 
@@ -142,6 +196,8 @@ export function createGuest(rng, ctx = {}) {
   };
 
   guest.difficulty = nightIndex;
+  // Was der Gast behauptet, haengt an seiner Wahrheit - also erst jetzt bauen.
+  guest.truth.statements = buildStatements(rng, guest);
   return guest;
 }
 
@@ -189,6 +245,12 @@ function choosePersonality(rng, archetype) {
 }
 
 /** Zufällige Zeile passend zur Situation. */
+/** Der Gast nennt seinen echten Namen - die Antwort auf ANSPRECHEN. */
+export function guestNameLine(rng, guest) {
+  const set = NAME_LINES[guest.personality] ?? NAME_LINES.polite;
+  return pick(rng, set).replace('{name}', guest.name);
+}
+
 export function guestLine(rng, guest, situation) {
   const set = LINES[guest.personality] ?? LINES.polite;
   const pool = set[situation] ?? set.talk;
@@ -211,7 +273,12 @@ export function violationsOf(guest) {
       severity: t.contraband.severity
     });
   }
+  if ((t.impaired ?? 0) >= 0.6) {
+    v.push({ id: 'impaired', label: 'Steht sichtbar unter Einfluss', severity: 2 });
+  }
   if (t.blacklisted) v.push({ id: 'blacklist', label: 'Hausverbot', severity: 2 });
+  // Wer handgreiflich wird, hat sich die Entscheidung selbst abgenommen.
+  if (t.aggressive) v.push({ id: 'aggressive', label: 'Übergriff an der Tür', severity: 3 });
   return v;
 }
 
@@ -224,6 +291,9 @@ export function visibleTells(guest, talentStreet = 0) {
   const tells = [];
   const t = guest.truth;
   if (t.drunk > 0.55) tells.push('schwankt');
+  for (const sign of t.impairmentSigns ?? []) {
+    tells.push(IMPAIRMENT_SIGNS.find((s) => s.id === sign)?.label ?? sign);
+  }
   if (t.risk > 0.65 && talentStreet >= 1) tells.push('unruhig');
   if (t.contraband && talentStreet >= 2 && t.contraband.severity >= 2) tells.push('greift staendig zur Jacke');
   if (t.underage && talentStreet >= 3) tells.push('wirkt sehr jung');

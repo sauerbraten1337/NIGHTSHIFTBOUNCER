@@ -4,16 +4,19 @@
  * Das Spiel sagt nicht, was falsch ist. Der Spieler vergleicht selbst:
  * Foto gegen Gesicht, Name gegen Aussage, Geburtsdatum gegen heute,
  * Ablaufdatum gegen heute, Hologramm auf Vollständigkeit.
- * Ein Klick auf ein Feld heisst: "hier stimmt etwas nicht".
+ * Ein Klick auf ein Feld schaltet den Status um, den der Spieler vergibt:
+ *   nichts -> NICHT KORREKT -> IN ORDNUNG -> nichts
+ * Das Spiel bewertet nichts davon, es notiert nur.
  */
 
 import { escapeHtml } from './hud.js';
 import { drawPortrait } from '../render/figure.js';
-import { ID_FIELDS, todayString, ageFromBirth, fieldLabel } from '../systems/identity.js';
+import { ID_FIELDS, todayString, ageFromBirth, claimedFaults } from '../systems/identity.js';
 import { TUNING } from '../data/config.js';
 
 export function createIdCard(game, { root, roleId = 'bouncer' } = {}) {
   const el = root ?? document.getElementById('idcard');
+  const wrap = document.getElementById('idhand') ?? el;
   let renderedFor = null;
   let renderedMarks = '';
   const api = { el, roleId };
@@ -32,19 +35,21 @@ export function createIdCard(game, { root, roleId = 'bouncer' } = {}) {
 
     if (!night || !inspection || !guest) {
       if (renderedFor !== null) {
-        el.classList.add('hidden');
+        wrap.classList.add('hidden');
         el.innerHTML = '';
         renderedFor = null;
       }
       return;
     }
 
-    const markKey = Object.entries(inspection.marks).map(([k, v]) => k + v).join('|');
+    const said = station.checks.talk?.said ?? [];
+    const markKey = Object.entries(inspection.marks).map(([k, v]) => k + v).join('|')
+      + `|said${said.length}`;
     if (renderedFor === guest.id && renderedMarks === markKey) return;
     renderedFor = guest.id;
     renderedMarks = markKey;
 
-    el.classList.remove('hidden');
+    wrap.classList.remove('hidden');
     el.innerHTML = template(game, guest, inspection, station);
     paintPhoto(el, guest);
   }
@@ -57,7 +62,7 @@ function template(game, guest, inspection, station) {
   const doc = guest.doc;
   const age = ageFromBirth(doc.birth);
   const said = station.checks.talk?.realName;
-  const hint = inspection.hint;
+  const claimed = claimedFaults(inspection);
 
   return `
     <div class="idc-head">
@@ -83,7 +88,7 @@ function template(game, guest, inspection, station) {
         <div class="idc-row ${mark(inspection, 'birth')}" data-field="birth" title="Alter berechnen, auf Manipulation achten">
           <span class="k">GEBOREN</span>
           <span class="v ${doc.tampered ? 'tampered' : ''}">${birthMarkup(doc)}</span>
-          <span class="age ${age < TUNING.minAge ? 'bad' : ''}">${age} J.</span>${badge(inspection, 'birth')}
+          <span class="age">${age} J.</span>${badge(inspection, 'birth')}
         </div>
         <div class="idc-row ${mark(inspection, 'expiry')}" data-field="expiry" title="Gegen das heutige Datum prüfen">
           <span class="k">GÜLTIG BIS</span>
@@ -98,16 +103,33 @@ function template(game, guest, inspection, station) {
       </div>
     </div>
 
+    ${statementBlock(station)}
+
     <div class="idc-foot">
       ${said ? `<span class="idc-said">GAST SAGT: <b>${escapeHtml(said)}</b></span>`
              : '<span class="idc-said dim">Namen erfragen: ANSPRECHEN</span>'}
-      ${hint === 'any' ? '<span class="idc-hint">GERÄT: DOKUMENT PRÜFEN</span>'
-        : hint ? `<span class="idc-hint">GERÄT: ${escapeHtml(fieldLabel(hint))}</span>` : ''}
-      ${inspection.found.length
-        ? `<span class="idc-found">${inspection.found.length} AUFFÄLLIGKEIT(EN) MARKIERT</span>`
-        : '<span class="idc-said dim">Feld anklicken = beanstanden</span>'}
+      ${claimed.length
+        ? `<span class="idc-found">${claimed.length} FELD(ER) ALS NICHT KORREKT NOTIERT</span>`
+        : '<span class="idc-said dim">Feld anklicken: nicht korrekt · in Ordnung · leer</span>'}
     </div>
   `;
+}
+
+/**
+ * Das Protokoll des Gesprächs. Es steht hier, damit man die Aussagen mit der
+ * Karte daneben vergleichen kann - ob eine davon gelogen ist, sagt niemand.
+ */
+function statementBlock(station) {
+  const talk = station.checks.talk;
+  const said = talk?.said ?? [];
+  if (!said.length) return '';
+  return `
+    <div class="idc-statements">
+      <div class="idc-stmt-head">AUSSAGEN${talk.moreToSay ? ' · REDET NOCH' : ''}</div>
+      <ul>
+        ${said.map((s) => `<li>„${escapeHtml(s.text)}“</li>`).join('')}
+      </ul>
+    </div>`;
 }
 
 function birthMarkup(doc) {
@@ -117,15 +139,19 @@ function birthMarkup(doc) {
   return `<span class="digit-off">${y}</span>-${m}-${d}`;
 }
 
+/**
+ * Die Farbe zeigt die Einschätzung des SPIELERS:
+ * rot = er hält das Feld für nicht korrekt, grün = er hält es für in Ordnung.
+ */
 function mark(inspection, field) {
   const m = inspection.marks[field];
-  return m === 'hit' ? 'hit' : m === 'miss' ? 'miss' : '';
+  return m === 'suspect' ? 'suspect' : m === 'fine' ? 'fine' : '';
 }
 
 function badge(inspection, field) {
   const m = inspection.marks[field];
-  if (m === 'hit') return '<span class="idc-badge hit">BEANSTANDET</span>';
-  if (m === 'miss') return '<span class="idc-badge miss">OK</span>';
+  if (m === 'suspect') return '<span class="idc-badge suspect">NICHT KORREKT</span>';
+  if (m === 'fine') return '<span class="idc-badge fine">IN ORDNUNG</span>';
   return '';
 }
 

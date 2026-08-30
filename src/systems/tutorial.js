@@ -7,9 +7,10 @@
  */
 
 import { createGuest } from './guests.js';
+import { buildStatements } from './statements.js';
 import { insertGuest } from './queue.js';
-import { addToast, addRadio, isSolo } from './state.js';
-import { ITEMS } from '../data/config.js';
+import { addToast, isSolo } from './state.js';
+import { ITEMS, ZONES, itemById } from '../data/config.js';
 
 /** Baut einen Gast mit genau den Eigenschaften, die der Schritt zeigen soll. */
 function scripted(game, spec = {}) {
@@ -29,6 +30,16 @@ function scripted(game, spec = {}) {
   guest.truth.blacklisted = false;
   guest.truth.contraband = null;
   guest.truth.contrabandZone = null;
+  guest.truth.impaired = 0;
+  guest.truth.impairmentSigns = [];
+  // Saubere, überschaubare Taschen: nur harmlose Sachen.
+  guest.truth.hasBag = !!spec.bag;
+  guest.truth.zoneIds = ZONES.filter((z) => !z.needsBag || spec.bag).map((z) => z.id);
+  guest.truth.carried = {
+    jacket: [itemById('phone'), itemById('lighter')].filter(Boolean),
+    pockets: [itemById('keys'), itemById('gum')].filter(Boolean),
+    ...(spec.bag ? { bag: [itemById('bottle'), itemById('charger')].filter(Boolean) } : {})
+  };
   guest.doc.name = guest.name;
   guest.doc.tampered = false;
   guest.doc.marksOk = true;
@@ -39,6 +50,8 @@ function scripted(game, spec = {}) {
   guest.patience = guest.patienceMax = 999;
 
   spec.build?.(guest);
+  // Die Aussagen muessen zur (jetzt ueberschriebenen) Wahrheit passen.
+  guest.truth.statements = buildStatements(game.rng, guest);
   guest.tutorial = spec.id ?? true;
   return guest;
 }
@@ -53,9 +66,11 @@ const STEPS = [
     id: 'welcome',
     title: 'SCHICHTBEGINN',
     body: 'Du stehst an der Tür des NULLWERK. Vor dir die Strasse, hinter dir der Club. ' +
-      'Was du reinlässt, ist deine Verantwortung. Der erste Gast kommt gleich.',
+      'Was du reinlässt, ist deine Verantwortung. Unten rechts liegt dein Block: ' +
+      'Seite 1 die Checkliste zum selbst Abhaken, Seite 2 dein Befund. ' +
+      'Oben links steht, wie viele Gäste heute auf der Liste stehen - danach ist Schluss.',
     setup(game) {
-      addRadio(game.state.night, 'CHEF', 'Erste Schicht. Nimm dir Zeit, heute ist wenig los.');
+      addToast(game.state.night, 'CHEF: ERSTE SCHICHT - HEUTE IST WENIG LOS', 'info', 5);
     },
     wait: (game, elapsed) => elapsed > 3.5
   },
@@ -75,7 +90,8 @@ const STEPS = [
     title: 'SELBST PRÜFEN',
     body: 'Der Ausweis liegt links unten - gross und lesbar. Prüfe ihn selbst: ' +
       'Passt das Foto zum Gast? Ist er alt genug? Ist das Dokument noch gültig? ' +
-      'Ein Klick auf ein Feld beanstandet es. Hier ist alles in Ordnung.',
+      'Ein Klick auf ein Feld schaltet deinen Vermerk um: nicht korrekt, in Ordnung, leer. ' +
+      'Das Spiel sagt dir nicht, ob du richtig liegst - du entscheidest. Hier ist alles sauber.',
     wait: (game, elapsed) => elapsed > 6
   },
   {
@@ -91,7 +107,8 @@ const STEPS = [
     id: 'expired',
     title: 'ABGELAUFEN',
     body: 'Nächster Gast. Sieh dir "GÜLTIG BIS" genau an und vergleiche es mit dem heutigen Datum ' +
-      'oben auf der Karte. Wenn etwas nicht stimmt: Feld anklicken, dann abweisen.',
+      'oben auf der Karte. Wenn etwas nicht stimmt: Feld als NICHT KORREKT vermerken, dann abweisen. ' +
+      'Jede zutreffende Beanstandung bringt am Ende der Nacht Prämie.',
     hint: ['X', 'ABWEISEN'],
     setup(game) {
       insertGuest(game, scripted(game, {
@@ -105,7 +122,9 @@ const STEPS = [
     id: 'age',
     title: 'ZU JUNG',
     body: 'Rechne beim Geburtsdatum mit. Neben dem Datum steht das errechnete Alter - ' +
-      'aber verlass dich nicht blind darauf, manche Dokumente sind manipuliert.',
+      'aber verlass dich nicht blind darauf, manche Dokumente sind manipuliert. ' +
+      'Das Mindestalter und alles Verbotene stehen links in der Hausordnung: ' +
+      'Maus auf den Pfeil am linken Rand.',
     setup(game) {
       insertGuest(game, scripted(game, {
         id: 'underage', personality: 'nervous',
@@ -122,7 +141,10 @@ const STEPS = [
     id: 'talkUnlock',
     title: 'ANSPRECHEN FREIGESCHALTET',
     body: 'Manche Ausweise gehören jemand anderem. Sprich den Gast an - er nennt seinen Namen. ' +
-      'Stimmt der nicht mit dem Dokument überein, hast du ihn.',
+      'Stimmt der nicht mit dem Dokument überein, hast du ihn. Frag ruhig mehrmals: ' +
+      'jede Ansprache lockt eine weitere Aussage heraus, und die stehen unter dem Ausweis. ' +
+      'Alter, Gültigkeit, Taschen, Zustand - was er sagt, muss zum Rest passen. Tut es das nicht, ' +
+      'trag "Aussage" auf Seite 2 als "entspricht nicht" ein.',
     hint: ['2', 'ANSPRECHEN'],
     unlock: 'talk',
     setup(game) {
@@ -176,23 +198,30 @@ const STEPS = [
     id: 'security',
     title: (game) => isSolo(game.state) ? 'KONTROLLE' : 'DIE SCHLEUSE',
     body: (game) => isSolo(game.state)
-      ? 'Ein sauberer Ausweis heisst nicht, dass alles sauber ist. Scanne den Gast (3) und ' +
-        'taste ihn ab (4, dann J/K/L für die Zonen). Der Alkoholtest liegt auf 5.'
+      ? 'Ein sauberer Ausweis heisst nicht, dass alles sauber ist. Taste den Gast ab (3) und ' +
+        'wähle eine Zone: J Jacke, K Hosentaschen, L Tasche - er holt sie hervor und leert sie aus. ' +
+        'Klick auf das, was nicht reindarf, und schliess die Zone dann ab. Der Alkotest (4) ' +
+        'zeigt nur den Wert; den Grenzwert liest du am Gerät ab. Deinen Befund trägst du ' +
+        'selbst auf Seite 2 des Zettels unten rechts ein.'
       : 'Alles, was du durchlässt, landet in der Schleuse - innen, aber noch nicht im Club. ' +
-        'Dort scannt die Security (7), tastet ab (8, Zonen J/K/L) und testet auf Alkohol (9). ' +
-        'Erst sie entscheidet mit ENTER über den Einlass.',
-    unlock: ['scan', 'search', 'alcohol'],
+        'Dort tastet die Security ab (7, Zonen J/K/L) und testet auf Alkohol (8). ' +
+        'Was aus einer Zone kommt, liegt gross auf dem Tisch: anklicken, was nicht reindarf, ' +
+        'dann die Zone abschliessen. ' +
+        'Erst die Security entscheidet mit ENTER über den Einlass.',
+    unlock: ['search', 'alcohol'],
     setup(game) {
       insertGuest(game, scripted(game, {
-        id: 'contraband', personality: 'nervous',
+        id: 'contraband', personality: 'nervous', bag: true,
         build: (g) => {
-          g.truth.contraband = ITEMS.find((i) => i.id === 'spray');
-          g.truth.contrabandZone = 'jacket';
-          g.truth.items = [g.truth.contraband];
+          const spray = ITEMS.find((i) => i.id === 'spray');
+          g.truth.contraband = spray;
+          g.truth.contrabandZone = 'bag';
+          g.truth.carried.bag = [itemById('bottle'), spray, itemById('mints')].filter(Boolean);
+          g.truth.items = Object.values(g.truth.carried).flat();
           g.truth.risk = 0.6;
         }
       }));
-      addToast(game.state.night, 'NEU: SCAN · ABTASTEN · ALKOTEST', 'good', 5);
+      addToast(game.state.night, 'NEU: ABTASTEN · ALKOTEST', 'good', 5);
     },
     wait: (game) => decisions(game) >= 7
   },
@@ -201,8 +230,8 @@ const STEPS = [
     title: 'DIE SCHLANGE WARTET',
     body: (game) => 'Jede Kontrolle kostet Zeit, und die Leute draussen werden ungeduldig. ' +
       'Wer zu lange steht, geht - das kostet Umsatz und Ruf. Mit der Taste ' +
-      (isSolo(game.state) ? '6' : '3') + ' redest du mit der Schlange und verschaffst dir Luft.',
-    hint: (game) => [isSolo(game.state) ? '6' : '3', 'SCHLANGE BERUHIGEN'],
+      (isSolo(game.state) ? '5' : '3') + ' redest du mit der Schlange und verschaffst dir Luft.',
+    hint: (game) => [isSolo(game.state) ? '5' : '3', 'SCHLANGE BERUHIGEN'],
     unlock: 'calm',
     setup(game) {
       const night = game.state.night;
@@ -221,10 +250,10 @@ const STEPS = [
       'VIPs, Zwischenfälle. Verdiene Geld, halte den Ruf hoch - und bau den Laden aus.',
     setup(game) {
       const state = game.state;
-      state.unlocks = { id: true, talk: true, scan: true, search: true, alcohol: true, calm: true };
+      state.unlocks = { id: true, talk: true, search: true, alcohol: true, calm: true };
       state.tutorialDone = true;
       state.night.tutorial.blockSpawns = false;
-      addRadio(state.night, 'CHEF', 'Läuft. Ab jetzt bist du dran.');
+      addToast(state.night, 'CHEF: LÄUFT. AB JETZT BIST DU DRAN.', 'good', 5);
     },
     wait: (game, elapsed) => elapsed > 6
   }
@@ -240,7 +269,7 @@ export function startTutorial(game) {
     finished: false,
     step: null
   };
-  game.state.unlocks = { id: true, talk: false, scan: false, search: false, alcohol: false, calm: false };
+  game.state.unlocks = { id: true, talk: false, search: false, alcohol: false, calm: false };
   advance(game);
 }
 

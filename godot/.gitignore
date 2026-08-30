@@ -1,0 +1,17 @@
+# Godot 4: Import-Cache und lokale Editor-Einstellungen gehören nicht ins Repo.
+.godot/
+/android/
+/build/
+/export/
+
+# Export-Ausgaben
+*.exe
+*.pck
+*.zip
+*.x86_64
+*.app/
+
+# Lokale Editor-Overrides
+override.cfg
+
+# .uid-Dateien NICHT ignorieren - sie halten die Skriptreferenzen zusammen.

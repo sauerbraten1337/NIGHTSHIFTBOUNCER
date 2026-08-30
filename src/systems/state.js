@@ -6,6 +6,9 @@
 
 import { TUNING, UPGRADES, CLUB_TIERS, RANKS, rolesFor, AIRLOCK_CAPACITY } from '../data/config.js';
 import { clamp } from '../core/rng.js';
+import { emptyNotes } from './notes.js';
+import { cheats } from './admin.js';
+import { createCharacter } from './character.js';
 
 export function createInitialState(mode = 'solo') {
   const upgrades = {};
@@ -25,18 +28,36 @@ export function createInitialState(mode = 'solo') {
     clubsOwned: 1,
     expandUnlocked: false,
     bookedArtist: null,
+    /** Der eigene Türsteher - im Editor erstellt, am Kleiderschrank änderbar. */
+    character: createCharacter(),
     tutorialDone: false,
     /** Freischaltungen: das Tutorial gibt Mechaniken nacheinander frei. */
-    unlocks: { id: true, talk: false, scan: false, search: false, alcohol: false, calm: false },
+    unlocks: { id: true, talk: false, search: false, alcohol: false, calm: false },
     lifetime: { guests: 0, admitted: 0, rejected: 0, revenue: 0, incidents: 0, nights: 0 },
     night: null,
     log: []
   };
 }
 
+/**
+ * Wie viele Gaeste muessen in dieser Nacht abgefertigt werden?
+ * Die Schicht endet nicht nach der Uhr, sondern wenn die Liste leer ist.
+ */
+export function guestQuota(state) {
+  const n = Math.max(0, state.nightIndex - 1);
+  return Math.min(
+    TUNING.guestsPerNightMax,
+    TUNING.guestsPerNight + n * TUNING.guestsPerNightGrowth
+  );
+}
+
 /** Zustand einer laufenden Nacht. */
-export function createNightState(event, artist, seed, mode = 'solo') {
+export function createNightState(event, artist, seed, mode = 'solo', quota = TUNING.guestsPerNight) {
   return {
+    /** Schichtplan statt Uhr: so viele Gaeste sind zu pruefen. */
+    quota,
+    processed: 0,
+
     seed,
     mode,
     event,
@@ -58,29 +79,43 @@ export function createNightState(event, artist, seed, mode = 'solo') {
       airlock: newStation('airlock')
     },
 
+    /**
+     * Ab welchem abgearbeiteten Gast spaetestens jemand ausrastet?
+     * Genau ein garantierter Uebergriff pro Nacht - startNight wuerfelt aus,
+     * wann er faellig wird (siehe systems/aggression.js).
+     */
+    forcedAttackAt: 0,
+
     spawnCooldown: 0.25,
     randomEventCooldown: 40,
     activeEffects: [],
     stats: {
       arrived: 0, admitted: 0, rejected: 0, left: 0, passed: 0,
       revenue: 0, entry: 0, bar: 0, incidents: 0, vips: 0,
-      correct: 0, mistakes: 0, verified: 0, catches: 0, fines: 0, artistFee: 0
+      correct: 0, mistakes: 0, verified: 0, catches: 0, fines: 0, artistFee: 0,
+      /** Selbst gefundene Unregelmaessigkeiten (Ausweis, Sachen, Alkohol). */
+      findings: 0, falseAlarms: 0, overlooked: 0, findingPay: 0,
+      /** Uebergriffe: versucht, abgewehrt, durchgekommen. */
+      attacks: 0, defended: 0, attacksLanded: 0, defensePay: 0
     },
     repDelta: 0,
-    toasts: [],
-    radio: []
+    toasts: []
   };
 }
 
 export function newStation(id) {
-  return { id, guest: null, checks: emptyChecks(), patdown: null };
+  return {
+    id, guest: null, checks: emptyChecks(), patdown: null, notes: emptyNotes(),
+    /** Laufender Uebergriff (siehe systems/aggression.js). */
+    aggro: null,
+    aggroCooldown: 2
+  };
 }
 
 export function emptyChecks() {
   return {
     id: null,        // Inspection-Objekt (siehe identity.js)
     talk: null,      // { line, realName, hint, moodHint }
-    scan: null,      // { ok, risk, blacklisted, ... }
     search: null,    // { done, found, text }
     alcohol: null,   // { value, promille, overLimit }
     verified: false,
@@ -148,6 +183,8 @@ export function nextRank(state) {
 
 /** Multiplikator für Aktionsdauer (kleiner = schneller). */
 export function actionSpeed(state) {
+  // Admin-Testhilfe: Kontrollen laufen praktisch ohne Wartezeit durch.
+  if (cheats.unlocked && cheats.fastActions) return 0.05;
   const talent = state.talents.scanner * 0.12;
   const scanner = upgradeLevel(state, 'scanner') >= 2 ? 0.18 : 0;
   const door = upgradeLevel(state, 'door') >= 1 ? 0.08 : 0;
@@ -198,10 +235,4 @@ export function addToast(night, text, kind = 'info', ttl = 3.4) {
   if (!night) return;
   night.toasts.push({ text, kind, ttl, life: ttl });
   if (night.toasts.length > 6) night.toasts.shift();
-}
-
-export function addRadio(night, speaker, text) {
-  if (!night) return;
-  night.radio.unshift({ speaker, text, life: 7 });
-  if (night.radio.length > 5) night.radio.length = 5;
 }

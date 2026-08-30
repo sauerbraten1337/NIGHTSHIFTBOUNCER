@@ -9,36 +9,125 @@
 import { violationsOf } from './guests.js';
 import { admitRevenue, plannedBarSpend, earn, fine, incidentCost } from './economy.js';
 import { changeReputation } from './reputation.js';
-import { incidentChance } from './security.js';
-import { addToast, addRadio, pushLog, isSolo } from './state.js';
+import { incidentChance, scorePatdown } from './security.js';
+import { addToast, pushLog, isSolo } from './state.js';
+import { emptyNotes, reportedProblems } from './notes.js';
 import { moveToAirlock } from './queue.js';
-import { inspectionVerdict } from './identity.js';
+import { inspectionVerdict, scoreInspection } from './identity.js';
 import { TUNING } from '../data/config.js';
 import { chance } from '../core/rng.js';
 
 /**
- * Koop-Verifikation: das Urteil des Bouncers (Ausweisprüfung) gegen den Befund
- * der Security (Scan/Abtasten).
+ * Koop-Verifikation: das Urteil der Tür (Ausweisprüfung) gegen den Befund der
+ * Schleuse (Abtasten und Alkoholtest). Zwei Augenpaare, ein Ergebnis.
  */
 export function coopVerification(guest, airlockChecks) {
   const doorVerdict = guest?.doorVerdict;
-  if (!doorVerdict || !airlockChecks?.scan) return { state: 'none' };
-  if (airlockChecks.scan.offline || airlockChecks.scan.ok === null) return { state: 'none' };
-  const securityClean = airlockChecks.scan.ok !== false && !airlockChecks.search?.found;
+  if (!doorVerdict || !doorVerdict.checked) return { state: 'none' };
+  // Die Schleuse hat erst dann ein belastbares Urteil, wenn sie fertig ist.
+  const searched = airlockChecks?.search?.done;
+  const tested = !!airlockChecks?.alcohol;
+  if (!searched || !tested) return { state: 'none' };
+
+  const securityClean = !(airlockChecks.search.flagged?.length)
+    && airlockChecks.alcohol.promille < airlockChecks.alcohol.limit;
   if (doorVerdict.clean === securityClean) return { state: 'verified', clean: securityClean };
   return { state: 'conflict', doorClean: doorVerdict.clean, securityClean };
 }
 
-/** Solo-Variante: ID-Prüfung und Scan an derselben Station. */
+/**
+ * Solo: Es gibt kein zweites Augenpaar. Wer aber wirklich alles prüft -
+ * Ausweis, alle Zonen, Alkoholtest - arbeitet nachweislich gründlich.
+ */
 export function soloVerification(checks) {
-  if (!checks.id || !checks.scan) return { state: 'none' };
-  if (checks.scan.offline || checks.scan.ok === null) return { state: 'none' };
-  const idClean = inspectionVerdict(checks.id).clean;
-  const scanClean = checks.scan.ok !== false;
-  return idClean === scanClean ? { state: 'verified', clean: idClean } : { state: 'conflict' };
+  if (!checks.id || !checks.search?.done || !checks.alcohol) return { state: 'none' };
+  return { state: 'verified', clean: inspectionVerdict(checks.id).clean };
 }
 
 /* ------------------------------------------------------------------ */
+
+/**
+ * Was hat der Spieler selbst gefunden?
+ *
+ * Erst hier - nach der Entscheidung - vergleicht das Spiel die Angaben des
+ * Spielers mit der Wahrheit. Waehrend der Kontrolle bekommt er dazu nichts
+ * zu sehen. Jede zutreffende Beanstandung bringt am Ende der Nacht Geld.
+ */
+export function collectFindings(guest, station) {
+  const checks = station.checks;
+  const notes = station.notes ?? emptyNotes();
+  const hits = [];
+  const wrong = [];
+  const missed = [];
+
+  // Ausweis: die vom Spieler als "nicht korrekt" markierten Felder.
+  if (checks.id) {
+    const s = scoreInspection(checks.id, guest);
+    for (const f of s.hits) hits.push({ kind: 'id', label: f });
+    for (const f of s.wrong) wrong.push({ kind: 'id', label: f });
+    for (const f of s.missed) missed.push({ kind: 'id', label: f });
+  }
+
+  // Abtasten: die vom Spieler beanstandeten Gegenstände.
+  if (station.patdown) {
+    const s = scorePatdown(station.patdown, guest);
+    for (const f of s.hits) hits.push({ kind: 'item', label: f.item.label });
+    for (const f of s.wrong) wrong.push({ kind: 'item', label: f.item.label });
+    for (const f of s.missed) missed.push({ kind: 'item', label: f.item.label });
+  }
+
+  // Notizzettel: der Spieler hat den Alkoholwert selbst als zu hoch notiert.
+  const problems = reportedProblems(notes);
+  if (checks.alcohol) {
+    const over = checks.alcohol.promille >= checks.alcohol.limit;
+    const noted = problems.includes('alcohol');
+    if (noted && over) hits.push({ kind: 'alcohol', label: 'Alkoholwert' });
+    else if (noted && !over) wrong.push({ kind: 'alcohol', label: 'Alkoholwert' });
+    else if (!noted && over) missed.push({ kind: 'alcohol', label: 'Alkoholwert' });
+  }
+
+  // Aussage: nur was der Gast wirklich gesagt hat, zaehlt. Wer nie
+  // angesprochen hat, kann hier weder treffen noch etwas uebersehen.
+  const said = checks.talk?.said ?? [];
+  const lies = said.filter((s) => s.lie);
+  if (problems.includes('statement')) {
+    if (lies.length) hits.push({ kind: 'statement', label: 'Falsche Aussage' });
+    else wrong.push({ kind: 'statement', label: 'Aussage' });
+  } else if (lies.length) {
+    missed.push({ kind: 'statement', label: 'Falsche Aussage' });
+  }
+
+  // Zustand der Person: nur als Angabe wertbar, wenn der Gast wirklich
+  // beeintraechtigt ist.
+  if (problems.includes('person')) {
+    if (guest.truth.impaired > 0.5 || guest.truth.drunk > 0.6) {
+      hits.push({ kind: 'person', label: 'Zustand der Person' });
+    } else {
+      wrong.push({ kind: 'person', label: 'Zustand der Person' });
+    }
+  }
+
+  return { hits, wrong, missed };
+}
+
+/** Findings verbuchen und die Praemie gutschreiben. */
+function bookFindings(game, guest, station) {
+  const { state } = game;
+  const night = state.night;
+  const score = collectFindings(guest, station);
+
+  night.stats.findings += score.hits.length;
+  night.stats.falseAlarms += score.wrong.length;
+  night.stats.overlooked += score.missed.length;
+
+  const pay = score.hits.length * TUNING.findingBonus;
+  if (pay > 0) {
+    night.stats.findingPay += pay;
+    earn(state, pay, 'finding');
+    addToast(night, `${score.hits.length} UNREGELMÄSSIGKEIT${score.hits.length > 1 ? 'EN' : ''} +${pay} EUR`, 'good');
+  }
+  return score;
+}
 
 /** Bouncer schickt den Gast weiter in die Schleuse (nur Koop). */
 export function passGuest(game, guest, station) {
@@ -49,17 +138,20 @@ export function passGuest(game, guest, station) {
   guest.doorVerdict = {
     clean: verdict.checked ? verdict.clean : null,
     checked: verdict.checked,
-    found: verdict.found ?? [],
+    claimed: verdict.claimed ?? [],
     talked: !!station.checks.talk
   };
+
+  // Die Tuer bucht ihre eigenen Befunde sofort ab.
+  guest.doorScore = bookFindings(game, guest, station);
 
   night.stats.passed++;
   moveToAirlock(game, guest);
   clearStation(station);
   guest.said = null;
-  addRadio(night, 'TÜR', verdict.checked
-    ? (verdict.clean ? 'Ausweis geprüft, kommt zu euch.' : 'Der ist auffällig - schaut ihn euch an.')
-    : 'Kommt ungeprüft durch, macht ihr weiter.');
+  addToast(night, verdict.checked
+    ? (verdict.clean ? 'TÜR: AUSWEIS GEPRÜFT, KOMMT DURCH' : 'TÜR: AUFFÄLLIG - GENAU ANSEHEN')
+    : 'TÜR: UNGEPRÜFT DURCHGELASSEN', verdict.clean === false ? 'warn' : 'info', 3);
   bus.emit('sfx', 'door');
   if (rng() < 0.001) pushLog(state, 'Tür läuft', 'info');
   return { verdict };
@@ -73,6 +165,8 @@ export function admitGuest(game, guest, station) {
   const verify = isSolo(state)
     ? soloVerification(station.checks)
     : coopVerification(guest, station.checks);
+
+  bookFindings(game, guest, station);
 
   night.stats.admitted++;
   state.lifetime.admitted++;
@@ -122,7 +216,6 @@ function resolveBadAdmission(game, guest, worst) {
       night.stats.incidents++;
       state.lifetime.incidents++;
       addToast(night, `BUSSGELD -${f.value} EUR: MINDERJÄHRIG`, 'bad', 5);
-      addRadio(night, 'FUNK', 'Da war jemand zu jung. Das gibt Ärger.');
       bus.emit('sfx', 'alarm');
     } else {
       changeReputation(state, -1.5, 'Risiko');
@@ -139,7 +232,6 @@ function resolveBadAdmission(game, guest, worst) {
     night.stats.incidents++;
     state.lifetime.incidents++;
     addToast(night, `ZWISCHENFALL: ${worst.label.toUpperCase()} (-${cost} EUR)`, 'bad', 5);
-    addRadio(night, 'FLOOR', `Zwischenfall im Club. ${worst.label}.`);
     pushLog(state, `Zwischenfall: ${worst.label}`, 'bad');
     bus.emit('sfx', 'alarm');
   } else {
@@ -155,6 +247,8 @@ export function rejectGuest(game, guest, station) {
   const violations = violationsOf(guest);
   const atAirlock = station.id === 'airlock';
 
+  bookFindings(game, guest, station);
+
   night.stats.rejected++;
   state.lifetime.rejected++;
 
@@ -167,7 +261,6 @@ export function rejectGuest(game, guest, station) {
       night.stats.catches++;
       rep += 0.4;
       addToast(night, 'GUTER FANG - SECURITY HAT IHN GESTOPPT', 'good', 4);
-      addRadio(night, 'SECURITY', 'Den hätten wir fast reingelassen.');
     } else if (isSolo(state) || !atAirlock) {
       const verify = isSolo(state) ? soloVerification(station.checks) : { state: 'none' };
       if (verify.state === 'verified') { rep += 0.25; night.stats.verified++; }
@@ -179,7 +272,7 @@ export function rejectGuest(game, guest, station) {
     addToast(night, `RICHTIG ABGEWIESEN: ${violations[0].label}`, 'good');
     if (guest.inspector) {
       changeReputation(state, 2, 'Testkontrolle bestanden');
-      addRadio(night, 'FUNK', 'Das war eine Testperson. Sauber gemacht.');
+      addToast(night, 'TESTPERSON ERKANNT', 'good', 3);
     }
   } else {
     night.stats.mistakes++;
@@ -189,7 +282,7 @@ export function rejectGuest(game, guest, station) {
     state.xp += 2;
     bus.emit('sfx', 'deny');
     addToast(night, `FALSCH ABGEWIESEN (-${lost} EUR Potenzial)`, 'bad');
-    if (guest.truth.vip) addRadio(night, 'FUNK', 'Das war ein VIP. Der redet morgen über uns.');
+    if (guest.truth.vip) addToast(night, 'DAS WAR EIN VIP', 'bad', 4);
     if (guest.inspector) changeReputation(state, 1, 'Testkontrolle');
   }
 
@@ -202,14 +295,17 @@ function finishGuest(game, guest, station, outcome) {
   guest.state = outcome;
   guest.exitTimer = 1.6;
   night.leaving.push(guest);
+  // Der Gast ist abgearbeitet - er zaehlt gegen den Schichtplan.
+  night.processed++;
   clearStation(station);
 }
 
 function clearStation(station) {
   station.guest = null;
   station.patdown = null;
+  station.notes = emptyNotes();
   station.checks = {
-    id: null, talk: null, scan: null, search: null, alcohol: null,
+    id: null, talk: null, search: null, alcohol: null,
     verified: false, conflict: false
   };
 }

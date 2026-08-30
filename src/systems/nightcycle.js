@@ -2,28 +2,40 @@
  * Night Cycle: Uhr, Phasen, Start und Abschluss einer Nacht.
  */
 
-import { TUNING, NIGHT_EVENTS } from '../data/config.js';
-import { createNightState, capacity, addToast, addRadio, pushLog } from './state.js';
+import { TUNING, NIGHT_EVENTS, FEATURES } from '../data/config.js';
+import { createNightState, capacity, addToast, pushLog, guestQuota } from './state.js';
 import { tickInsideRevenue } from './economy.js';
 import { updateQueue } from './queue.js';
 import { updateRandomEvents } from './randomEvents.js';
 import { nightRating, changeReputation } from './reputation.js';
-import { weightedPick, clamp } from '../core/rng.js';
+import { weightedPick, clamp, randInt } from '../core/rng.js';
 import { resetGuestSerial } from './guests.js';
 import { startTutorial, updateTutorial } from './tutorial.js';
+import { updateAggression } from './aggression.js';
 
+/**
+ * Phasen der Nacht - jetzt am Schichtfortschritt festgemacht ("at" ist der
+ * Anteil der abgearbeiteten Liste), nicht mehr an der Uhr.
+ */
 export const PHASES = [
   { at: 0, label: 'OPENING', intensity: 0.25 },
-  { at: 30, label: 'ERSTE GÄSTE', intensity: 0.4 },
-  { at: 60, label: 'WARM UP', intensity: 0.5 },
-  { at: 105, label: 'FULL FLOOR', intensity: 0.65 },
-  { at: 150, label: 'PRIME TIME', intensity: 0.8 },
-  { at: 180, label: 'PEAK HOUR', intensity: 1.0 },
-  { at: 240, label: 'AFTER PEAK', intensity: 0.7 },
-  { at: 275, label: 'CLOSING', intensity: 0.4 }
+  { at: 0.1, label: 'ERSTE GÄSTE', intensity: 0.4 },
+  { at: 0.2, label: 'WARM UP', intensity: 0.5 },
+  { at: 0.35, label: 'FULL FLOOR', intensity: 0.65 },
+  { at: 0.5, label: 'PRIME TIME', intensity: 0.8 },
+  { at: 0.6, label: 'PEAK HOUR', intensity: 1.0 },
+  { at: 0.8, label: 'AFTER PEAK', intensity: 0.7 },
+  { at: 0.92, label: 'CLOSING', intensity: 0.4 }
 ];
 
+/** Anteil der abgearbeiteten Schicht (0..1). */
+export function shiftProgress(night) {
+  if (!night?.quota) return 0;
+  return Math.min(1, night.processed / night.quota);
+}
+
 export function pickNightEvent(rng, state) {
+  if (!FEATURES.nightEvents) return NIGHT_EVENTS[0];
   const nightNumber = state.nightIndex + 1;
   const pool = NIGHT_EVENTS.filter((e) => nightNumber >= (e.minNight ?? 1));
   if (nightNumber === 1) return NIGHT_EVENTS[0];
@@ -34,23 +46,25 @@ export function startNight(game, event, artist, opts = {}) {
   const { state, rng } = game;
   resetGuestSerial();
   state.nightIndex++;
-  state.night = createNightState(event, artist, rng.seed, state.mode);
+  state.night = createNightState(event, artist, rng.seed, state.mode, guestQuota(state));
   state.night.repDelta = 0;
   state.phase = 'night';
   if (artist) {
     state.night.stats.artistFee = artist.fee;
     state.money -= artist.fee;
   }
+  // Ein Uebergriff pro Nacht ist gesetzt - offen ist nur, bei welchem Gast.
+  state.night.forcedAttackAt = randInt(rng, 1, Math.max(1, state.night.quota - 2));
   if (opts.tutorial) startTutorial(game);
   pushLog(state, `NIGHT ${String(state.nightIndex).padStart(2, '0')} - ${event.label}`, 'info');
-  addRadio(state.night, 'TÜR', 'Wir sind offen.');
+  addToast(state.night, `OFFEN - ${state.night.quota} LEUTE AUF DER LISTE`, 'info', 4);
   game.bus.emit('nightStart', state.night);
   return state.night;
 }
 
-export function currentPhase(clock) {
+export function currentPhase(progress) {
   let phase = PHASES[0];
-  for (const p of PHASES) if (clock >= p.at) phase = p;
+  for (const p of PHASES) if (progress >= p.at) phase = p;
   return phase;
 }
 
@@ -71,20 +85,22 @@ export function updateNight(game, dt) {
 
   updateTutorial(game, dt);
   updateQueue(game, dt, minutes);
-  if (!night.tutorial) updateRandomEvents(game, dt, minutes);
+  updateAggression(game, dt);
+  if (!night.tutorial && FEATURES.randomEvents) updateRandomEvents(game, dt, minutes);
   tickInsideRevenue(state, minutes);
   updateInside(game, dt, minutes);
   updateEffects(night, dt);
   updateToasts(night, dt);
 
-  const phase = currentPhase(night.clock);
+  const phase = currentPhase(shiftProgress(night));
   if (night.lastPhase !== phase.label) {
     night.lastPhase = phase.label;
     if (night.clock > 1) addToast(night, phase.label, 'info');
     game.bus.emit('phase', phase);
   }
 
-  if (night.clock >= TUNING.nightEndMinute) endNight(game);
+  // Die Schicht endet, wenn die Liste abgearbeitet ist - nicht nach der Uhr.
+  if (!night.tutorial && night.processed >= night.quota) endNight(game);
 }
 
 function updateInside(game, dt, minutes) {
@@ -110,10 +126,6 @@ function updateToasts(night, dt) {
   for (let i = night.toasts.length - 1; i >= 0; i--) {
     night.toasts[i].life -= dt;
     if (night.toasts[i].life <= 0) night.toasts.splice(i, 1);
-  }
-  for (let i = night.radio.length - 1; i >= 0; i--) {
-    night.radio[i].life -= dt;
-    if (night.radio[i].life <= 0) night.radio.splice(i, 1);
   }
 }
 

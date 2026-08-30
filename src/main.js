@@ -14,18 +14,28 @@ import { createInput } from './core/input.js';
 import { createLoop } from './core/loop.js';
 import { createAudio } from './core/audio.js';
 
-import { createInitialState, rank, pushLog, isSolo } from './systems/state.js';
+import { createInitialState, rank, pushLog, isSolo, addToast } from './systems/state.js';
 import { createPlayers, updatePlayers, tryAction, stationOf } from './systems/coop.js';
-import { startNight, updateNight, pickNightEvent, currentPhase } from './systems/nightcycle.js';
+import { startNight, updateNight, pickNightEvent, currentPhase, shiftProgress, endNight } from './systems/nightcycle.js';
 import { saveGame, loadGame } from './systems/save.js';
+import { normalizeCharacter } from './systems/character.js';
 import { checkRankUp } from './systems/progression.js';
-import { rolesFor } from './data/config.js';
+import { rolesFor, DEFENSE_KEYS } from './data/config.js';
 
 import { createRenderer } from './render/renderer.js';
 import { createHud } from './ui/hud.js';
 import { createScreens } from './ui/screens.js';
 import { createIdCard } from './ui/idcard.js';
+import { createItemTray } from './ui/itemtray.js';
+import { createRulebook } from './ui/rulebook.js';
 import { createNet, serializeState, applySnapshot } from './net/net.js';
+import { createAdminHud } from './ui/adminhud.js';
+import {
+  restoreAdmin, adminAddMoney, adminSetReputation, adminUnlockAll,
+  adminPrepareNight, adminShortenShift
+} from './systems/admin.js';
+import { startAggression, aggressionActive } from './systems/aggression.js';
+import { settings, setSetting, onSettingsChange, uiScaleValue } from './systems/settings.js';
 
 const canvas = document.getElementById('scene');
 
@@ -92,7 +102,28 @@ const renderer = createRenderer(canvas);
 const hud = createHud(game);
 const screens = createScreens(game);
 const idcard = createIdCard(game, { roleId: 'bouncer' });
+const itemTray = createItemTray(game, { roleId: 'security' });
+const rulebook = createRulebook(game);
+const adminHud = createAdminHud(game);
 game.net = createNet(game.bus);
+
+/* ---------------- Einstellungen anwenden ---------------- */
+
+/**
+ * Ton und Oberflaechengroesse folgen den Einstellungen - beim Start und
+ * bei jeder Aenderung im Einstellungsbildschirm.
+ */
+function applySettings() {
+  const s = settings();
+  audio.setMasterVolume(s.master);
+  audio.setMusicVolume(s.music);
+  audio.setSfxVolume(s.sfx);
+  audio.setMuted(s.muted);
+  document.documentElement.style.setProperty('--ui-scale', String(uiScaleValue(s.uiScale)));
+  game.tutorialWanted = s.tutorial;
+}
+
+onSettingsChange(applySettings);
 
 let pendingEvent = null;
 let lobbyUi = null;
@@ -106,13 +137,18 @@ function applyMode(mode) {
   game.localRole = game.netRole === 'guest' ? 'security' : 'bouncer';
   for (const p of game.players) p.remote = !game.controls(p.id);
   idcard.roleId = game.localRole;
+  // Der Kontrolltisch gehört zu der Station, an der abgetastet wird.
+  itemTray.roleId = isSolo(game.state) ? 'bouncer' : 'security';
   hud.rebuild();
 }
 
 function goMenu() {
   game.state.phase = 'menu';
+  game.state.night = null;
+  game.paused = false;
   game.netRole = null;
   hud.hide();
+  audio.setIntensity(0.25);
   screens.menu({
     onStart: (mode, tutorial) => {
       game.tutorialWanted = tutorial;
@@ -120,18 +156,53 @@ function goMenu() {
       game.state = createInitialState(mode);
       game.state.tutorialDone = carry.tutorialDone && false;
       applyMode(mode);
-      if (mode === 'online') goLobby();
-      else goBriefing();
+      // Eine neue Karriere beginnt vor dem Spiegel: erst der eigene Türsteher.
+      goCharacterEditor(() => (mode === 'online' ? goLobby() : goBriefing()));
     },
     onContinue: (mode, tutorial) => {
       game.tutorialWanted = tutorial;
       game.state = createInitialState(mode);
       loadGame(game.state);
       game.state.mode = mode;
+      game.state.character = normalizeCharacter(game.state.character);
       applyMode(mode);
+      // Wer weiterspielt, hat seinen Türsteher schon - ausser der Spielstand
+      // stammt noch aus der Zeit vor dem Editor.
+      if (!game.state.character.created) {
+        goCharacterEditor(() => (mode === 'online' ? goLobby() : goBriefing()));
+        return;
+      }
       if (mode === 'online') goLobby();
       else goBriefing();
     }
+  });
+}
+
+/**
+ * Zurück zum Titel - von überall aus. Eine laufende Nacht wird verworfen,
+ * ein offener Online-Raum verlassen; der Karrierestand bleibt gespeichert.
+ */
+function quitToMenu() {
+  if (game.state.mode === 'online') game.net.leave();
+  game.paused = false;
+  pendingEvent = null;
+  goMenu();
+}
+
+/**
+ * Charaktereditor. Beim Start der Karriere führt er weiter ins Spiel,
+ * am Kleiderschrank im Büro nur zurück ins Büro.
+ */
+function goCharacterEditor(onDone, opts = {}) {
+  game.state.phase = 'character';
+  hud.hide();
+  screens.character({
+    title: opts.title,
+    subtitle: opts.subtitle,
+    confirmLabel: opts.confirmLabel,
+    onBack: opts.onBack,
+    backLabel: opts.backLabel,
+    onDone
   });
 }
 
@@ -175,7 +246,10 @@ function goBriefing() {
   applyMode(game.state.mode);
   pendingEvent = pickNightEvent(game.rng, game.state);
   const tutorial = game.tutorialWanted && !game.state.tutorialDone;
-  screens.briefing(pendingEvent, () => beginNight(tutorial), { tutorial });
+  // Vor der ersten Schicht kommt man noch zurueck zum Titel; nach einer
+  // gespielten Nacht waere das ein Rueckweg mitten aus der Karriere heraus.
+  const onBack = game.state.nightIndex === 0 ? () => goMenu() : null;
+  screens.briefing(pendingEvent, () => beginNight(tutorial), { tutorial, onBack });
 }
 
 function beginNight(tutorial) {
@@ -184,7 +258,7 @@ function beginNight(tutorial) {
   applyMode(game.state.mode);
   startNight(game, pendingEvent, artist, { tutorial });
   if (!tutorial) {
-    game.state.unlocks = { id: true, talk: true, scan: true, search: true, alcohol: true, calm: true };
+    game.state.unlocks = { id: true, talk: true, search: true, alcohol: true, calm: true };
   }
   screens.hide();
   hud.show();
@@ -199,7 +273,29 @@ function goReport() {
     screens.waiting('Der Host sieht sich den Night Report an …');
     return;
   }
-  screens.report(() => screens.shop(goBriefing));
+  screens.report(goOffice, quitToMenu);
+}
+
+/**
+ * Der Tag danach: im Büro des Clubleiters. Am Kleiderschrank ändert man
+ * sein Aussehen, am Laptop kauft man ein, durch die Tür geht es in die
+ * nächste Nacht.
+ */
+function goOffice() {
+  game.state.phase = 'office';
+  hud.hide();
+  screens.office({
+    onWardrobe: () => goCharacterEditor(goOffice, {
+      title: 'KLEIDERSCHRANK',
+      subtitle: 'NEUES OUTFIT FÜR DIE NÄCHSTE SCHICHT',
+      confirmLabel: 'ÜBERNEHMEN',
+      onBack: goOffice,
+      backLabel: 'ABBRECHEN'
+    }),
+    onLaptop: () => screens.shop(goOffice),
+    onDoor: goBriefing,
+    onMenu: quitToMenu
+  });
 }
 
 /* ---------------- Bus-Ereignisse ---------------- */
@@ -301,7 +397,7 @@ const loop = createLoop({
     updatePlayers(game, dt, input);
     updateNight(game, dt);
 
-    const phase = currentPhase(game.state.night.clock);
+    const phase = currentPhase(shiftProgress(game.state.night));
     const load = Math.min(1, game.state.night.queue.length / 14);
     audio.setIntensity(phase.intensity * 0.75 + load * 0.25);
 
@@ -319,17 +415,29 @@ const loop = createLoop({
     if (game.state.phase === 'night') {
       hud.update();
       idcard.update();
+      itemTray.update();
     }
+    adminHud.update();
   }
 });
 
 /** Eingaben des Gastes: direkt als Netzwerk-Aktion. */
 function readGuestInput() {
   const role = game.roleById('security');
+  const station = game.stationFor('security');
+
+  // Übergriff: es zählt nur noch die Abwehr, alles andere ist gesperrt.
+  const aggro = station?.aggro;
+  if (aggro && aggro.phase !== 'over') {
+    for (const entry of DEFENSE_KEYS) {
+      if (input.justPressed(entry.key)) game.act('security', 'defend', { key: entry.key });
+    }
+    return;
+  }
+
   for (const action of role.actions) {
     if (input.justPressed(action.key)) game.act('security', action.code);
   }
-  const station = game.stationFor('security');
   if (station?.patdown && !station.patdown.complete) {
     for (const [key, zone] of [['KeyJ', 'jacket'], ['KeyK', 'pockets'], ['KeyL', 'bag']]) {
       if (input.justPressed(key)) game.act('security', 'zone', { zone });
@@ -337,32 +445,139 @@ function readGuestInput() {
   }
 }
 
+/* ---------------- Maus: Abtast-Ringe direkt anklicken ---------------- */
+
+/** Welcher Ring liegt unter dem Mauszeiger? */
+function zoneAt(clientX, clientY) {
+  if (game.state.phase !== 'night' || game.paused) return null;
+  const p = renderer.toWorld(clientX, clientY);
+  for (const hit of renderer.zoneHits) {
+    const dx = (p.x - hit.x) / hit.rx;
+    const dy = (p.y - hit.y) / hit.ry;
+    if (dx * dx + dy * dy <= 1) return hit;
+  }
+  return null;
+}
+
+/** Liegt eine eingeblendete Abwehr-Taste unter dem Zeiger? */
+function keyAt(clientX, clientY) {
+  if (game.state.phase !== 'night' || game.paused) return null;
+  const p = renderer.toWorld(clientX, clientY);
+  for (const hit of renderer.keyHits) {
+    const dx = (p.x - hit.x) / hit.rx;
+    const dy = (p.y - hit.y) / hit.ry;
+    if (dx * dx + dy * dy <= 1) return hit;
+  }
+  return null;
+}
+
+canvas.addEventListener('pointerdown', (event) => {
+  // Abwehr geht auch mit der Maus - wer lieber klickt, ist nicht wehrlos.
+  const key = keyAt(event.clientX, event.clientY);
+  if (key) {
+    event.preventDefault();
+    game.act(key.role, 'defend', { key: key.key });
+    return;
+  }
+  const hit = zoneAt(event.clientX, event.clientY);
+  if (!hit) return;
+  event.preventDefault();
+  game.act(hit.role, 'zone', { zone: hit.zone });
+});
+
+canvas.addEventListener('pointermove', (event) => {
+  const over = keyAt(event.clientX, event.clientY) || zoneAt(event.clientX, event.clientY);
+  canvas.style.cursor = over ? 'pointer' : '';
+});
+
 /* ---------------- Systemtasten ---------------- */
 
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (e.code === 'Escape' && game.state.phase === 'night' && !game.isGuest) togglePause();
-  else if (e.code === 'KeyM') audio.toggleMute();
-  else if (e.code === 'KeyH') document.getElementById('hint').classList.toggle('hidden');
+  else if (e.code === 'KeyM') setSetting('muted', audio.toggleMute());
 });
 
 function togglePause() {
   game.paused = !game.paused;
   if (game.paused) {
-    screens.pause(togglePause, () => {
-      game.paused = false;
-      game.state.night.clock = 300;
-      screens.hide();
-    });
+    screens.pause(togglePause, endShiftNow, adminTools, quitToMenu);
   } else {
     screens.hide();
   }
 }
 
+/** Schicht vorzeitig abschliessen: Night Report wie am Ende einer Nacht. */
+function endShiftNow() {
+  game.paused = false;
+  screens.hide();
+  if (game.state.night?.running) endNight(game);
+  else goReport();
+}
+
+/* ---------------- Admin: Testhilfen aus dem Pausenmenü ---------------- */
+
+/**
+ * Die Eingriffe, die den Spielfluss betreffen. Der Schaltzustand liegt in
+ * `systems/admin.js`; hier steht nur, was beim Druck auf den Knopf passiert.
+ */
+const adminTools = {
+  /** Direkt ins Briefing der gewaehlten Nacht - die laufende Schicht faellt weg. */
+  night(n) {
+    const number = adminPrepareNight(game.state, n);
+    game.paused = false;
+    game.tutorialWanted = false;
+    hud.hide();
+    screens.hide();
+    goBriefing();
+    return `Nacht ${number} vorbereitet.`;
+  },
+  money() {
+    adminAddMoney(game.state, 5000);
+    return `Geld: €${Math.round(game.state.money).toLocaleString('de-DE')}.`;
+  },
+  rep() {
+    adminSetReputation(game.state, 100);
+    return 'Ruf auf 100 gesetzt.';
+  },
+  unlockAll() {
+    adminUnlockAll(game.state);
+    hud.rebuild();
+    return 'Alle Kontrollen freigeschaltet.';
+  },
+  shorten() {
+    if (!game.state.night) return 'Keine laufende Schicht.';
+    const quota = adminShortenShift(game.state, 3);
+    return `Liste gekürzt: ${game.state.night.processed}/${quota}.`;
+  },
+  /** Uebergriff sofort ausloesen - zum Testen der Abwehr. */
+  attack() {
+    const night = game.state.night;
+    const station = night && Object.values(night.stations)
+      .find((s) => s.guest && !aggressionActive(s));
+    if (!station) return 'Niemand an der Kontrolle.';
+    startAggression(game, station, 'idle');
+    game.paused = false;
+    screens.hide();
+    return 'Übergriff läuft.';
+  },
+  endShift() {
+    if (!game.state.night?.running) return 'Keine laufende Schicht.';
+    game.paused = false;
+    addToast(game.state.night, 'ADMIN: SCHICHT BEENDET', 'info');
+    endNight(game);
+    screens.hide();
+    return 'Schicht beendet.';
+  }
+};
+
 window.addEventListener('pointerdown', () => audio.start(), { once: true });
 
 loop.start();
+applySettings();
+restoreAdmin();
 applyMode('solo');
 goMenu();
 
+game.renderer = renderer;
 window.NULLWERK = game;

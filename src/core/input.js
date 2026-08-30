@@ -18,8 +18,10 @@ export function createInput(target = window) {
     down.delete(e.code);
   };
   const onBlur = () => {
+    // Nur gehaltene Tasten vergessen. Frisch gedrückte NICHT verwerfen:
+    // Beim Wechsel vom Briefing ins Spiel verliert der Button den Fokus, und
+    // das Blur-Event würde sonst genau den ersten Tastendruck schlucken.
     down.clear();
-    pressed.clear();
   };
 
   target.addEventListener('keydown', onKeyDown);
@@ -44,7 +46,7 @@ export function createInput(target = window) {
     },
     setEnabled(v) {
       enabled = v;
-      if (!v) onBlur();
+      if (!v) { down.clear(); pressed.clear(); }
     },
     destroy() {
       target.removeEventListener('keydown', onKeyDown);

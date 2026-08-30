@@ -10,14 +10,13 @@
 import { WORLD } from './layout.js';
 import { PAL } from './palette.js';
 import { drawStationView } from './scene.js';
-import { drawOverview } from './overview.js';
 import {
   createEffects, updateEffects, drawFog, drawDust, drawSparks, scanlines, vignette
 } from './effects.js';
-import { currentPhase } from '../systems/nightcycle.js';
+import { drawTitleScene } from './title.js';
+import { currentPhase, shiftProgress } from '../systems/nightcycle.js';
 import { isSolo } from '../systems/state.js';
-import { AREAS } from '../data/config.js';
-import { clockString } from '../systems/nightcycle.js';
+import { bufferSize, settings, onSettingsChange } from '../systems/settings.js';
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
@@ -25,18 +24,30 @@ export function createRenderer(canvas) {
   let beatTime = 0;
   let time = 0;
 
+  /**
+   * Die Puffergroesse kommt aus den Einstellungen: "AUTO" folgt dem
+   * Bildschirm, eine feste Auflösung rechnet auf ihre Höhe um.
+   */
   function resize() {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.round(rect.width * dpr));
-    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    const size = bufferSize(rect.width || window.innerWidth, rect.height || window.innerHeight);
+    canvas.width = Math.max(1, size.width);
+    canvas.height = Math.max(1, size.height);
   }
 
   window.addEventListener('resize', resize);
+  // Auflösung geändert: sofort neu aufspannen, ohne Neuladen.
+  onSettingsChange((_all, key) => {
+    if (key === null || key === 'resolution') resize();
+  });
   resize();
 
   /** Rechtecke der aktuellen Ansichten (Weltkoordinaten) - fürs UI-Layout. */
   let viewRects = [];
+  /** Anklickbare Abtast-Ringe (Weltkoordinaten) - fürs Zeigen mit der Maus. */
+  let zoneHits = [];
+  /** Anklickbare Abwehr-Tasten waehrend eines Uebergriffs. */
+  let keyHits = [];
 
   function render(game, dt) {
     const { state } = game;
@@ -44,7 +55,7 @@ export function createRenderer(canvas) {
     updateEffects(fx, dt);
 
     const night = state.night;
-    const phase = night ? currentPhase(night.clock) : { intensity: 0.35, label: 'CLOSED' };
+    const phase = night ? currentPhase(shiftProgress(night)) : { intensity: 0.35, label: 'CLOSED' };
     beatTime += dt * (128 / 60) * (0.8 + phase.intensity * 0.4);
     const beat = beatTime % 1;
     const pulse = Math.pow(1 - beat, 3);
@@ -58,8 +69,16 @@ export function createRenderer(canvas) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
 
-    if (!night) {
-      ctx.restore?.();
+    // Titelbildschirm: eigene Schauszene mit Club, Schlange und Türsteher.
+    if (!night || state.phase !== 'night') {
+      zoneHits = [];
+      keyHits = [];
+      viewRects = [];
+      drawTitleScene(ctx, WORLD.width, WORLD.height, time, pulse);
+      if (settings().effects) {
+        vignette(ctx, WORLD.width, WORLD.height, 0.55);
+        scanlines(ctx, WORLD.width, WORLD.height, 0.03);
+      }
       return;
     }
 
@@ -68,8 +87,10 @@ export function createRenderer(canvas) {
     const views = layoutViews(game);
     viewRects = views;
 
+    const hits = [];
+    const keys = [];
     for (const view of views) {
-      drawStationView(ctx, game, {
+      const drawn = drawStationView(ctx, game, {
         rect: view.rect,
         area: view.area,
         station: view.station,
@@ -77,12 +98,17 @@ export function createRenderer(canvas) {
         t: time,
         beat,
         pulse,
-        dark,
-        label: view.label,
-        sub: view.sub,
-        accent: view.accent
+        dark
       });
+      for (const z of drawn?.zones ?? []) {
+        hits.push({ ...z, x: z.x + view.rect.x, y: z.y + view.rect.y, role: view.role });
+      }
+      for (const k of drawn?.keys ?? []) {
+        keys.push({ ...k, x: k.x + view.rect.x, y: k.y + view.rect.y, role: view.role });
+      }
     }
+    zoneHits = hits;
+    keyHits = keys;
 
     // Trennlinie im Splitscreen
     if (views.length === 2) {
@@ -90,14 +116,14 @@ export function createRenderer(canvas) {
       ctx.fillRect(views[0].rect.w - 1, 0, 4, WORLD.height);
     }
 
-    // Club-Übersicht
-    drawOverview(ctx, game, { x: WORLD.width - 236, y: WORLD.height - 268, w: 220, h: 150 }, beat, pulse);
-
-    drawFog(ctx, fx, 0.45 + phase.intensity * 0.4);
-    drawDust(ctx, fx);
-    drawSparks(ctx, fx);
+    // Bildeffekte lassen sich abschalten - auf schwachen Rechnern zaehlt jedes Bild.
+    if (settings().effects) {
+      drawFog(ctx, fx, 0.45 + phase.intensity * 0.4);
+      drawDust(ctx, fx);
+      drawSparks(ctx, fx);
+      scanlines(ctx, WORLD.width, WORLD.height, 0.03);
+    }
     vignette(ctx, WORLD.width, WORLD.height, blackout ? 0.9 : 0.5);
-    scanlines(ctx, WORLD.width, WORLD.height, 0.03);
   }
 
   /** Welche Ansichten werden gezeigt? */
@@ -110,20 +136,16 @@ export function createRenderer(canvas) {
     const doorView = {
       id: 'outside',
       area: 'outside',
+      role: 'bouncer',
       station: night.stations.door,
-      queue: night.queue,
-      label: `${AREAS.outside.label} · ${AREAS.outside.sub}`,
-      sub: `${clockString(night.clock)} · SCHLANGE ${night.queue.length}`,
-      accent: PAL.red
+      queue: night.queue
     };
     const airlockView = {
       id: 'airlock',
       area: 'airlock',
+      role: 'security',
       station: night.stations.airlock,
-      queue: night.airlockQueue,
-      label: `${AREAS.airlock.label} · ${AREAS.airlock.sub}`,
-      sub: `WARTEN ${night.airlockQueue.length}`,
-      accent: PAL.cyan
+      queue: night.airlockQueue
     };
 
     if (solo) {
@@ -155,12 +177,28 @@ export function createRenderer(canvas) {
     };
   }
 
+  /** Umkehrung von toWorld: Weltkoordinate -> Bildschirmkoordinate. */
+  function toScreen(worldX, worldY) {
+    const bounds = canvas.getBoundingClientRect();
+    const scale = Math.min(canvas.width / WORLD.width, canvas.height / WORLD.height);
+    const dpr = canvas.width / bounds.width;
+    const offsetX = (canvas.width - WORLD.width * scale) / 2;
+    const offsetY = (canvas.height - WORLD.height * scale) / 2;
+    return {
+      x: bounds.left + (worldX * scale + offsetX) / dpr,
+      y: bounds.top + (worldY * scale + offsetY) / dpr
+    };
+  }
+
   return {
     render,
     resize,
     fx,
     toWorld,
+    toScreen,
     get views() { return viewRects; },
+    get zoneHits() { return zoneHits; },
+    get keyHits() { return keyHits; },
     get beat() { return beatTime % 1; }
   };
 }

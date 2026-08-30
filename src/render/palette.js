@@ -26,8 +26,14 @@ export const OUTFIT = [
 
 export const HAIR = ['#141519', '#2b2019', '#4a3524', '#6b6f78', '#8e2f3a', '#243a52', '#d8d3c8'];
 
-export function withAlpha(hex, alpha) {
-  const h = hex.replace('#', '');
+export function withAlpha(color, alpha) {
+  const text = String(color);
+  // Auch `rgb(...)` annehmen: figure.js mischt Hauttöne und gibt rgb() zurück.
+  if (text.startsWith('rgb')) {
+    const [r, g, b] = (text.match(/\d+/g) ?? []).map(Number);
+    return `rgba(${r || 0},${g || 0},${b || 0},${alpha})`;
+  }
+  const h = text.replace('#', '');
   const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
   const r = parseInt(full.slice(0, 2), 16);
   const g = parseInt(full.slice(2, 4), 16);
