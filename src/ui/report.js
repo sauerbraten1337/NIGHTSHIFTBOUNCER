@@ -33,7 +33,7 @@ function gradeFor(rating) {
   return GRADES.find((g) => rating >= g.min) ?? GRADES[GRADES.length - 1];
 }
 
-export function renderReport(game, onContinue) {
+export function renderReport(game, onContinue, onMenu = null) {
   const { state } = game;
   const night = state.night;
   const s = night.stats;
@@ -129,10 +129,13 @@ export function renderReport(game, onContinue) {
 
     <div class="btn-row">
       <button class="btn primary" id="report-next">FEIERABEND — INS BÜRO</button>
+      ${onMenu ? '<button class="btn ghost" id="report-menu">ZURÜCK ZUM HAUPTMENÜ</button>' : ''}
     </div>
   `;
 
   wrap.querySelector('#report-next').addEventListener('click', onContinue);
+  // Nach der Nacht ist Schluss erlaubt: der Stand ist gespeichert.
+  wrap.querySelector('#report-menu')?.addEventListener('click', () => onMenu());
 
   countUp(wrap);
   requestAnimationFrame(() => wrap.classList.add('run'));

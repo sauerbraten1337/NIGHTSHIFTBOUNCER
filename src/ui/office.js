@@ -12,7 +12,7 @@ import { clubTier, capacity, rank } from '../systems/state.js';
 import { normalizeCharacter } from '../systems/character.js';
 import { repBand } from '../systems/reputation.js';
 
-/** opts: { onWardrobe, onLaptop, onDoor } */
+/** opts: { onWardrobe, onLaptop, onDoor, onMenu } */
 export function renderOffice(game, opts = {}) {
   const { state } = game;
   const character = normalizeCharacter(state.character);
@@ -39,8 +39,13 @@ export function renderOffice(game, opts = {}) {
       </div>
 
       <div class="office-hint" id="office-hint">Sieh dich um: Schrank, Laptop, Tür.</div>
+
+      ${opts.onMenu ? '<button class="office-menu" id="office-menu" type="button">HAUPTMENÜ</button>' : ''}
     </div>
   `;
+
+  // Der Stand ist gespeichert - von hier darf man jederzeit zurueck zum Titel.
+  wrap.querySelector('#office-menu')?.addEventListener('click', () => opts.onMenu());
 
   const hits = wrap.querySelector('#office-hits');
   const hint = wrap.querySelector('#office-hint');

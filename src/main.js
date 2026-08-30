@@ -35,6 +35,7 @@ import {
   adminPrepareNight, adminShortenShift
 } from './systems/admin.js';
 import { startAggression, aggressionActive } from './systems/aggression.js';
+import { settings, setSetting, onSettingsChange, uiScaleValue } from './systems/settings.js';
 
 const canvas = document.getElementById('scene');
 
@@ -106,6 +107,24 @@ const rulebook = createRulebook(game);
 const adminHud = createAdminHud(game);
 game.net = createNet(game.bus);
 
+/* ---------------- Einstellungen anwenden ---------------- */
+
+/**
+ * Ton und Oberflaechengroesse folgen den Einstellungen - beim Start und
+ * bei jeder Aenderung im Einstellungsbildschirm.
+ */
+function applySettings() {
+  const s = settings();
+  audio.setMasterVolume(s.master);
+  audio.setMusicVolume(s.music);
+  audio.setSfxVolume(s.sfx);
+  audio.setMuted(s.muted);
+  document.documentElement.style.setProperty('--ui-scale', String(uiScaleValue(s.uiScale)));
+  game.tutorialWanted = s.tutorial;
+}
+
+onSettingsChange(applySettings);
+
 let pendingEvent = null;
 let lobbyUi = null;
 let snapshotTimer = 0;
@@ -125,8 +144,11 @@ function applyMode(mode) {
 
 function goMenu() {
   game.state.phase = 'menu';
+  game.state.night = null;
+  game.paused = false;
   game.netRole = null;
   hud.hide();
+  audio.setIntensity(0.25);
   screens.menu({
     onStart: (mode, tutorial) => {
       game.tutorialWanted = tutorial;
@@ -154,6 +176,17 @@ function goMenu() {
       else goBriefing();
     }
   });
+}
+
+/**
+ * Zurück zum Titel - von überall aus. Eine laufende Nacht wird verworfen,
+ * ein offener Online-Raum verlassen; der Karrierestand bleibt gespeichert.
+ */
+function quitToMenu() {
+  if (game.state.mode === 'online') game.net.leave();
+  game.paused = false;
+  pendingEvent = null;
+  goMenu();
 }
 
 /**
@@ -240,7 +273,7 @@ function goReport() {
     screens.waiting('Der Host sieht sich den Night Report an …');
     return;
   }
-  screens.report(goOffice);
+  screens.report(goOffice, quitToMenu);
 }
 
 /**
@@ -260,7 +293,8 @@ function goOffice() {
       backLabel: 'ABBRECHEN'
     }),
     onLaptop: () => screens.shop(goOffice),
-    onDoor: goBriefing
+    onDoor: goBriefing,
+    onMenu: quitToMenu
   });
 }
 
@@ -461,20 +495,24 @@ canvas.addEventListener('pointermove', (event) => {
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (e.code === 'Escape' && game.state.phase === 'night' && !game.isGuest) togglePause();
-  else if (e.code === 'KeyM') audio.toggleMute();
+  else if (e.code === 'KeyM') setSetting('muted', audio.toggleMute());
 });
 
 function togglePause() {
   game.paused = !game.paused;
   if (game.paused) {
-    screens.pause(togglePause, () => {
-      game.paused = false;
-      endNight(game);
-      screens.hide();
-    }, adminTools);
+    screens.pause(togglePause, endShiftNow, adminTools, quitToMenu);
   } else {
     screens.hide();
   }
+}
+
+/** Schicht vorzeitig abschliessen: Night Report wie am Ende einer Nacht. */
+function endShiftNow() {
+  game.paused = false;
+  screens.hide();
+  if (game.state.night?.running) endNight(game);
+  else goReport();
 }
 
 /* ---------------- Admin: Testhilfen aus dem Pausenmenü ---------------- */
@@ -536,6 +574,7 @@ const adminTools = {
 window.addEventListener('pointerdown', () => audio.start(), { once: true });
 
 loop.start();
+applySettings();
 restoreAdmin();
 applyMode('solo');
 goMenu();

@@ -53,13 +53,14 @@ async function newPage() {
   return page;
 }
 
-/** Tutorial-Haken sitzt im Menue unter EINSTELLUNGEN. */
+/** Tutorial-Haken sitzt im Einstellungsbildschirm des Hauptmenues. */
 async function setTutorial(page, on) {
-  if (on) return;
   await page.click('.menu-item[data-id="settings"]');
   await page.waitForSelector('#menu-tutorial');
-  await page.uncheck('#menu-tutorial');
-  await page.click('.menu-item[data-id="settings"]');
+  if (on) await page.check('#menu-tutorial');
+  else await page.uncheck('#menu-tutorial');
+  await page.click('#settings-back');
+  await page.waitForSelector('.menu-item[data-id="solo"]', { timeout: 5000 });
 }
 
 /** Neue Karriere: erst der Charaktereditor, dann geht es weiter. */
@@ -100,6 +101,21 @@ if (shots) await solo.screenshot({ path: 'docs/shot-catalog.png' });
 await solo.click('#catalog-back');
 await solo.waitForSelector('.menu-item[data-id="solo"]', { timeout: 5000 });
 results.catalog.back = true;
+
+// Einstellungen: die Auflösung greift sofort auf dem Zeichenpuffer.
+await solo.click('.menu-item[data-id="settings"]');
+await solo.waitForSelector('#settings-back', { timeout: 5000 });
+if (shots) await solo.screenshot({ path: 'docs/shot-settings.png' });
+await solo.click('.seg-b[data-set="resolution"][data-value="720"]');
+await solo.waitForTimeout(150);
+results.settings = await solo.evaluate(() => ({
+  height: document.getElementById('scene').height,
+  rows: document.querySelectorAll('.set-row').length,
+  stored: JSON.parse(localStorage.getItem('nullwerk.settings.v1') ?? '{}').resolution
+}));
+await solo.click('.seg-b[data-set="resolution"][data-value="auto"]');
+await solo.click('#settings-back');
+await solo.waitForSelector('.menu-item[data-id="solo"]', { timeout: 5000 });
 
 // Charaktereditor beim Start: Figur, Regler und Vorschau.
 await solo.click('.menu-item[data-id="solo"]');
@@ -360,7 +376,8 @@ if (results.report) {
   results.office = await solo.evaluate(() => ({
     phase: window.NULLWERK.state.phase,
     spots: [...document.querySelectorAll('.office-hit')].map((b) => b.dataset.spot),
-    canvas: !!document.querySelector('#office-canvas')
+    canvas: !!document.querySelector('#office-canvas'),
+    menuButton: !!document.querySelector('#office-menu')
   }));
   if (shots) await solo.screenshot({ path: 'docs/shot-office.png' });
 
@@ -387,6 +404,23 @@ if (results.report) {
   await solo.click('.office-hit[data-spot="door"]');
   results.office.door = await solo.waitForSelector('#briefing-start', { timeout: 5000 })
     .then(() => true).catch(() => false);
+
+  // Rueckweg ins Hauptmenue: Schicht starten, Pause, zweimal bestaetigen.
+  if (results.office.door) {
+    await solo.click('#briefing-start');
+    await solo.waitForTimeout(700);
+    await solo.keyboard.press('Escape');
+    await solo.waitForSelector('#pause-menu', { timeout: 4000 });
+    await solo.click('#pause-menu');
+    await solo.click('#pause-menu');
+    results.backToMenu = await solo.waitForSelector('.menu-item[data-id="solo"]', { timeout: 5000 })
+      .then(() => true).catch(() => false);
+    results.backToMenuState = await solo.evaluate(() => ({
+      phase: window.NULLWERK.state.phase,
+      night: !!window.NULLWERK.state.night,
+      hudHidden: document.getElementById('hud').classList.contains('hidden')
+    }));
+  }
 }
 await solo.close();
 
@@ -625,6 +659,10 @@ console.log(`  Notizzettel 2 Seiten  Reiter ${results.notes.tabs} · Checkliste 
 console.log(`  Solo   Einlass ${results.solo.stats.admitted} · abgewiesen ${results.solo.stats.rejected}` +
   ` · richtig ${results.solo.stats.correct}/${results.solo.stats.correct + results.solo.stats.mistakes}`);
 console.log(`  Solo   Freischaltungen ${Object.entries(results.solo.unlocks).filter(([, v]) => v).map(([k]) => k).join(',')}`);
+console.log(`  Einstellungen         ${results.settings?.rows ?? 0} Zeilen · Puffer ${results.settings?.height}px` +
+  ` · gespeichert ${results.settings?.stored}`);
+console.log(`  Zurück ins Menü       ${results.backToMenu === true} · Phase ${results.backToMenuState?.phase}` +
+  ` · Nacht verworfen ${results.backToMenuState?.night === false}`);
 console.log(`  Report/Shop           ${results.report}`);
 console.log(`  Charaktereditor       Vorschau ${results.editor.canvas} · ${results.editor.swatches} Farbfelder` +
   ` · ${results.editor.chips} Schalter · Name ${results.editor.saved?.name}`);
@@ -690,6 +728,20 @@ if (results.notes.page2.page !== 1) fail('Man kann nicht auf Seite 2 blättern')
 if (!results.notes.page2.topics) fail('Seite 2 hat keine Befund-Zeilen');
 if (results.notes.topicSet !== 'ok') fail('Auf Seite 2 lässt sich kein Befund eintragen');
 if (results.solo.stats.admitted + results.solo.stats.rejected < 3) fail('Solo: zu wenige Entscheidungen');
+if (results.settings?.height !== 720) {
+  fail(`Auflösung 720 wurde nicht übernommen (Puffer ${results.settings?.height})`);
+}
+if (results.settings?.stored !== '720') fail('Auflösung wurde nicht gespeichert');
+if (results.office && results.office.menuButton !== true) {
+  fail('Im Büro fehlt der Weg zurück ins Hauptmenü');
+}
+if (results.office?.door && results.backToMenu !== true) {
+  fail('Aus der Pause kommt man nicht zurück ins Hauptmenü');
+}
+if (results.backToMenuState && (results.backToMenuState.phase !== 'menu'
+  || results.backToMenuState.night !== false || !results.backToMenuState.hudHidden)) {
+  fail('Nach dem Rückweg ins Hauptmenü läuft noch eine Schicht');
+}
 if (!results.report) fail('Night Report wurde nicht angezeigt');
 if (!results.editor.canvas || results.editor.swatches < 12 || !results.editor.name) {
   fail('Der Charaktereditor beim Spielstart ist unvollständig');

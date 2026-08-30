@@ -16,6 +16,10 @@ export function createAudio() {
   let muted = false;
   let intensity = 0.4;
   let bpm = 132;
+  // Lautstärken aus den Einstellungen - auch bevor es einen AudioContext gibt.
+  let masterVolume = 0.9;
+  let musicVolume = 0.5;
+  let sfxVolume = 0.55;
   let nextNoteTime = 0;
   let step = 0;
   let timer = 0;
@@ -26,7 +30,7 @@ export function createAudio() {
     if (!AC) return null;
     ctx = new AC();
     master = ctx.createGain();
-    master.gain.value = 0.9;
+    master.gain.value = muted ? 0 : masterVolume;
     master.connect(ctx.destination);
 
     filter = ctx.createBiquadFilter();
@@ -36,11 +40,11 @@ export function createAudio() {
     filter.connect(master);
 
     musicGain = ctx.createGain();
-    musicGain.gain.value = 0.5;
+    musicGain.gain.value = musicVolume;
     musicGain.connect(filter);
 
     sfxGain = ctx.createGain();
-    sfxGain.gain.value = 0.55;
+    sfxGain.gain.value = sfxVolume;
     sfxGain.connect(master);
 
     crowdGain = ctx.createGain();
@@ -141,9 +145,21 @@ export function createAudio() {
       if (crowdGain && ctx) crowdGain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
     },
     toggleMute() {
-      muted = !muted;
-      if (master && ctx) master.gain.setTargetAtTime(muted ? 0 : 0.9, ctx.currentTime, 0.05);
+      return this.setMuted(!muted);
+    },
+    setMuted(value) {
+      muted = !!value;
+      if (master && ctx) master.gain.setTargetAtTime(muted ? 0 : masterVolume, ctx.currentTime, 0.05);
       return muted;
+    },
+    /** Gesamtlautstärke 0..1 - wirkt auch auf Musik und Effekte. */
+    setMasterVolume(v) {
+      masterVolume = clamp01(v);
+      if (master && ctx && !muted) master.gain.setTargetAtTime(masterVolume, ctx.currentTime, 0.08);
+    },
+    setSfxVolume(v) {
+      sfxVolume = clamp01(v);
+      if (sfxGain && ctx) sfxGain.gain.setTargetAtTime(sfxVolume, ctx.currentTime, 0.08);
     },
     get muted() {
       return muted;
@@ -157,7 +173,8 @@ export function createAudio() {
       bpm = 128 + Math.round(intensity * 10);
     },
     setMusicVolume(v) {
-      if (musicGain && ctx) musicGain.gain.setTargetAtTime(v, ctx.currentTime, 0.1);
+      musicVolume = clamp01(v);
+      if (musicGain && ctx) musicGain.gain.setTargetAtTime(musicVolume, ctx.currentTime, 0.1);
     },
     /** Kurze UI-/Gameplay-Sounds. */
     sfx(name) {
@@ -182,6 +199,11 @@ export function createAudio() {
       }
     }
   };
+}
+
+function clamp01(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
 }
 
 function tone(ctx, dest, type, freq, dur, gain, time) {

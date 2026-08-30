@@ -8,7 +8,11 @@ import { renderCharacterEditor } from './character.js';
 import { CLUB_NAME, MODES, rolesFor, DEFENSE_KEYS, ITEMS, ITEM_CATEGORIES, ZONES } from '../data/config.js';
 import { drawItemIcon } from '../render/items.js';
 import { clubTier, capacity, rank } from '../systems/state.js';
-import { hasSave, clearSave } from '../systems/save.js';
+import { hasSave, clearSave, peekSave } from '../systems/save.js';
+import {
+  settings, setSetting, resetSettings, RESOLUTIONS, UI_SCALES,
+  resolutionNote, toggleFullscreen, fullscreenActive
+} from '../systems/settings.js';
 import { cheats, unlockAdmin, lockAdmin, setCheat, ADMIN_MAX_NIGHT } from '../systems/admin.js';
 import { repBand } from '../systems/reputation.js';
 import { difficultyBriefing } from '../systems/difficulty.js';
@@ -35,76 +39,114 @@ export function createScreens(game) {
 
   function hide() { root.classList.add('hidden'); }
 
-  /**
-   * Die Tutorial-Einstellung gehoert nicht in einen einzelnen Menue-Aufbau:
-   * wer aus dem Katalog oder aus dem Briefing zurueckkommt, soll seine
-   * Auswahl wiederfinden.
-   */
-  let tutorialWanted = true;
-
   /* ---------- Hauptmenü ---------- */
+
+  /** Merkt sich, welcher Modus zuletzt gewaehlt wurde (fuer FORTSETZEN). */
+  let lastMode = 'solo';
 
   /**
    * Der Titelbildschirm laesst die Szene auf dem Canvas frei: das Menue steht
-   * als schmale Spalte rechts, oben der Clubname, darunter die Auswahl.
+   * als Spalte rechts - oben der Clubname mit Leuchtschrift, darunter die
+   * Auswahl, ganz unten die Fusszeile mit den Systemtasten.
    */
   function menu({ onStart, onContinue }) {
     const el = document.createElement('div');
     el.className = 'menu';
+    const save = peekSave();
+
     el.innerHTML = `
+      <div class="menu-scan" aria-hidden="true"></div>
       <div class="menu-head">
-        <div class="menu-kicker">NULLWERK PRÄSENTIERT</div>
-        <h1 class="menu-title">${escapeHtml(CLUB_NAME)}</h1>
+        <div class="menu-kicker"><i></i>NULLWERK PRÄSENTIERT</div>
+        <h1 class="menu-title" data-text="${escapeHtml(CLUB_NAME)}">${escapeHtml(CLUB_NAME)}</h1>
         <div class="menu-sub">NIGHTSHIFT — BOUNCER CO-OP</div>
         <div class="menu-tag">Tür auf, Tür zu. Du entscheidest, wer reinkommt.</div>
+        ${save ? saveStrip(save) : ''}
       </div>
       <nav class="menu-nav" id="menu-nav"></nav>
       <div class="menu-panel hidden" id="menu-panel"></div>
-      <div class="menu-foot">TON STARTET MIT DEM ERSTEN KLICK · ESC PAUSE · M TON</div>
+      <div class="menu-foot">
+        <span class="mf-keys"><kbd>↑</kbd><kbd>↓</kbd> WÄHLEN · <kbd>ENTER</kbd> LOS · <kbd>ESC</kbd> PAUSE · <kbd>M</kbd> TON</span>
+        <button class="mf-fs" id="menu-fullscreen" type="button">
+          ${fullscreenActive() ? 'VOLLBILD BEENDEN' : 'VOLLBILD'}</button>
+      </div>
     `;
 
     const nav = el.querySelector('#menu-nav');
     const panel = el.querySelector('#menu-panel');
 
     const items = [
+      { group: 'SCHICHT ANTRETEN' },
       { id: 'solo', label: MODES.solo.label, note: 'Allein an der Tür. Alles liegt bei dir.', kind: 'mode' },
       { id: 'local', label: MODES.local.label, note: 'Zwei an einer Tastatur, geteilter Bildschirm.', kind: 'mode' },
       { id: 'online', label: MODES.online.label, note: 'Raum erstellen oder mit Code beitreten.', kind: 'mode' },
+      { group: 'CLUB' },
       { id: 'catalog', label: 'GEGENSTÄNDE', note: 'Alles, was Gäste dabeihaben können.', kind: 'screen' },
-      { id: 'settings', label: 'EINSTELLUNGEN', note: 'Tutorial, Spielstand.', kind: 'panel' },
+      { id: 'settings', label: 'EINSTELLUNGEN', note: 'Auflösung, Ton, Tutorial, Spielstand.', kind: 'screen' },
       { id: 'howto', label: 'ANLEITUNG', note: 'Wie eine Schicht abläuft.', kind: 'panel' },
       { id: 'credits', label: 'ÜBER DAS SPIEL', note: 'Was das hier ist.', kind: 'panel' }
     ];
-    if (hasSave()) {
-      items.splice(3, 0, {
+    if (save) {
+      items.splice(1, 0, {
         id: 'continue', label: 'KARRIERE FORTSETZEN',
-        note: 'Weiter mit dem gespeicherten Club.', kind: 'continue'
+        note: `Nacht ${String(save.nightIndex + 1).padStart(2, '0')} · €${Math.round(save.money).toLocaleString('de-DE')} · Ruf ${Math.round(save.reputation)}`,
+        kind: 'continue'
       });
     }
 
+    let index = 0;
     for (const item of items) {
+      if (item.group) {
+        const head = document.createElement('div');
+        head.className = 'menu-group';
+        head.textContent = item.group;
+        nav.appendChild(head);
+        continue;
+      }
+      index++;
+      const play = item.kind === 'mode' || item.kind === 'continue';
       const btn = document.createElement('button');
-      btn.className = `menu-item${item.kind === 'mode' || item.kind === 'continue' ? ' play' : ''}`;
+      btn.type = 'button';
+      btn.className = `menu-item${play ? ' play' : ''}${item.kind === 'continue' ? ' resume' : ''}`;
       btn.dataset.id = item.id;
       btn.innerHTML = `
-        <span class="mi-mark">▸</span>
-        <span class="mi-text"><b>${escapeHtml(item.label)}</b><i>${escapeHtml(item.note)}</i></span>`;
+        <span class="mi-num">${String(index).padStart(2, '0')}</span>
+        <span class="mi-text"><b>${escapeHtml(item.label)}</b><i>${escapeHtml(item.note)}</i></span>
+        <span class="mi-mark">▸</span>`;
       btn.addEventListener('click', () => choose(item));
       nav.appendChild(btn);
     }
 
-    /** Merkt sich, welcher Modus zuletzt gewaehlt wurde (fuer FORTSETZEN). */
-    let lastMode = 'solo';
+    el.querySelector('#menu-fullscreen').addEventListener('click', async (e) => {
+      const on = await toggleFullscreen(document.documentElement);
+      e.target.textContent = on ? 'VOLLBILD BEENDEN' : 'VOLLBILD';
+    });
+
+    // Pfeiltasten durch die Auswahl - ein Menü soll ohne Maus bedienbar sein.
+    el.addEventListener('keydown', (e) => {
+      if (!['ArrowDown', 'ArrowUp'].includes(e.key)) return;
+      const buttons = [...nav.querySelectorAll('.menu-item')];
+      if (!buttons.length) return;
+      e.preventDefault();
+      const at = buttons.indexOf(document.activeElement);
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      const next = (at + step + buttons.length) % buttons.length;
+      buttons[at < 0 ? 0 : next].focus();
+    });
 
     function choose(item) {
       if (item.kind === 'mode') {
         lastMode = item.id;
-        onStart(item.id, tutorialWanted);
+        onStart(item.id, settings().tutorial);
         return;
       }
-      if (item.kind === 'continue') { onContinue(lastMode, tutorialWanted); return; }
-      // Eigener Bildschirm mit Rueckweg ins Menue.
-      if (item.kind === 'screen') { catalog(() => menu({ onStart, onContinue })); return; }
+      if (item.kind === 'continue') { onContinue(lastMode, settings().tutorial); return; }
+      if (item.kind === 'screen') {
+        const back = () => menu({ onStart, onContinue });
+        if (item.id === 'catalog') catalog(back);
+        else settingsScreen(back);
+        return;
+      }
       togglePanel(item.id);
     }
 
@@ -120,7 +162,6 @@ export function createScreens(game) {
       panel.classList.remove('hidden');
       panel.innerHTML = panelHtml(id);
       markOpen();
-      if (id === 'settings') wireSettings();
     }
 
     function markOpen() {
@@ -130,17 +171,6 @@ export function createScreens(game) {
     }
 
     function panelHtml(id) {
-      if (id === 'settings') {
-        return `
-          <label class="menu-toggle">
-            <input type="checkbox" id="menu-tutorial" ${tutorialWanted ? 'checked' : ''} />
-            <span>TUTORIAL SPIELEN</span>
-          </label>
-          <p class="menu-note">Die Einarbeitung erklärt Ausweis, Abtasten und Entscheidung Schritt für Schritt.</p>
-          ${hasSave()
-            ? '<button class="btn ghost" id="menu-clear">SPIELSTAND LÖSCHEN</button>'
-            : '<p class="menu-note">Kein Spielstand vorhanden.</p>'}`;
-      }
       if (id === 'howto') {
         return `
           <ol class="menu-steps">
@@ -158,18 +188,210 @@ export function createScreens(game) {
         <p class="menu-note">Alles hier ist von Hand gezeichneter Code: keine Bilder, keine Assets.</p>`;
     }
 
-    function wireSettings() {
-      panel.querySelector('#menu-tutorial')?.addEventListener('change', (e) => {
-        tutorialWanted = e.target.checked;
+    show(el, { bare: true });
+    nav.querySelector('.menu-item')?.focus({ preventScroll: true });
+  }
+
+  /** Kopfzeile über dem Menü: wo die gespeicherte Karriere steht. */
+  function saveStrip(save) {
+    const when = save.savedAt
+      ? new Date(save.savedAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })
+      : '—';
+    return `
+      <div class="menu-save">
+        <span class="ms-dot"></span>
+        <b>${escapeHtml(save.name || 'DEIN TÜRSTEHER')}</b>
+        <i>NACHT ${String(save.nightIndex + 1).padStart(2, '0')} · ZULETZT ${escapeHtml(when)}</i>
+      </div>`;
+  }
+
+  /* ---------- Einstellungen ---------- */
+
+  /**
+   * Eigener Bildschirm statt Klappfach: Bild, Ton, Spiel und Daten stehen
+   * untereinander, jede Änderung greift sofort und wird gespeichert.
+   */
+  function settingsScreen(onBack) {
+    const el = document.createElement('div');
+    el.className = 'settings';
+
+    function draw() {
+      const s = settings();
+      const view = viewportSize();
+      el.innerHTML = `
+        <div class="set-head">
+          <div>
+            <div class="set-kicker">NULLWERK · SYSTEM</div>
+            <h1 class="title">EINSTELLUNGEN</h1>
+            <div class="subtitle">BILD · TON · SPIEL · DATEN</div>
+          </div>
+          <button class="btn ghost" id="settings-back">ZURÜCK</button>
+        </div>
+
+        <section class="set-block">
+          <h2 class="set-h"><span>01</span> BILD</h2>
+
+          <div class="set-row">
+            <div class="set-label">
+              <b>AUFLÖSUNG</b>
+              <i>Wie fein das Bild gerechnet wird. Niedriger läuft flüssiger.</i>
+            </div>
+            <div class="set-control">
+              <div class="seg" id="set-res">
+                ${RESOLUTIONS.map((r) => `
+                  <button type="button" class="seg-b ${s.resolution === r.id ? 'on' : ''}"
+                          data-set="resolution" data-value="${r.id}"
+                          title="${escapeHtml(r.note)}">${escapeHtml(r.label)}</button>`).join('')}
+              </div>
+              <div class="set-hint" id="set-res-note">
+                AKTUELL: ${escapeHtml(resolutionNote(view.w, view.h))} ·
+                ${escapeHtml(RESOLUTIONS.find((r) => r.id === s.resolution)?.note ?? '')}
+              </div>
+            </div>
+          </div>
+
+          <div class="set-row">
+            <div class="set-label"><b>OBERFLÄCHE</b><i>Grösse von Schrift und Bedienelementen.</i></div>
+            <div class="set-control">
+              <div class="seg">
+                ${UI_SCALES.map((u) => `
+                  <button type="button" class="seg-b ${s.uiScale === u.id ? 'on' : ''}"
+                          data-set="uiScale" data-value="${u.id}">${escapeHtml(u.label)}</button>`).join('')}
+              </div>
+            </div>
+          </div>
+
+          <div class="set-row">
+            <div class="set-label"><b>BILDEFFEKTE</b><i>Nebel, Scanlines, Funken. Aus spart Leistung.</i></div>
+            <div class="set-control">${switchHtml('effects', s.effects)}</div>
+          </div>
+
+          <div class="set-row">
+            <div class="set-label"><b>VOLLBILD</b><i>Der Club füllt den ganzen Bildschirm.</i></div>
+            <div class="set-control">
+              <button class="btn" id="set-fs" type="button">
+                ${fullscreenActive() ? 'VOLLBILD BEENDEN' : 'VOLLBILD EIN'}</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-block">
+          <h2 class="set-h"><span>02</span> TON</h2>
+          <div class="set-row">
+            <div class="set-label"><b>STUMM</b><i>Schaltet alles ab — wie die Taste <kbd>M</kbd>.</i></div>
+            <div class="set-control">${switchHtml('muted', s.muted)}</div>
+          </div>
+          ${sliderRow('master', 'GESAMT', 'Lautstärke von allem.', s.master)}
+          ${sliderRow('music', 'MUSIK', 'Der Sound aus dem Club.', s.music)}
+          ${sliderRow('sfx', 'EFFEKTE', 'Türen, Piepser, Stempel.', s.sfx)}
+        </section>
+
+        <section class="set-block">
+          <h2 class="set-h"><span>03</span> SPIEL</h2>
+          <div class="set-row">
+            <div class="set-label">
+              <b>TUTORIAL SPIELEN</b>
+              <i>Die Einarbeitung erklärt Ausweis, Abtasten und Entscheidung Schritt für Schritt.</i>
+            </div>
+            <div class="set-control">
+              <label class="switch">
+                <input type="checkbox" id="menu-tutorial" data-toggle="tutorial" ${s.tutorial ? 'checked' : ''} />
+                <span class="sw-track"><i></i></span>
+                <span class="sw-text">${s.tutorial ? 'AN' : 'AUS'}</span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-block">
+          <h2 class="set-h"><span>04</span> DATEN</h2>
+          <div class="set-row">
+            <div class="set-label"><b>SPIELSTAND</b><i>${hasSave()
+              ? 'Gelöscht ist gelöscht — die Karriere beginnt danach von vorn.'
+              : 'Kein Spielstand vorhanden.'}</i></div>
+            <div class="set-control">
+              <button class="btn ghost" id="settings-clear" ${hasSave() ? '' : 'disabled'}>
+                SPIELSTAND LÖSCHEN</button>
+            </div>
+          </div>
+          <div class="set-row">
+            <div class="set-label"><b>ZURÜCKSETZEN</b><i>Alle Einstellungen wieder auf Werk.</i></div>
+            <div class="set-control"><button class="btn ghost" id="settings-reset">STANDARD</button></div>
+          </div>
+        </section>
+
+        <div class="btn-row">
+          <button class="btn primary" id="settings-done">FERTIG</button>
+        </div>`;
+      wire();
+    }
+
+    function switchHtml(key, on) {
+      return `
+        <label class="switch">
+          <input type="checkbox" data-toggle="${key}" ${on ? 'checked' : ''} />
+          <span class="sw-track"><i></i></span>
+          <span class="sw-text">${on ? 'AN' : 'AUS'}</span>
+        </label>`;
+    }
+
+    function sliderRow(key, label, note, value) {
+      return `
+        <div class="set-row">
+          <div class="set-label"><b>${escapeHtml(label)}</b><i>${escapeHtml(note)}</i></div>
+          <div class="set-control slider">
+            <input type="range" min="0" max="100" step="1" value="${Math.round(value * 100)}"
+                   data-range="${key}" />
+            <span class="set-val" data-val="${key}">${Math.round(value * 100)}%</span>
+          </div>
+        </div>`;
+    }
+
+    function wire() {
+      for (const btn of el.querySelectorAll('[data-set]')) {
+        btn.addEventListener('click', () => {
+          setSetting(btn.dataset.set, btn.dataset.value);
+          draw();
+        });
+      }
+      for (const input of el.querySelectorAll('[data-toggle]')) {
+        input.addEventListener('change', (e) => {
+          setSetting(input.dataset.toggle, e.target.checked);
+          draw();
+        });
+      }
+      for (const range of el.querySelectorAll('[data-range]')) {
+        const key = range.dataset.range;
+        range.addEventListener('input', (e) => {
+          const value = Number(e.target.value) / 100;
+          setSetting(key, value);
+          const out = el.querySelector(`[data-val="${key}"]`);
+          if (out) out.textContent = `${Math.round(value * 100)}%`;
+        });
+      }
+      el.querySelector('#set-fs')?.addEventListener('click', async (e) => {
+        const on = await toggleFullscreen(document.documentElement);
+        e.target.textContent = on ? 'VOLLBILD BEENDEN' : 'VOLLBILD EIN';
       });
-      panel.querySelector('#menu-clear')?.addEventListener('click', (e) => {
+      el.querySelector('#settings-clear')?.addEventListener('click', (e) => {
         clearSave();
         e.target.disabled = true;
         e.target.textContent = 'GELÖSCHT';
       });
+      el.querySelector('#settings-reset')?.addEventListener('click', () => { resetSettings(); draw(); });
+      el.querySelector('#settings-back')?.addEventListener('click', onBack);
+      el.querySelector('#settings-done')?.addEventListener('click', onBack);
     }
 
-    show(el, { bare: true });
+    draw();
+    show(el, { wide: true });
+  }
+
+  function viewportSize() {
+    return {
+      w: window.innerWidth || 1280,
+      h: window.innerHeight || 720
+    };
   }
 
   /* ---------- Gegenstands-Katalog ---------- */
@@ -285,12 +507,20 @@ export function createScreens(game) {
     const { state } = game;
     const roles = rolesFor(state.mode);
     const el = document.createElement('div');
+    el.className = 'brief';
     el.innerHTML = `
-      <h1 class="title">${opts.tutorial ? 'EINARBEITUNG' : `NIGHT ${String(state.nightIndex + 1).padStart(2, '0')}`}</h1>
-      <div class="subtitle">${escapeHtml(event.label)} · ${escapeHtml(clubTier(state).label)} ·
-        RUF ${Math.round(state.reputation)} (${repBand(state.reputation)}) · ${escapeHtml(MODES[state.mode].label)}</div>
-      <p style="font-size:13px;color:#aab2bf;max-width:700px">${escapeHtml(
-        opts.tutorial ? 'Ruhige erste Schicht. Alles wird Schritt für Schritt erklärt.' : event.desc)}</p>
+      <div class="brief-head">
+        <div class="brief-kicker">NULLWERK · SCHICHTPLAN</div>
+        <h1 class="title">${opts.tutorial ? 'EINARBEITUNG' : `NIGHT ${String(state.nightIndex + 1).padStart(2, '0')}`}</h1>
+        <div class="brief-chips">
+          <span class="bchip event">${escapeHtml(event.label)}</span>
+          <span class="bchip">${escapeHtml(clubTier(state).label)}</span>
+          <span class="bchip">RUF ${Math.round(state.reputation)} · ${escapeHtml(repBand(state.reputation))}</span>
+          <span class="bchip mode">${escapeHtml(MODES[state.mode].label)}</span>
+        </div>
+        <p class="brief-desc">${escapeHtml(
+          opts.tutorial ? 'Ruhige erste Schicht. Alles wird Schritt für Schritt erklärt.' : event.desc)}</p>
+      </div>
 
       <div class="stats-grid" style="margin-top:20px">
         <div class="stat-cell"><span class="k">GELD</span><span class="v">€${Math.round(state.money).toLocaleString('de-DE')}</span></div>
@@ -326,7 +556,9 @@ export function createScreens(game) {
     show(el);
   }
 
-  function report(onContinue) { show(renderReport(game, onContinue), { wide: true }); }
+  function report(onContinue, onMenu = null) {
+    show(renderReport(game, onContinue, onMenu), { wide: true });
+  }
   /** Der Laptop: randlos, damit der Desktop den ganzen Bildschirm füllt. */
   function shop(onNext) { show(renderShop(game, onNext), { full: true }); }
 
@@ -340,7 +572,7 @@ export function createScreens(game) {
    * Pause. Hier - und nur hier - steht die komplette Tastenbelegung, damit
    * das laufende Spiel frei von Steuerungstexten bleibt.
    */
-  function pause(onResume, onQuit, admin = null) {
+  function pause(onResume, onQuit, admin = null, onMenu = null) {
     const roles = rolesFor(game.state.mode);
     const el = document.createElement('div');
     el.className = 'pause';
@@ -348,9 +580,12 @@ export function createScreens(game) {
       <div class="pause-main">
         <h1 class="title">PAUSE</h1>
         <div class="subtitle">DIE SCHLANGE WARTET</div>
-        <div class="btn-row" style="flex-direction:column;align-items:stretch;max-width:280px">
+        <div class="btn-row pause-btns">
           <button class="btn primary" id="pause-resume">WEITER</button>
-          <button class="btn ghost" id="pause-quit">SCHICHT ABBRECHEN</button>
+          <button class="btn" id="pause-quit">SCHICHT BEENDEN</button>
+          ${onMenu ? '<button class="btn ghost danger" id="pause-menu">ZURÜCK ZUM HAUPTMENÜ</button>' : ''}
+          <p class="menu-note" id="pause-warn">Beenden schliesst die Nacht ab und zeigt den Night Report.
+            Zurück zum Hauptmenü verwirft die laufende Schicht.</p>
         </div>
         <div class="admin" id="pause-admin"></div>
       </div>
@@ -390,6 +625,20 @@ export function createScreens(game) {
       </aside>`;
     el.querySelector('#pause-resume').addEventListener('click', onResume);
     el.querySelector('#pause-quit').addEventListener('click', onQuit);
+    // Zurueck ins Hauptmenue heisst: die Nacht ist weg. Einmal nachfragen.
+    const menuBtn = el.querySelector('#pause-menu');
+    if (menuBtn) {
+      let armed = false;
+      menuBtn.addEventListener('click', () => {
+        if (!armed) {
+          armed = true;
+          menuBtn.textContent = 'WIRKLICH? NOCHMAL KLICKEN';
+          menuBtn.classList.add('armed');
+          return;
+        }
+        onMenu();
+      });
+    }
     if (admin) adminBox(el.querySelector('#pause-admin'), admin);
     show(el);
   }
@@ -523,7 +772,7 @@ export function createScreens(game) {
 
   return {
     show, hide, menu, lobby, briefing, report, shop, office, character,
-    pause, waiting, catalog, root
+    pause, waiting, catalog, settings: settingsScreen, root
   };
 }
 

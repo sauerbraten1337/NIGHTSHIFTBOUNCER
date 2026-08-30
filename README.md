@@ -116,8 +116,24 @@ genau dem Icon, das später auf dem Kontrolltisch liegt, der Gruppe der Hausordn
 Zonen, in denen sie stecken. Hier — und nur hier, im Titelbildschirm — kann man in Ruhe
 nachschlagen; in der Schicht steht in der Hausordnung weiterhin nur die Gruppe.
 
-Jeder Bildschirm hinter dem Titel hat einen Rückweg: aus dem Katalog, aus der Online-Lobby
-und aus dem Briefing der ersten Schicht kommt man mit **ZURÜCK** wieder ins Menü.
+**EINSTELLUNGEN** öffnet einen eigenen Bildschirm mit vier Bereichen:
+
+* **BILD** — Auflösung des Zeichenpuffers (AUTO, NATIV oder fest von 960 × 540 bis
+  3840 × 2160), Grösse der Bedienoberfläche, Bildeffekte (Nebel, Scanlines, Funken)
+  und Vollbild. Jede Änderung greift sofort, ohne Neuladen.
+* **TON** — stumm schalten sowie Regler für Gesamt-, Musik- und Effektlautstärke.
+* **SPIEL** — Tutorial an oder aus.
+* **DATEN** — Spielstand löschen, Einstellungen auf Werk zurücksetzen.
+
+Alles davon liegt in `localStorage` unter `nullwerk.settings.v1` und gilt auch beim
+nächsten Start.
+
+Jeder Bildschirm hinter dem Titel hat einen Rückweg: aus dem Katalog, aus den
+Einstellungen, aus der Online-Lobby und aus dem Briefing der ersten Schicht kommt man mit
+**ZURÜCK** wieder ins Menü. Aus einer laufenden Karriere führen drei Wege zurück zum Titel:
+im Pausenmenü **ZURÜCK ZUM HAUPTMENÜ** (mit Rückfrage, die laufende Nacht wird verworfen),
+im Night Report und im Büro. **SCHICHT BEENDEN** im Pausenmenü schliesst die Nacht dagegen
+regulär ab und zeigt den Report.
 
 ## Dein Türsteher
 
@@ -394,6 +410,7 @@ src/systems/          state · guests · queue · identity · security · alcoho
                       nightcycle · progression · difficulty · tutorial · coop · save
                       aggression (Übergriffe und Tastenabwehr)
                       admin (Testzugang: Nachtwahl und Cheats hinter einem Code)
+                      settings (Bild, Ton, Spiel - dauerhaft im localStorage)
 src/render/           layout · palette · sprites · figure (grosse Frontfiguren,
                       Stimmungen und Haltungen für den eigenen Charakter)
                       items (gezeichnete Gegenstände) · scene (Tür-/Schleusenansicht,
@@ -401,7 +418,8 @@ src/render/           layout · palette · sprites · figure (grosse Frontfigure
                       office (Büro am Tag, samt anklickbarer Stellen)
                       desktop (Wallpaper des Laptops) · effects · renderer
 src/ui/               hud (inkl. Entscheidungs-Buttons) · notepad (Block mit zwei Seiten)
-                      screens: Menü, Gegenstands-Katalog, Lobby, Briefing, Pause
+                      screens: Menü, Einstellungen, Gegenstands-Katalog, Lobby,
+                      Briefing, Pause
                       idcard (Ausweis in der Hand) · itemtray (Kontrolltisch)
                       rulebook (ausfahrende Hausordnung am linken Rand)
                       adminhud (Röntgenblick auf die Wahrheit des Gastes)
