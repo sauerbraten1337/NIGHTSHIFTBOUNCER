@@ -46,7 +46,7 @@ static func grade_for(rating: int) -> Dictionary:
 			return g
 	return GRADES[GRADES.size() - 1]
 
-static func build(game: Node, on_continue: Callable) -> Control:
+static func build(game: Node, on_continue: Callable, on_menu: Callable = Callable()) -> Control:
 	var g: Dictionary = game.get("game")
 	var state: Dictionary = g["state"]
 	var night: Dictionary = state["night"]
@@ -227,9 +227,17 @@ static func build(game: Node, on_continue: Callable) -> Control:
 
 	wrap.add_child(body)
 
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 10)
 	var next := UiTheme.button("FEIERABEND — INS BÜRO", UiTheme.GREEN, 12, 3.0)
 	next.pressed.connect(on_continue)
-	wrap.add_child(next)
+	buttons.add_child(next)
+	# Nach der Nacht ist Schluss erlaubt: der Stand ist gespeichert.
+	if on_menu.is_valid():
+		var to_menu := UiTheme.button("ZURÜCK ZUM HAUPTMENÜ", UiTheme.DIM, 12, 3.0)
+		to_menu.pressed.connect(on_menu)
+		buttons.add_child(to_menu)
+	wrap.add_child(buttons)
 	return wrap
 
 # ---------- Bausteine ----------

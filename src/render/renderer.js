@@ -16,6 +16,7 @@ import {
 import { drawTitleScene } from './title.js';
 import { currentPhase, shiftProgress } from '../systems/nightcycle.js';
 import { isSolo } from '../systems/state.js';
+import { bufferSize, settings, onSettingsChange } from '../systems/settings.js';
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
@@ -23,14 +24,22 @@ export function createRenderer(canvas) {
   let beatTime = 0;
   let time = 0;
 
+  /**
+   * Die Puffergroesse kommt aus den Einstellungen: "AUTO" folgt dem
+   * Bildschirm, eine feste Auflösung rechnet auf ihre Höhe um.
+   */
   function resize() {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.round(rect.width * dpr));
-    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    const size = bufferSize(rect.width || window.innerWidth, rect.height || window.innerHeight);
+    canvas.width = Math.max(1, size.width);
+    canvas.height = Math.max(1, size.height);
   }
 
   window.addEventListener('resize', resize);
+  // Auflösung geändert: sofort neu aufspannen, ohne Neuladen.
+  onSettingsChange((_all, key) => {
+    if (key === null || key === 'resolution') resize();
+  });
   resize();
 
   /** Rechtecke der aktuellen Ansichten (Weltkoordinaten) - fürs UI-Layout. */
@@ -66,8 +75,10 @@ export function createRenderer(canvas) {
       keyHits = [];
       viewRects = [];
       drawTitleScene(ctx, WORLD.width, WORLD.height, time, pulse);
-      vignette(ctx, WORLD.width, WORLD.height, 0.55);
-      scanlines(ctx, WORLD.width, WORLD.height, 0.03);
+      if (settings().effects) {
+        vignette(ctx, WORLD.width, WORLD.height, 0.55);
+        scanlines(ctx, WORLD.width, WORLD.height, 0.03);
+      }
       return;
     }
 
@@ -105,11 +116,14 @@ export function createRenderer(canvas) {
       ctx.fillRect(views[0].rect.w - 1, 0, 4, WORLD.height);
     }
 
-    drawFog(ctx, fx, 0.45 + phase.intensity * 0.4);
-    drawDust(ctx, fx);
-    drawSparks(ctx, fx);
+    // Bildeffekte lassen sich abschalten - auf schwachen Rechnern zaehlt jedes Bild.
+    if (settings().effects) {
+      drawFog(ctx, fx, 0.45 + phase.intensity * 0.4);
+      drawDust(ctx, fx);
+      drawSparks(ctx, fx);
+      scanlines(ctx, WORLD.width, WORLD.height, 0.03);
+    }
     vignette(ctx, WORLD.width, WORLD.height, blackout ? 0.9 : 0.5);
-    scanlines(ctx, WORLD.width, WORLD.height, 0.03);
   }
 
   /** Welche Ansichten werden gezeigt? */

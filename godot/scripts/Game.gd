@@ -312,11 +312,34 @@ func apply_mode(mode: String) -> void:
 
 func go_menu() -> void:
 	game["state"]["phase"] = "menu"
+	game["state"]["night"] = null
+	paused = false
 	net_role = null
 	if hud != null:
 		hud.call("hide_hud")
+	audio.set_intensity(0.25)
 	if screens != null:
 		screens.call("menu")
+
+## Zurueck zum Titel - von ueberall aus. Eine laufende Nacht wird verworfen,
+## ein offener Online-Raum verlassen; der Karrierestand bleibt gespeichert.
+func quit_to_menu() -> void:
+	if game["state"]["mode"] == "online" and game.has("net") and game["net"] != null:
+		(game["net"] as Net).leave()
+	paused = false
+	_pending_event = null
+	go_menu()
+
+## Schicht vorzeitig abschliessen: Night Report wie am Ende einer Nacht.
+func end_shift_now() -> void:
+	paused = false
+	if screens != null:
+		screens.call("hide_screen")
+	var night: Variant = game["state"]["night"]
+	if night != null and bool((night as Dictionary).get("running", false)):
+		NightCycle.end_night(game)
+	else:
+		go_report()
 
 func go_briefing() -> void:
 	var state: Dictionary = game["state"]

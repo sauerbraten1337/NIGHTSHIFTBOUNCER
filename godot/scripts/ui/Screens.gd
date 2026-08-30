@@ -596,7 +596,11 @@ func _stat_cell(key: String, value: String) -> Control:
 # ---------------- Weiterreichende Bildschirme ----------------
 
 func report() -> void:
-	show_screen(Report.build(game, func() -> void: game.call("go_office")), {"wide": true})
+	show_screen(Report.build(
+		game,
+		func() -> void: game.call("go_office"),
+		func() -> void: game.call("quit_to_menu")
+	), {"wide": true})
 
 ## Der Laptop: randlos, damit der Desktop den ganzen Bildschirm fuellt.
 func shop() -> void:
@@ -615,6 +619,7 @@ func office() -> void:
 			}),
 		"onLaptop": func() -> void: shop(),
 		"onDoor": func() -> void: game.call("go_briefing"),
+		"onMenu": func() -> void: game.call("quit_to_menu"),
 	}), {"full": true})
 
 ## Charaktereditor - beim ersten Start und am Kleiderschrank.
@@ -647,13 +652,21 @@ func pause() -> void:
 	var resume := UiTheme.button("WEITER", UiTheme.GREEN, 12, 3.0)
 	resume.pressed.connect(func() -> void: game.call("toggle_pause"))
 	main.add_child(resume)
-	var quit := UiTheme.button("SCHICHT ABBRECHEN", UiTheme.RED, 12, 3.0)
-	quit.pressed.connect(func() -> void:
-		game.set("paused", false)
-		NightCycle.end_night(game.get("game"))
-		hide_screen()
-	)
+	var quit := UiTheme.button("SCHICHT BEENDEN", UiTheme.RED, 12, 3.0)
+	quit.pressed.connect(func() -> void: game.call("end_shift_now"))
 	main.add_child(quit)
+
+	# Zurueck ins Hauptmenue heisst: die Nacht ist weg. Einmal nachfragen.
+	var to_menu := UiTheme.button("ZURÜCK ZUM HAUPTMENÜ", UiTheme.DIM, 12, 3.0)
+	var armed := [false]
+	to_menu.pressed.connect(func() -> void:
+		if not armed[0]:
+			armed[0] = true
+			to_menu.text = "WIRKLICH? NOCHMAL KLICKEN"
+			return
+		game.call("quit_to_menu")
+	)
+	main.add_child(to_menu)
 	main.add_child(_admin_box())
 	cols.add_child(main)
 

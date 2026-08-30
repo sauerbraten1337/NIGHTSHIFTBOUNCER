@@ -9,7 +9,7 @@
 class_name OfficeScreen
 extends RefCounted
 
-## opts: { onWardrobe, onLaptop, onDoor }
+## opts: { onWardrobe, onLaptop, onDoor, onMenu }
 static func build(game: Node, opts: Dictionary) -> Control:
 	var g: Dictionary = game.get("game")
 	var state: Dictionary = g["state"]
@@ -60,6 +60,17 @@ static func build(game: Node, opts: Dictionary) -> Control:
 	hint.offset_left = 40
 	hint.offset_top = -50
 	wrap.add_child(hint)
+
+	# Der Stand ist gespeichert - von hier darf man jederzeit zurueck zum Titel.
+	if (opts.get("onMenu", Callable()) as Callable).is_valid():
+		var to_menu := UiTheme.button("HAUPTMENÜ", UiTheme.DIM, 10, 3.0)
+		to_menu.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+		to_menu.offset_left = -180
+		to_menu.offset_top = -56
+		to_menu.offset_right = -30
+		to_menu.offset_bottom = -22
+		to_menu.pressed.connect(func() -> void: (opts["onMenu"] as Callable).call())
+		wrap.add_child(to_menu)
 
 	# Anklickbare Stellen
 	var spots := [
