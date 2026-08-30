@@ -633,7 +633,8 @@ html, body {
   padding: 0;
 }
 .screen-inner.bare {
-  width: min(560px, 48vw);
+  /* Schmal genug, dass die Leuchtschrift des Clubs frei bleibt. */
+  width: min(520px, 43vw);
   border: none;
   background: none;
   padding: 0;
