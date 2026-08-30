@@ -27,11 +27,16 @@ var tutorial_wanted := true
 var _pending_event: Variant = null
 var _snapshot_timer := 0.0
 
-## Wird von der UI-Schicht gesetzt (ui/Hud.gd, ui/Screens.gd). Solange nichts
-## gesetzt ist, laeuft das Spiel ohne Oberflaeche - so laesst sich die
-## Zeichenkette allein pruefen.
+## Die Oberflaeche. `hud` und `screens` sind bewusst als Node getypt und
+## werden ueber call()/get() angesprochen: so laesst sich die Zeichenkette
+## auch ohne UI pruefen (z.B. in tools/screenshot.gd), indem man sie null
+## laesst.
 var hud: Node = null
 var screens: Node = null
+var idcard: IdCard = null
+var item_tray: ItemTray = null
+var rulebook: Rulebook = null
+var admin_hud: AdminHud = null
 
 func _ready() -> void:
 	game = {
@@ -59,8 +64,175 @@ func _ready() -> void:
 			)
 	)
 
+	game["net"] = Net.new(bus)
+	_wire_net(bus)
+	_build_ui()
+
 	Admin.restore_admin()
 	apply_mode("solo")
+	go_menu()
+
+## Baut die Oberflaeche auf. Reihenfolge wie in index.html: die Handstuecke
+## liegen im HUD, der Roentgenblick darueber auf einer eigenen Ebene.
+func _build_ui() -> void:
+	var h := Hud.new(self)
+	add_child(h)
+	hud = h
+
+	var overlay := h.overlay_root()
+
+	# Beide Handstuecke sitzen unten und wachsen nach oben, so hoch ihr Inhalt
+	# ist - wie `bottom: …px` mit automatischer Hoehe in styles/ui.css.
+	idcard = IdCard.new(self, "bouncer")
+	idcard.anchor_left = 0.0
+	idcard.anchor_top = 1.0
+	idcard.anchor_right = 0.0
+	idcard.anchor_bottom = 1.0
+	idcard.offset_left = 44
+	idcard.offset_bottom = -58
+	idcard.grow_horizontal = Control.GROW_DIRECTION_END
+	idcard.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	idcard.rotation = deg_to_rad(-2.4)
+	overlay.add_child(idcard)
+
+	item_tray = ItemTray.new(self, "security")
+	item_tray.anchor_left = 0.5
+	item_tray.anchor_top = 1.0
+	item_tray.anchor_right = 0.5
+	item_tray.anchor_bottom = 1.0
+	item_tray.offset_bottom = -104
+	item_tray.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	item_tray.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	overlay.add_child(item_tray)
+
+	rulebook = Rulebook.new()
+	overlay.add_child(rulebook)
+
+	var s := Screens.new(self)
+	add_child(s)
+	screens = s
+
+	# Der Roentgenblick gehoert nicht zur Schicht, sondern zum Testwerkzeug -
+	# er bleibt auch sichtbar, wenn das HUD ausgeblendet ist.
+	var admin_layer := CanvasLayer.new()
+	admin_layer.layer = 3
+	add_child(admin_layer)
+	var admin_root := Control.new()
+	admin_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	admin_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	admin_layer.add_child(admin_root)
+	admin_hud = AdminHud.new(self)
+	admin_hud.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	admin_hud.offset_left = -296
+	admin_hud.offset_right = -16
+	admin_hud.offset_top = 96
+	admin_root.add_child(admin_hud)
+
+# ---------------- Netzwerk ----------------
+
+func _wire_net(bus: Bus) -> void:
+	bus.on("net:room", func(payload: Variant) -> void:
+		var p: Dictionary = payload
+		net_role = p["role"]
+		apply_mode("online")
+		if screens != null:
+			screens.call("lobby_set_room", String(p["code"]), String(p["role"]))
+			screens.call("lobby_set_status", "Warte auf den Partner …" \
+				if p["role"] == "host" else "Verbunden. Warte auf den Host …")
+	)
+
+	bus.on("net:peer", func(payload: Variant) -> void:
+		var p: Dictionary = payload
+		if bool(p.get("connected", false)):
+			if screens != null:
+				screens.call("lobby_set_status", "Partner ist da. Ihr könnt starten.", "ok")
+				screens.call("lobby_show_start", is_host)
+			if hud != null:
+				hud.call("set_net", "ONLINE · PARTNER VERBUNDEN", false)
+		else:
+			if hud != null:
+				hud.call("set_net", "HOST HAT DEN RAUM GESCHLOSSEN" \
+					if bool(p.get("fatal", false)) else "PARTNER GETRENNT", true)
+			if screens != null:
+				screens.call("lobby_set_status", "Partner getrennt.", "bad")
+				screens.call("lobby_show_start", false)
+	)
+
+	bus.on("net:error", func(reason: Variant) -> void:
+		if screens != null:
+			screens.call("lobby_set_status", String(reason), "bad")
+	)
+
+	bus.on("net:closed", func(_p: Variant) -> void:
+		if game["state"]["mode"] == "online" and hud != null:
+			hud.call("set_net", "VERBINDUNG GETRENNT", true)
+	)
+
+	# Host: Aktionen des Gastes anwenden.
+	bus.on("net:action", func(payload: Variant) -> void:
+		if not is_host:
+			return
+		var msg: Dictionary = payload
+		if msg.get("role", "") != "security":
+			return   # der Gast steuert nur die Schleuse
+		for p: Dictionary in (game["players"] as Array):
+			if p["id"] == "security":
+				Coop.try_action(game, p, String(msg["code"]), msg.get("payload", {}))
+				return
+	)
+
+	# Gast: Schnappschuss uebernehmen.
+	bus.on("net:snapshot", func(data: Variant) -> void:
+		if not is_guest or data == null:
+			return
+		var was_phase: String = game["state"]["phase"]
+		Net.apply_snapshot(game, data, func(id: String) -> Dictionary: return role_by_id(id))
+		var phase: String = game["state"]["phase"]
+		if phase == "night" and was_phase != "night":
+			if screens != null:
+				screens.call("hide_screen")
+			if hud != null:
+				hud.call("show_hud")
+			audio.start()
+		elif phase != "night" and was_phase == "night":
+			go_report()
+	)
+
+	bus.on("net:phase", func(payload: Variant) -> void:
+		if not is_guest:
+			return
+		if (payload as Dictionary).get("phase", "") == "briefing" and screens != null:
+			screens.call("waiting", "Der Host startet gleich die Schicht …")
+	)
+
+## Von ui/Screens.gd aus dem Lobby-Bildschirm gerufen.
+func net_host() -> void:
+	net_role = "host"
+	if (game["net"] as Net).create_room():
+		if screens != null:
+			screens.call("lobby_set_status", "Raum wird erstellt …")
+	elif screens != null:
+		screens.call("lobby_set_status", "Server nicht erreichbar. Läuft \"npm start\"?", "bad")
+
+func net_join(code: String) -> void:
+	var trimmed := code.strip_edges()
+	if trimmed.length() < 4:
+		if screens != null:
+			screens.call("lobby_set_status", "Bitte den 5-stelligen Code eingeben.", "bad")
+		return
+	net_role = "guest"
+	if (game["net"] as Net).join_room(trimmed):
+		if screens != null:
+			screens.call("lobby_set_status", "Verbinde …")
+	elif screens != null:
+		screens.call("lobby_set_status", "Server nicht erreichbar.", "bad")
+
+func net_start() -> void:
+	(game["net"] as Net).send({"type": "phase", "phase": "briefing"})
+	go_briefing()
+
+func net_cancel() -> void:
+	(game["net"] as Net).leave()
 	go_menu()
 
 # ---------------- Spielobjekt-Helfer (wie in main.js) ----------------
@@ -130,6 +302,11 @@ func apply_mode(mode: String) -> void:
 	local_role = "security" if is_guest else "bouncer"
 	for p: Dictionary in (game["players"] as Array):
 		p["remote"] = not controls(p["id"])
+	if idcard != null:
+		idcard.role_id = local_role
+	# Der Kontrolltisch gehoert zu der Station, an der abgetastet wird.
+	if item_tray != null:
+		item_tray.role_id = "bouncer" if GameState.is_solo(state) else "security"
 	if hud != null:
 		hud.call("rebuild")
 
@@ -146,6 +323,10 @@ func go_briefing() -> void:
 	state["phase"] = "briefing"
 	if hud != null:
 		hud.call("hide_hud")
+	if is_guest:
+		if screens != null:
+			screens.call("waiting", "Der Host bereitet die Schicht vor …")
+		return
 	apply_mode(state["mode"])
 	_pending_event = NightCycle.pick_night_event(game["rng"], state)
 	var tutorial: bool = tutorial_wanted and not bool(state["tutorialDone"])
@@ -170,10 +351,16 @@ func begin_night(tutorial: bool) -> void:
 		hud.call("show_hud")
 	audio.start()
 	audio.set_intensity(0.3)
+	if is_host:
+		_send_snapshot()
 
 func go_report() -> void:
 	if hud != null:
 		hud.call("hide_hud")
+	if is_guest:
+		if screens != null:
+			screens.call("waiting", "Der Host sieht sich den Night Report an …")
+		return
 	if screens != null:
 		screens.call("report")
 	else:
@@ -201,6 +388,8 @@ func _on_night_end() -> void:
 # ---------------- Schleifen ----------------
 
 func _physics_process(delta: float) -> void:
+	if game.has("net") and game["net"] != null:
+		(game["net"] as Net).poll()
 	var state: Dictionary = game["state"]
 	if state["phase"] != "night" or paused:
 		input.end_frame()
@@ -231,8 +420,15 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	renderer.render(delta)
 	var state: Dictionary = game["state"]
-	if state["phase"] == "night" and hud != null:
-		hud.call("update_hud")
+	if state["phase"] == "night":
+		if hud != null:
+			hud.call("update_hud")
+		if idcard != null:
+			idcard.update_card()
+		if item_tray != null:
+			item_tray.update_tray()
+	if admin_hud != null:
+		admin_hud.update_admin()
 
 ## Eingaben des Gastes: direkt als Netzwerk-Aktion.
 func _read_guest_input() -> void:
@@ -284,6 +480,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event.is_action_pressed("ui_pause") and game["state"]["phase"] == "night" and not is_guest:
 		toggle_pause()
+	elif event.is_action_pressed("mute"):
+		audio.toggle_mute()
 
 ## Welcher Ring liegt unter dem Mauszeiger? (Ellipsentest wie in main.js)
 func _hit_at(hits: Array, p: Vector2) -> Variant:

@@ -8,6 +8,11 @@
 ## uebertragbar bleibt.
 ##
 ## Alle Winkel in Radiant, alle Koordinaten in Weltkoordinaten (1280x720).
+##
+## Das Ziel `ci` ist bewusst als Variant getypt und nicht als CanvasItem:
+## uebergeben wird entweder ein echter CanvasItem oder eine DrawList, die
+## dieselben draw_*-Aufrufe aufzeichnet und spaeter additiv wiedergibt
+## (siehe render/DrawList.gd). Beide sind hier gleichwertig.
 class_name Draw2D
 extends RefCounted
 
@@ -33,14 +38,14 @@ static func ellipse_points(
 	return points
 
 ## Gefuellte Ellipse. Entspricht ctx.ellipse(...) + ctx.fill().
-static func ellipse(ci: CanvasItem, center: Vector2, radii: Vector2, color: Color) -> void:
+static func ellipse(ci: Variant, center: Vector2, radii: Vector2, color: Color) -> void:
 	ci.draw_colored_polygon(ellipse_points(center, radii), color)
 
 ## Gefuellter Ellipsenausschnitt. Canvas schliesst einen Teilbogen beim Fuellen
 ## mit einer Sehne (nicht als Tortenstueck) - genau das macht diese Funktion,
 ## und darauf beruhen die Frisuren in Figure.gd.
 static func ellipse_arc(
-	ci: CanvasItem, center: Vector2, radii: Vector2,
+	ci: Variant, center: Vector2, radii: Vector2,
 	start_angle: float, end_angle: float, color: Color
 ) -> void:
 	var points := ellipse_points(center, radii, start_angle, end_angle)
@@ -49,7 +54,7 @@ static func ellipse_arc(
 
 ## Umrissene Ellipse. Entspricht ctx.ellipse(...) + ctx.stroke().
 static func ellipse_outline(
-	ci: CanvasItem, center: Vector2, radii: Vector2, color: Color, width: float = 1.0
+	ci: Variant, center: Vector2, radii: Vector2, color: Color, width: float = 1.0
 ) -> void:
 	var points := ellipse_points(center, radii)
 	ci.draw_polyline(points, color, width, true)
@@ -98,14 +103,14 @@ static func round_rect_points(rect: Rect2, radius: float) -> PackedVector2Array:
 	append_quad(path, Vector2(x, y), Vector2(x + r, y), 6)
 	return path
 
-static func fill_round_rect(ci: CanvasItem, rect: Rect2, radius: float, color: Color) -> void:
+static func fill_round_rect(ci: Variant, rect: Rect2, radius: float, color: Color) -> void:
 	if radius <= 0.5:
 		ci.draw_rect(rect, color)
 		return
 	ci.draw_colored_polygon(round_rect_points(rect, radius), color)
 
 static func stroke_round_rect(
-	ci: CanvasItem, rect: Rect2, radius: float, color: Color, width: float = 1.0
+	ci: Variant, rect: Rect2, radius: float, color: Color, width: float = 1.0
 ) -> void:
 	var points := round_rect_points(rect, radius)
 	points.append(points[0])
@@ -116,7 +121,7 @@ static func stroke_round_rect(
 ## Linie mit runden Enden (ctx.lineCap = 'round'). Godots draw_line kennt
 ## keine Enden, darum sitzt an jedem Ende ein Kreis.
 static func line_round(
-	ci: CanvasItem, from: Vector2, to: Vector2, color: Color, width: float
+	ci: Variant, from: Vector2, to: Vector2, color: Color, width: float
 ) -> void:
 	ci.draw_line(from, to, color, width, true)
 	var r := width * 0.5
@@ -126,7 +131,7 @@ static func line_round(
 
 ## Linienzug mit runden Enden und Gelenken.
 static func polyline_round(
-	ci: CanvasItem, points: PackedVector2Array, color: Color, width: float
+	ci: Variant, points: PackedVector2Array, color: Color, width: float
 ) -> void:
 	if points.size() < 2:
 		return
@@ -138,12 +143,12 @@ static func polyline_round(
 
 # ---------- Pfade ----------
 
-static func fill_path(ci: CanvasItem, points: PackedVector2Array, color: Color) -> void:
+static func fill_path(ci: Variant, points: PackedVector2Array, color: Color) -> void:
 	if points.size() >= 3:
 		ci.draw_colored_polygon(points, color)
 
 static func stroke_path(
-	ci: CanvasItem, points: PackedVector2Array, color: Color,
+	ci: Variant, points: PackedVector2Array, color: Color,
 	width: float = 1.0, closed: bool = false
 ) -> void:
 	if points.size() < 2:
@@ -161,7 +166,7 @@ static func stroke_path(
 # interpoliert dazwischen - bei einer geraden Kante ist das exakt derselbe
 # lineare Verlauf, ganz ohne Textur.
 
-static func vgradient_rect(ci: CanvasItem, rect: Rect2, top: Color, bottom: Color) -> void:
+static func vgradient_rect(ci: Variant, rect: Rect2, top: Color, bottom: Color) -> void:
 	ci.draw_polygon(
 		PackedVector2Array([
 			rect.position,
@@ -172,7 +177,7 @@ static func vgradient_rect(ci: CanvasItem, rect: Rect2, top: Color, bottom: Colo
 		PackedColorArray([top, top, bottom, bottom])
 	)
 
-static func hgradient_rect(ci: CanvasItem, rect: Rect2, left: Color, right: Color) -> void:
+static func hgradient_rect(ci: Variant, rect: Rect2, left: Color, right: Color) -> void:
 	ci.draw_polygon(
 		PackedVector2Array([
 			rect.position,
@@ -186,7 +191,7 @@ static func hgradient_rect(ci: CanvasItem, rect: Rect2, left: Color, right: Colo
 ## Vieleck mit einer Farbe je Eckpunkt - fuer Trapeze wie das Pult und die
 ## Seitenwaende, deren Verlauf nicht achsenparallel liegt.
 static func gradient_polygon(
-	ci: CanvasItem, points: PackedVector2Array, colors: PackedColorArray
+	ci: Variant, points: PackedVector2Array, colors: PackedColorArray
 ) -> void:
 	if points.size() >= 3:
 		ci.draw_polygon(points, colors)
@@ -231,7 +236,7 @@ enum Align { LEFT, CENTER, RIGHT }
 enum Baseline { TOP, MIDDLE, ALPHABETIC, BOTTOM }
 
 static func text(
-	ci: CanvasItem, font: Font, pos: Vector2, content: String, size: int, color: Color,
+	ci: Variant, font: Font, pos: Vector2, content: String, size: int, color: Color,
 	align: Align = Align.LEFT, baseline: Baseline = Baseline.ALPHABETIC
 ) -> void:
 	if content.is_empty():

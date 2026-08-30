@@ -3,14 +3,19 @@
 ##   xvfb-run -a godot --path godot --script res://tools/screenshot.gd -- --out /pfad
 ##
 ## Ohne Bildschirm laeuft Godot nur headless, und headless zeichnet nichts -
-## darum ein virtueller X-Server. Das Werkzeug startet die Hauptszene, laesst
-## sie ein paar Sekunden laufen und legt Aufnahmen ab: Titelbildschirm, dann
-## eine laufende Nacht.
+## darum ein virtueller X-Server. Das Werkzeug startet die Hauptszene und
+## laeuft den ganzen Spielfluss ab: Titel, Charaktereditor, Briefing, Nacht
+## (solo und Koop), Nachtabschluss, Buero und Laptop.
 extends SceneTree
 
 var _out_dir := "user://shots"
 var _game: Node = null
 var _frame := 0
+
+## Was wann passiert. Erst der Schritt, dann - ein paar Bilder spaeter -
+## die Aufnahme, damit sich die Oberflaeche aufbauen kann.
+var _plan: Array = []
+var _step := 0
 
 func _init() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -24,37 +29,59 @@ func _init() -> void:
 	root.add_child(_game)
 	print("Szene gestartet, Aufnahmen nach ", _out_dir)
 
+	_plan = [
+		[40, func() -> void: _shot("01-titel")],
+		[50, func() -> void: _screens().call("character", func() -> void: pass)],
+		[80, func() -> void: _shot("02-charaktereditor")],
+		[90, func() -> void:
+			_game.set("tutorial_wanted", false)
+			_game.call("go_briefing")],
+		[120, func() -> void: _shot("03-briefing")],
+		[130, func() -> void: _game.call("begin_night", false)],
+		[210, func() -> void: _shot("04-nacht-solo")],
+		# Ausweis und Abtasten ausloesen, damit Ausweiskarte und Kontrolltisch
+		# im Bild sind - beide erscheinen erst, wenn danach gefragt wurde.
+		[212, func() -> void:
+			_game.call("act", "bouncer", "id")
+			_game.call("act", "bouncer", "search")],
+		[216, func() -> void: _game.call("act", "bouncer", "zone", {"zone": "jacket"})],
+		[250, func() -> void: _shot("04b-nacht-ausweis")],
+		[255, func() -> void: _game.call("toggle_pause")],
+		[280, func() -> void: _shot("05-pause")],
+		[285, func() -> void: _game.call("toggle_pause")],
+		# Nachtabschluss: die Schicht abbrechen wie der Admin-Knopf.
+		[290, func() -> void: _game.call("admin_end_shift")],
+		# Der Admin-Knopf schliesst zuletzt den Bildschirm - fuer die Aufnahme
+		# den Nachtabschluss danach noch einmal aufrufen.
+		[300, func() -> void: _game.call("go_report")],
+		[340, func() -> void: _shot("06-nachtabschluss")],
+		[345, func() -> void: _game.call("go_office")],
+		[380, func() -> void: _shot("07-buero")],
+		[385, func() -> void: _screens().call("shop")],
+		[440, func() -> void: _shot("08-laptop")],
+		# Derselbe Blick im lokalen Koop - der Splitscreen ist eine eigene
+		# Zeichenpfad-Variante.
+		[450, func() -> void:
+			var g: Dictionary = _game.get("game")
+			(g["state"] as Dictionary)["night"] = null
+			(g["state"] as Dictionary)["nightIndex"] = 0
+			_game.call("apply_mode", "local")
+			_game.call("go_briefing")],
+		[480, func() -> void: _game.call("begin_night", false)],
+		[560, func() -> void:
+			_shot("09-nacht-koop")
+			quit(0)],
+	]
+
+func _screens() -> Node:
+	return _game.get("screens")
+
 ## SceneTree._process liefert bool: true wuerde die Schleife beenden.
 func _process(_delta: float) -> bool:
 	_frame += 1
-
-	# Titelbildschirm, sobald sich das Bild aufgebaut hat.
-	if _frame == 40:
-		_shot("01-titel")
-
-	# In die Nacht wechseln: ohne Oberflaeche fuehrt go_briefing() direkt
-	# hinein (siehe Game.gd).
-	if _frame == 45:
-		_game.call("go_briefing")
-
-	if _frame == 120:
-		_shot("02-nacht-solo")
-
-	# Denselben Blick im lokalen Koop - der Splitscreen ist eine eigene
-	# Zeichenpfad-Variante.
-	if _frame == 125:
-		_game.set("tutorial_wanted", false)
-		var g: Dictionary = _game.get("game")
-		(g["state"] as Dictionary)["night"] = null
-		(g["state"] as Dictionary)["nightIndex"] = 0
-		_game.call("apply_mode", "local")
-		_game.call("go_briefing")
-
-	if _frame == 220:
-		_shot("03-nacht-koop")
-		quit(0)
-		return true
-
+	while _step < _plan.size() and int(_plan[_step][0]) <= _frame:
+		(_plan[_step][1] as Callable).call()
+		_step += 1
 	return false
 
 func _shot(name: String) -> void:

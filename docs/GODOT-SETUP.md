@@ -111,12 +111,38 @@ Exitcode 0 und keine Fehlerausgabe heißt: Projekt lädt und läuft.
 
 ## Portierungsstand
 
-| Modul | Web | Godot |
+Die Portierung ist vollständig: Das Godot-Projekt spielt dasselbe Spiel wie
+die Web-Fassung, aus derselben Datenlage und mit denselben Zahlen.
+
+| Bereich | Web | Godot |
 | --- | --- | --- |
-| Farbwelt | `src/render/palette.js` | `godot/scripts/Palette.gd` |
-| Weltkoordinaten | `src/render/layout.js` | `godot/scripts/Layout.gd` |
-| Szene | `src/render/scene.js` | offen |
-| Spiellogik | `src/systems/*` | offen |
-| UI | `src/ui/*` | offen |
-| Audio | `src/core/audio.js` | offen |
-| Online-Koop | `src/net/net.js`, `server/` | offen |
+| Zufall, Bus, Eingabe, Schleife | `src/core/*` | `scripts/core/*` (`Rng.gd`, `Bus.gd`, `GameInput.gd`) |
+| Daten | `src/data/*` | `scripts/data/Config.gd`, `Dialogue.gd` |
+| Spiellogik | `src/systems/*` | `scripts/systems/*` (22 Module) |
+| Zeichnen | `src/render/*` | `scripts/render/*` inkl. `Draw2D.gd` (Canvas-2D-Ersatz) |
+| Oberfläche | `src/ui/*`, `styles/ui.css` | `scripts/ui/*` (Control-Knoten + `UiTheme.gd`) |
+| Audio | `src/core/audio.js` | `scripts/core/GameAudio.gd` (`AudioStreamGenerator`) |
+| Online-Koop | `src/net/net.js`, `server/` | `scripts/net/Net.gd` (`WebSocketPeer`, gleiches Protokoll) |
+| Spielstand | `localStorage` | `user://nullwerk.save.v1.json` |
+| Einstiegspunkt | `src/main.js` | `scripts/Game.gd` (`scenes/Main.tscn`) |
+
+Der Server aus `server/` bedient beide Fassungen — das JSON-Protokoll ist
+unverändert.
+
+### Prüfen
+
+```bash
+# Alle Skripte auf Syntaxfehler prüfen
+for f in $(find godot/scripts -name "*.gd"); do
+  godot --headless --path godot --check-only --script "res://${f#godot/}"
+done
+
+# Regressionstests (Systeme, ganze Nächte solo und im Koop, Spielstand)
+godot --headless --path godot --script res://tests/run_tests.gd
+
+# Bildschirmfotos des ganzen Spielflusses (braucht einen X-Server)
+xvfb-run -a godot --path godot --script res://tools/screenshot.gd -- --out /tmp/shots
+
+# Tastenbelegung neu schreiben (nach Änderungen an tools/write_input_map.gd)
+godot --headless --path godot --script res://tools/write_input_map.gd
+```

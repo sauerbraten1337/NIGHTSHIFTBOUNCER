@@ -39,6 +39,7 @@ func poll() -> void:
 		if not _connected:
 			_connected = true
 			status = "online"
+			_flush_pending()
 		while _socket.get_available_packet_count() > 0:
 			var raw := _socket.get_packet().get_string_from_utf8()
 			var msg: Variant = JSON.parse_string(raw)

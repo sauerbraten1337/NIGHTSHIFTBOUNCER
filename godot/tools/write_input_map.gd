@@ -57,6 +57,7 @@ const BINDINGS := {
 	"ui_pause": KEY_ESCAPE,
 	"notepad": KEY_N,
 	"rulebook": KEY_H,
+	"mute": KEY_M,
 }
 
 func _init() -> void:
