@@ -16,10 +16,6 @@ var _frame: PanelContainer = null
 var _scroll: ScrollContainer = null
 var _inner: VBoxContainer = null
 
-## Die Tutorial-Einstellung gehoert nicht in einen einzelnen Menue-Aufbau:
-## wer aus dem Katalog oder aus dem Briefing zurueckkommt, soll seine Auswahl
-## wiederfinden.
-var _tutorial_wanted := true
 ## Merkt sich, welcher Modus zuletzt gewaehlt wurde (fuer FORTSETZEN).
 var _last_mode := "solo"
 
@@ -87,7 +83,7 @@ func show_screen(content: Control, opts: Dictionary = {}) -> void:
 	# "wide": breiter Kasten fuer Nachtabschluss und Charaktereditor.
 	if bare:
 		_frame.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-		_frame.offset_left = -480
+		_frame.offset_left = -MenuScreen.COLUMN_WIDTH
 	elif full:
 		_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	else:
@@ -105,163 +101,25 @@ func hide_screen() -> void:
 
 # ---------------- Hauptmenue ----------------
 
-## Der Titelbildschirm laesst die Szene frei: das Menue steht als schmale
-## Spalte rechts, oben der Clubname, darunter die Auswahl.
+## Der Titelbildschirm laesst die Szene frei: das Menue steht als Spalte
+## rechts - oben der Clubname als Leuchtschrift, darunter die Auswahl, ganz
+## unten die Fusszeile. Aufgebaut wird sie in MenuScreen.
 func menu() -> void:
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
-	box.custom_minimum_size = Vector2(430, 0)
+	show_screen(MenuScreen.build({
+		"on_mode": func(mode: String) -> void:
+			_last_mode = mode
+			_start_career(mode),
+		"on_continue": func() -> void: _continue_career(_last_mode),
+		"on_catalog": func() -> void: catalog(func() -> void: menu()),
+		"on_settings": func() -> void: settings(),
+	}), {"bare": true})
 
-	var head := VBoxContainer.new()
-	head.add_theme_constant_override("separation", 2)
-	head.add_child(UiTheme.label("NULLWERK PRÄSENTIERT", 9, UiTheme.DIM, 4.0))
-	head.add_child(UiTheme.label(Config.CLUB_NAME, 42, Color(1, 1, 1), 6.0, true))
-	head.add_child(UiTheme.label("NIGHTSHIFT — BOUNCER CO-OP", 11, UiTheme.CYAN, 3.0))
-	head.add_child(UiTheme.label(
-		"Tür auf, Tür zu. Du entscheidest, wer reinkommt.", 12, UiTheme.TEXT
-	))
-	box.add_child(head)
-	box.add_child(_gap(14))
-
-	var items: Array[Dictionary] = [
-		{"id": "solo", "label": Config.MODES["solo"]["label"],
-			"note": "Allein an der Tür. Alles liegt bei dir.", "kind": "mode"},
-		{"id": "local", "label": Config.MODES["local"]["label"],
-			"note": "Zwei an einer Tastatur, geteilter Bildschirm.", "kind": "mode"},
-		{"id": "online", "label": Config.MODES["online"]["label"],
-			"note": "Raum erstellen oder mit Code beitreten.", "kind": "mode"},
-		{"id": "catalog", "label": "GEGENSTÄNDE",
-			"note": "Alles, was Gäste dabeihaben können.", "kind": "screen"},
-		{"id": "settings", "label": "EINSTELLUNGEN",
-			"note": "Tutorial, Spielstand.", "kind": "panel"},
-		{"id": "howto", "label": "ANLEITUNG",
-			"note": "Wie eine Schicht abläuft.", "kind": "panel"},
-		{"id": "credits", "label": "ÜBER DAS SPIEL",
-			"note": "Was das hier ist.", "kind": "panel"},
-	]
-	if SaveGame.has_save():
-		items.insert(3, {
-			"id": "continue", "label": "KARRIERE FORTSETZEN",
-			"note": "Weiter mit dem gespeicherten Club.", "kind": "continue",
-		})
-
-	var panel := PanelContainer.new()
-	panel.visible = false
-	panel.add_theme_stylebox_override("panel", UiTheme.panel_box())
-	var panel_body := VBoxContainer.new()
-	panel_body.add_theme_constant_override("separation", 6)
-	panel.add_child(panel_body)
-
-	var open_panel := {"id": ""}
-	for item: Dictionary in items:
-		var play: bool = item["kind"] == "mode" or item["kind"] == "continue"
-		var b := _menu_item(item["label"], item["note"], play)
-		b.pressed.connect(func() -> void:
-			_choose_menu_item(item, open_panel, panel, panel_body)
-		)
-		box.add_child(b)
-
-	box.add_child(panel)
-	box.add_child(_gap(10))
-	box.add_child(UiTheme.label(
-		"TON STARTET MIT DEM ERSTEN KLICK · ESC PAUSE · M TON", 9, UiTheme.DIM, 2.0
-	))
-
-	show_screen(box, {"bare": true})
-
-func _choose_menu_item(
-	item: Dictionary, open_panel: Dictionary, panel: PanelContainer, body: VBoxContainer
-) -> void:
-	match item["kind"]:
-		"mode":
-			_last_mode = item["id"]
-			_start_career(item["id"])
-		"continue":
-			_continue_career(_last_mode)
-		"screen":
-			catalog(func() -> void: menu())
-		_:
-			# Eigenes Feld auf- oder zuklappen.
-			if open_panel["id"] == item["id"]:
-				open_panel["id"] = ""
-				panel.visible = false
-				return
-			open_panel["id"] = item["id"]
-			panel.visible = true
-			for child in body.get_children():
-				body.remove_child(child)
-				child.queue_free()
-			_fill_menu_panel(body, item["id"])
-
-func _fill_menu_panel(body: VBoxContainer, id: String) -> void:
-	match id:
-		"settings":
-			var toggle := CheckBox.new()
-			toggle.text = "TUTORIAL SPIELEN"
-			toggle.button_pressed = _tutorial_wanted
-			toggle.add_theme_font_override("font", Fonts.mono())
-			toggle.add_theme_font_size_override("font_size", 11)
-			toggle.toggled.connect(func(on: bool) -> void: _tutorial_wanted = on)
-			body.add_child(toggle)
-			body.add_child(UiTheme.body_label(
-				"Die Einarbeitung erklärt Ausweis, Abtasten und Entscheidung "
-				+ "Schritt für Schritt.", 11, UiTheme.DIM
-			))
-			if SaveGame.has_save():
-				var clear := UiTheme.button("SPIELSTAND LÖSCHEN", UiTheme.RED, 11)
-				clear.pressed.connect(func() -> void:
-					SaveGame.clear_save()
-					clear.disabled = true
-					clear.text = "GELÖSCHT"
-				)
-				body.add_child(clear)
-			else:
-				body.add_child(UiTheme.body_label(
-					"Kein Spielstand vorhanden.", 11, UiTheme.DIM
-				))
-		"howto":
-			var steps := [
-				"AUSWEIS verlangen und selbst prüfen: Foto, Name, Geburtsdatum, "
-					+ "Gültigkeit, Hologramm.",
-				"ANSPRECHEN — was sagt der Gast, passt es zum Ausweis?",
-				"ABTASTEN — Jacke, Hosentaschen, Tasche. Ringe anklicken oder J K L.",
-				"ALKOTEST bei Verdacht. Den Grenzwert liest du selbst ab.",
-				"ENTSCHEIDEN — einlassen oder abweisen. Niemand sagt dir, ob es "
-					+ "richtig war.",
-			]
-			for i in steps.size():
-				body.add_child(UiTheme.body_label("%d. %s" % [i + 1, steps[i]], 11))
-		_:
-			body.add_child(UiTheme.body_label(
-				"Ein Club, eine Tür, eine Nacht. Im Koop steht einer draussen an der "
-				+ "Tür und einer drinnen in der Sicherheitsschleuse — was der eine "
-				+ "übersieht, kann der andere noch fangen.", 11, UiTheme.DIM
-			))
-			body.add_child(UiTheme.body_label(
-				"Alles hier ist von Hand gezeichneter Code: keine Bilder, keine Assets.",
-				11, UiTheme.DIM
-			))
-
-func _menu_item(label: String, note: String, play: bool) -> Button:
-	var b := Button.new()
-	b.flat = true
-	b.custom_minimum_size = Vector2(0, 52)
-	var row := HBoxContainer.new()
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	row.add_theme_constant_override("separation", 10)
-	var mark := UiTheme.label("▸", 12, UiTheme.RED if play else UiTheme.DIM)
-	row.add_child(mark)
-	var text := VBoxContainer.new()
-	text.add_theme_constant_override("separation", 0)
-	text.add_child(UiTheme.label(label, 16, UiTheme.TEXT, 3.0, true))
-	text.add_child(UiTheme.label(note, 10, UiTheme.DIM))
-	row.add_child(text)
-	b.add_child(row)
-	return b
+## Einstellungen: eigener Bildschirm statt Klappfach im Menue.
+func settings() -> void:
+	show_screen(SettingsScreen.build(func() -> void: menu()), {"wide": true})
 
 func _start_career(mode: String) -> void:
-	game.set("tutorial_wanted", _tutorial_wanted)
+	game.set("tutorial_wanted", Settings.get_bool("tutorial"))
 	var g: Dictionary = game.get("game")
 	var carried: Dictionary = g["state"]
 	g["state"] = GameState.create_initial_state(mode)
@@ -277,7 +135,7 @@ func _start_career(mode: String) -> void:
 	)
 
 func _continue_career(mode: String) -> void:
-	game.set("tutorial_wanted", _tutorial_wanted)
+	game.set("tutorial_wanted", Settings.get_bool("tutorial"))
 	var g: Dictionary = game.get("game")
 	g["state"] = GameState.create_initial_state(mode)
 	SaveGame.load_game(g["state"])
@@ -502,13 +360,21 @@ func briefing(event: Dictionary, tutorial: bool) -> void:
 	box.add_theme_constant_override("separation", 8)
 	var title := "EINARBEITUNG" if tutorial \
 		else "NIGHT %s" % str(int(state["nightIndex"]) + 1).pad_zeros(2)
+	box.add_child(UiTheme.label("NULLWERK · SCHICHTPLAN", 9, UiTheme.RED, 5.0))
 	box.add_child(UiTheme.label(title, 26, UiTheme.TEXT, 4.0, true))
-	box.add_child(UiTheme.label("%s · %s · RUF %d (%s) · %s" % [
-		event["label"], GameState.club_tier(state)["label"],
+	# Die Eckdaten der Nacht als einzelne Schilder statt einer langen Zeile.
+	var chips := HFlowContainer.new()
+	chips.add_theme_constant_override("h_separation", 6)
+	chips.add_theme_constant_override("v_separation", 6)
+	chips.add_child(_chip(String(event["label"]), UiTheme.AMBER))
+	chips.add_child(_chip(String(GameState.club_tier(state)["label"]), UiTheme.DIM))
+	chips.add_child(_chip("RUF %d · %s" % [
 		int(round(float(state["reputation"]))),
 		Reputation.rep_band(float(state["reputation"])),
-		Config.MODES[state["mode"]]["label"],
-	], 11, UiTheme.CYAN, 2.0))
+	], UiTheme.DIM))
+	chips.add_child(_chip(String(Config.MODES[state["mode"]]["label"]), UiTheme.CYAN))
+	box.add_child(chips)
+	box.add_child(UiTheme.separator())
 	box.add_child(UiTheme.body_label(
 		"Ruhige erste Schicht. Alles wird Schritt für Schritt erklärt." if tutorial
 		else event["desc"], 12, UiTheme.DIM
@@ -576,6 +442,18 @@ func briefing(event: Dictionary, tutorial: bool) -> void:
 	box.add_child(row)
 
 	show_screen(box, {"wide": true})
+
+## Ein Schild im Briefing-Kopf (`.bchip`): Rand in der Farbe der Angabe.
+func _chip(text: String, color: Color) -> Control:
+	var panel := PanelContainer.new()
+	var box := UiTheme.panel_box(
+		Color(1, 1, 1, 0.02), Color(color.r, color.g, color.b, 0.45)
+	)
+	box.content_margin_top = 5
+	box.content_margin_bottom = 5
+	panel.add_theme_stylebox_override("panel", box)
+	panel.add_child(UiTheme.label(text, 10, color, 3.0))
+	return panel
 
 ## Eine Zelle des Kennzahlenrasters (`.stat-cell`): eigener Kasten, feste
 ## Mindestbreite, Wert in der Anzeigeschrift.
@@ -667,6 +545,10 @@ func pause() -> void:
 		game.call("quit_to_menu")
 	)
 	main.add_child(to_menu)
+	main.add_child(UiTheme.body_label(
+		"Beenden schliesst die Nacht ab und zeigt den Night Report. Zurück zum "
+		+ "Hauptmenü verwirft die laufende Schicht.", 10, UiTheme.DIM
+	))
 	main.add_child(_admin_box())
 	cols.add_child(main)
 

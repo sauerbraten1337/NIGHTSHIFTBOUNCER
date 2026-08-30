@@ -69,8 +69,21 @@ func _ready() -> void:
 	_build_ui()
 
 	Admin.restore_admin()
+	apply_settings()
+	Settings.apply_window()
+	Settings.on_changed(func(_key: String) -> void: apply_settings())
 	apply_mode("solo")
 	go_menu()
+
+## Ton, Bildeffekte und Tutorial folgen den Einstellungen - beim Start und bei
+## jeder Aenderung im Einstellungsbildschirm. Das Fenster selbst stellt
+## Settings.apply_window() ein; das passiert nur dort, wo es gebraucht wird.
+func apply_settings() -> void:
+	audio.set_master_volume(Settings.get_float("master"))
+	audio.set_music_volume(Settings.get_float("music"))
+	audio.set_sfx_volume(Settings.get_float("sfx"))
+	audio.set_muted(Settings.get_bool("muted"))
+	tutorial_wanted = Settings.get_bool("tutorial")
 
 ## Baut die Oberflaeche auf. Reihenfolge wie in index.html: die Handstuecke
 ## liegen im HUD, der Roentgenblick darueber auf einer eigenen Ebene.
@@ -504,7 +517,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_pause") and game["state"]["phase"] == "night" and not is_guest:
 		toggle_pause()
 	elif event.is_action_pressed("mute"):
-		audio.toggle_mute()
+		# Auch die Taste schreibt in die Einstellungen: sonst waere der Ton
+		# beim naechsten Start wieder an.
+		Settings.set_value("muted", audio.toggle_mute())
 
 ## Welcher Ring liegt unter dem Mauszeiger? (Ellipsentest wie in main.js)
 func _hit_at(hits: Array, p: Vector2) -> Variant:

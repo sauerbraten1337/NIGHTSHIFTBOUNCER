@@ -91,7 +91,7 @@ func render(dt: float) -> void:
 		_title_fx.queue_redraw()
 		_world_fx.visible = false
 		_overlay.set("vignette_strength", 0.55)
-		_overlay.set("scanline_alpha", 0.03)
+		_overlay.set("scanline_alpha", 0.03 if Settings.get_bool("effects") else 0.0)
 		_overlay.queue_redraw()
 		return
 
@@ -155,16 +155,19 @@ func render(dt: float) -> void:
 	zone_hits = hits
 	key_hits = keys
 
-	# Nebel, Staub, Funken ueber der ganzen Welt
+	# Nebel, Staub, Funken ueber der ganzen Welt. Wer die Bildeffekte
+	# abschaltet, spart genau diese Ebenen.
+	var effects := Settings.get_bool("effects")
 	_world_fx_list.clear()
-	fx.draw_fog(_world_fx_list, 0.45 + float(phase["intensity"]) * 0.4)
-	fx.draw_dust(_world_fx_list)
-	fx.draw_sparks(_world_fx_list)
+	if effects:
+		fx.draw_fog(_world_fx_list, 0.45 + float(phase["intensity"]) * 0.4)
+		fx.draw_dust(_world_fx_list)
+		fx.draw_sparks(_world_fx_list)
 	_world_fx.queue_redraw()
 
 	_overlay.set("split_at", views[0]["rect"].size.x if views.size() == 2 else -1.0)
 	_overlay.set("vignette_strength", 0.9 if blackout else 0.5)
-	_overlay.set("scanline_alpha", 0.03)
+	_overlay.set("scanline_alpha", 0.03 if effects else 0.0)
 	_overlay.queue_redraw()
 
 ## Welche Ansichten werden gezeigt?

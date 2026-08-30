@@ -31,7 +31,11 @@ func _init() -> void:
 
 	_plan = [
 		[40, func() -> void: _shot("01-titel")],
-		[50, func() -> void: _screens().call("character", func() -> void: pass)],
+		# Einstellungen: eigener Bildschirm mit Bild, Ton, Spiel und Daten.
+		[45, func() -> void: _screens().call("settings")],
+		[60, func() -> void: _shot("01b-einstellungen")],
+		[64, func() -> void: _screens().call("menu")],
+		[70, func() -> void: _screens().call("character", func() -> void: pass)],
 		[80, func() -> void: _shot("02-charaktereditor")],
 		[90, func() -> void:
 			_game.set("tutorial_wanted", false)

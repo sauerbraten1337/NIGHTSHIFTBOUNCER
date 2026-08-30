@@ -169,6 +169,19 @@ static func _apply(draft: Dictionary, key: String, value: Variant) -> void:
 	else:
 		draft[key] = int(value)
 
+## Jede Gruppe steht in einem eigenen kleinen Kasten mit cyanfarbener Kante -
+## sonst laufen sieben Reihen Knoepfe zu einer Wand zusammen.
+static func _framed(group: Control) -> Control:
+	var panel := PanelContainer.new()
+	var box := UiTheme.panel_box(Color(1, 1, 1, 0.02), UiTheme.LINE_SOFT)
+	box.border_width_left = 2
+	box.border_color = Color(UiTheme.CYAN.r, UiTheme.CYAN.g, UiTheme.CYAN.b, 0.4)
+	box.content_margin_top = 8
+	box.content_margin_bottom = 8
+	panel.add_theme_stylebox_override("panel", box)
+	panel.add_child(group)
+	return panel
+
 static func _swatch_group(
 	game: Node, label: String, key: String, entries: Array[Dictionary],
 	draft: Dictionary, stage: Control
@@ -216,7 +229,7 @@ static func _swatch_group(
 		)
 
 	group.add_child(row)
-	return group
+	return _framed(group)
 
 static func _chip_group(
 	game: Node, label: String, key: String, entries: Array[Dictionary],
@@ -256,7 +269,7 @@ static func _chip_group(
 		)
 
 	group.add_child(row)
-	return group
+	return _framed(group)
 
 ## Die Vorschau: Umkleide mit Raster, Podest, Scheinwerfer und Massband.
 class StageNode extends Control:
