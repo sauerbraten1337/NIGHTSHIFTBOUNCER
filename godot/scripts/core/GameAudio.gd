@@ -87,8 +87,21 @@ func stop() -> void:
 	_playback = null
 
 func toggle_mute() -> bool:
-	_muted = not _muted
+	return set_muted(not _muted)
+
+func set_muted(value: bool) -> bool:
+	_muted = value
 	return _muted
+
+## Gesamtlautstaerke 0..1 - wirkt auf Musik, Effekte und Menge.
+func set_master_volume(v: float) -> void:
+	_master_volume = clampf(v, 0.0, 1.0)
+
+func set_sfx_volume(v: float) -> void:
+	_sfx_volume = clampf(v, 0.0, 1.0)
+
+var _master_volume := 0.9
+var _sfx_volume := 0.55
 
 ## intensity 0..1 steuert Filter, Crowd und Arrangement.
 func set_intensity(value: float) -> void:
@@ -98,7 +111,7 @@ func set_intensity(value: float) -> void:
 	_bpm = 128.0 + round(_intensity * 10.0)
 
 func set_music_volume(v: float) -> void:
-	_music_volume = v
+	_music_volume = clampf(v, 0.0, 1.0)
 
 var _music_volume := 0.5
 
@@ -112,7 +125,7 @@ func _process(_delta: float) -> void:
 
 func _fill(frames: int) -> void:
 	var dt := 1.0 / MIX_RATE
-	var master_gain := 0.0 if _muted else 0.9
+	var master_gain := 0.0 if _muted else _master_volume
 	for i in frames:
 		# Weiche Parameterfahrten (entsprechen setTargetAtTime).
 		_filter_freq += (_filter_target - _filter_freq) * 0.00005
@@ -131,7 +144,7 @@ func _fill(frames: int) -> void:
 
 		music = _music_filter.process(music) * _music_volume
 		var crowd := _crowd.sample(_time, dt) * _crowd_gain
-		var out := (music + sfx * 0.55 + crowd) * master_gain
+		var out := (music + sfx * _sfx_volume + crowd) * master_gain
 		out = clampf(out, -1.0, 1.0)
 		_playback.push_frame(Vector2(out, out))
 

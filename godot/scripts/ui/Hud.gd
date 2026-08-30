@@ -304,21 +304,72 @@ func _action_button(role_id: String, action: Dictionary, accent: Color) -> Contr
 func _decision_button(role_id: String, action: Dictionary) -> Control:
 	var yes: bool = action["code"] != "reject"
 	var accent := UiTheme.GREEN if yes else UiTheme.RED
-	var b := UiTheme.button("", accent, 12, 3.0)
-	b.custom_minimum_size = Vector2(190, 58)
+	# Die Entscheidung ist der groesste Knopf im Bild: eigene Zeichnung mit
+	# abgeschraegten Ecken, Lichtkante oben und Schein beim Ueberfahren.
+	var b := DecisionButton.new(accent)
+	b.custom_minimum_size = Vector2(196, 62)
 	b.pressed.connect(func() -> void: game.call("act", role_id, action["code"]))
 
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", 12)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	row.add_child(Icons.icon_node(action["code"], 26.0, accent))
-	row.add_child(UiTheme.label(action["label"], 13, UiTheme.TEXT, 3.0))
+	row.add_child(Icons.icon_node(action["code"], 30.0, accent))
+	row.add_child(UiTheme.label(action["label"], 14, accent, 5.0))
 	b.add_child(row)
 
 	_decision_buttons.append({"button": b, "code": action["code"], "role": role_id})
 	return b
+
+## EINLASSEN / ABWEISEN: schraege Ecken, farbige Lichtkante, Schein beim
+## Ueberfahren. Gegenstueck zu `.dec` in styles/ui.css.
+class DecisionButton extends Button:
+	var accent := UiTheme.GREEN
+
+	func _init(color: Color) -> void:
+		accent = color
+		flat = true
+		focus_mode = Control.FOCUS_NONE
+		var empty := StyleBoxEmpty.new()
+		for state: String in ["normal", "hover", "pressed", "focus", "disabled"]:
+			add_theme_stylebox_override(state, empty)
+		mouse_entered.connect(queue_redraw)
+		mouse_exited.connect(queue_redraw)
+
+	func _draw() -> void:
+		var w := size.x
+		var h := size.y
+		var cut := 14.0
+		var lit := is_hovered() and not disabled
+		var alpha := 0.3 if disabled else 1.0
+
+		var shape := PackedVector2Array([
+			Vector2(cut, 0), Vector2(w, 0), Vector2(w, h - cut),
+			Vector2(w - cut, h), Vector2(0, h), Vector2(0, cut),
+		])
+		# Fuellung: oben die Farbe der Entscheidung, unten fast schwarz.
+		var top := Color(accent.r * 0.22, accent.g * 0.22, accent.b * 0.22, 0.94 * alpha)
+		var bottom := Color(0.04, 0.05, 0.06, 0.94 * alpha)
+		Draw2D.gradient_polygon(self, shape, PackedColorArray([
+			top, top, bottom, bottom, bottom, top,
+		]))
+
+		var edge := Color(accent.r, accent.g, accent.b, (0.9 if lit else 0.5) * alpha)
+		draw_polyline(PackedVector2Array([
+			Vector2(cut, 0.5), Vector2(w - 0.5, 0.5), Vector2(w - 0.5, h - cut),
+			Vector2(w - cut, h - 0.5), Vector2(0.5, h - 0.5), Vector2(0.5, cut),
+			Vector2(cut, 0.5),
+		]), edge, 1.0)
+		# Lichtkante oben - sie macht den Knopf zur Taste.
+		draw_rect(Rect2(cut, 0, w - cut, 2.0),
+			Color(accent.r, accent.g, accent.b, (1.0 if lit else 0.55) * alpha))
+		if lit:
+			# Schein nach aussen, solange der Zeiger darauf liegt.
+			for i in 4:
+				var g := float(i + 1)
+				draw_rect(Rect2(-g, -g, w + g * 2.0, h + g * 2.0),
+					Color(accent.r, accent.g, accent.b, 0.06), false, 1.0)
 
 # ---------------- Aktualisierung ----------------
 
@@ -472,7 +523,12 @@ func _update_decisions() -> void:
 		var open: bool = station != null and station["patdown"] != null \
 			and (station["patdown"] as Dictionary)["active"] != null
 		var attacked: bool = station != null and station["aggro"] != null
-		(entry["button"] as Button).disabled = guest == null or open or attacked
+		var button := entry["button"] as Button
+		var blocked: bool = guest == null or open or attacked
+		if button.disabled != blocked:
+			button.disabled = blocked
+			button.queue_redraw()
+		button.modulate = Color(1, 1, 1, 0.35 if blocked else 1.0)
 
 static func _is_for(player: Dictionary, code: String) -> bool:
 	var pending: Variant = player["pending"]

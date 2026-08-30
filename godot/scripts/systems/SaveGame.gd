@@ -56,6 +56,29 @@ static func load_game(state: Dictionary, path: String = DEFAULT_PATH) -> bool:
 			state[key] = incoming
 	return true
 
+## Kurzer Blick in den Spielstand, ohne ihn zu laden - das Hauptmenue zeigt
+## damit an, wo die Karriere steht. null, wenn es keinen gibt.
+static func peek_save(path: String = DEFAULT_PATH) -> Variant:
+	if not FileAccess.file_exists(path):
+		return null
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return null
+	var raw := file.get_as_text()
+	file.close()
+	var data: Variant = JSON.parse_string(raw)
+	if data == null or not (data is Dictionary):
+		return null
+	var d := data as Dictionary
+	var character: Variant = d.get("character", null)
+	return {
+		"nightIndex": int(d.get("nightIndex", 0)),
+		"money": float(d.get("money", 0.0)),
+		"reputation": float(d.get("reputation", 0.0)),
+		"name": (character as Dictionary).get("name", null) if character is Dictionary else null,
+		"savedAt": int(d.get("savedAt", 0)),
+	}
+
 static func has_save(path: String = DEFAULT_PATH) -> bool:
 	return FileAccess.file_exists(path)
 

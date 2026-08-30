@@ -124,10 +124,38 @@ die Web-Fassung, aus derselben Datenlage und mit denselben Zahlen.
 | Audio | `src/core/audio.js` | `scripts/core/GameAudio.gd` (`AudioStreamGenerator`) |
 | Online-Koop | `src/net/net.js`, `server/` | `scripts/net/Net.gd` (`WebSocketPeer`, gleiches Protokoll) |
 | Spielstand | `localStorage` | `user://nullwerk.save.v1.json` |
+| Einstellungen | `localStorage` | `user://nullwerk.settings.v1.json` (`scripts/systems/Settings.gd`) |
 | Einstiegspunkt | `src/main.js` | `scripts/Game.gd` (`scenes/Main.tscn`) |
 
 Der Server aus `server/` bedient beide Fassungen — das JSON-Protokoll ist
 unverändert.
+
+### Titelbildschirm und Einstellungen
+
+Der Titelbildschirm (`scripts/ui/MenuScreen.gd`) baut die Menüspalte rechts
+über der Szene auf: Leuchtröhre am Rand, wandernder Lichtbalken, Clubname als
+Neonschrift, gruppierte und nummerierte Einträge, ein Streifen mit dem Stand
+der gespeicherten Karriere und eine Fusszeile mit Tastenhilfe und
+Vollbild-Knopf. Bedienbar ist die Auswahl mit Maus und mit den Pfeiltasten.
+
+**EINSTELLUNGEN** (`scripts/ui/SettingsScreen.gd`) ist ein eigener Bildschirm
+mit vier Bereichen:
+
+* **BILD** — Auflösung des Fensters (AUTO oder fest von 1280 × 720 bis
+  3840 × 2160), Anzeige (Fenster, randloses Vollbild, exklusiv), Bildeffekte
+  (Nebel, Scanlines, Funken) und Bildsynchronisation. Anders als im Browser
+  ist das hier die echte Fenstergrösse — jede Änderung greift sofort.
+* **TON** — stumm sowie Regler für Gesamt-, Musik- und Effektlautstärke.
+* **SPIEL** — Tutorial an oder aus.
+* **DATEN** — Spielstand löschen, Einstellungen auf Werk zurücksetzen.
+
+Alles liegt in `user://nullwerk.settings.v1.json` und wird beim Start
+angewendet (`Game.apply_settings()` und `Settings.apply_window()`).
+
+Aus einer laufenden Karriere führen drei Wege zurück zum Titel: im Pausenmenü
+**ZURÜCK ZUM HAUPTMENÜ** (mit Rückfrage, verwirft die Nacht und verlässt einen
+Online-Raum), im Night Report und im Büro. **SCHICHT BEENDEN** im Pausenmenü
+schliesst die Nacht dagegen regulär ab und zeigt den Report.
 
 ### Prüfen
 

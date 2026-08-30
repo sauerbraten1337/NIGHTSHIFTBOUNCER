@@ -33,6 +33,7 @@ func _run_all() -> void:
 	_test_area_limits()
 	_test_upgrades_and_talents()
 	_test_save_roundtrip()
+	_test_settings()
 
 # ---------- Pruefhelfer ----------
 
@@ -486,3 +487,46 @@ func _test_save_roundtrip() -> void:
 
 	SaveGame.clear_save(path)
 	check(not SaveGame.has_save(path), "gelöscht")
+
+func _test_settings() -> void:
+	print("einstellungen")
+	var path := "user://test_settings.json"
+	if FileAccess.file_exists(path):
+		DirAccess.open("user://").remove(path.get_file())
+	Settings.use_path(path)
+
+	# Ohne Datei gelten die Vorgaben.
+	check_eq(Settings.get_string("resolution"), "1280x720", "Vorgabe Auflösung")
+	check(Settings.get_bool("effects"), "Bildeffekte sind an")
+	check(Settings.get_bool("tutorial"), "Tutorial ist an")
+
+	# Jede Aenderung meldet sich und liegt danach auf der Platte.
+	var seen: Array[String] = []
+	var off := Settings.on_changed(func(key: String) -> void: seen.append(key))
+	Settings.set_value("resolution", "1920x1080")
+	Settings.set_value("master", 0.4)
+	Settings.set_value("muted", true)
+	off.call()
+	check_eq(seen, ["resolution", "master", "muted"] as Array[String], "Änderungen gemeldet")
+	check(FileAccess.file_exists(path), "Einstellungen gespeichert")
+
+	# Neu laden: dieselben Werte, und Unbekanntes aus einer fremden Datei
+	# wird nicht uebernommen.
+	Settings.use_path(path)
+	check_eq(Settings.get_string("resolution"), "1920x1080", "Auflösung geladen")
+	check_eq(Settings.get_float("master"), 0.4, "Lautstärke geladen")
+	check(Settings.get_bool("muted"), "Stumm geladen")
+	check_eq(
+		int(Settings.resolution_entry()["size"].x), 1920, "Auflösung kennt ihre Fenstergröße"
+	)
+	check_eq(String(Settings.display_entry("fullscreen")["id"]), "fullscreen", "Anzeigemodus gefunden")
+	# Unbekannte Schluessel werden weder gelesen noch gesetzt.
+	Settings.set_value("gibtsnicht", 1)
+	check(not Settings.values().has("gibtsnicht"), "unbekannter Schlüssel bleibt draussen")
+
+	Settings.reset()
+	check_eq(Settings.get_string("resolution"), "1280x720", "zurückgesetzt")
+
+	DirAccess.open("user://").remove(path.get_file())
+	# Fuer alles Weitere wieder der normale Ablageort.
+	Settings.use_path(Settings.DEFAULT_PATH)
