@@ -193,8 +193,8 @@ func _build_toasts() -> void:
 func _build_bottom() -> void:
 	_decisions = HBoxContainer.new()
 	_decisions.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	_decisions.offset_top = -170
-	_decisions.offset_bottom = -90
+	_decisions.offset_top = -206
+	_decisions.offset_bottom = -102
 	_decisions.offset_left = -420
 	_decisions.offset_right = 420
 	_decisions.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -205,8 +205,8 @@ func _build_bottom() -> void:
 	bottom.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	bottom.offset_left = 18
 	bottom.offset_right = -18
-	bottom.offset_top = -78
-	bottom.offset_bottom = -14
+	bottom.offset_top = -96
+	bottom.offset_bottom = -12
 	_root.add_child(bottom)
 
 	_bar1 = HBoxContainer.new()
@@ -263,6 +263,7 @@ func _build_bars() -> void:
 		# Entscheidungen wandern in die Mitte - gross und anklickbar.
 		var group := VBoxContainer.new()
 		group.alignment = BoxContainer.ALIGNMENT_CENTER
+		group.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		group.add_theme_constant_override("separation", 4)
 		if controlled > 1:
 			var role_label := UiTheme.label(role["label"], 9, accent, 3.0)
@@ -278,25 +279,12 @@ func _build_bars() -> void:
 		_decisions.add_child(group)
 
 func _action_button(role_id: String, action: Dictionary, accent: Color) -> Control:
-	var b := UiTheme.button("", accent, 9, 2.0)
-	b.custom_minimum_size = Vector2(78, 56)
-	b.tooltip_text = action["label"]
+	var built := UiTheme.icon_button(action["code"], action["label"], accent, 76.0, 28.0)
+	var b: Button = built["button"]
 	b.pressed.connect(func() -> void: game.call("act", role_id, action["code"]))
 
-	var box := VBoxContainer.new()
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var icon := Icons.icon_node(action["code"], 24.0, accent)
-	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	box.add_child(icon)
-	var name := UiTheme.label(action["label"], 8, UiTheme.DIM, 1.0)
-	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(name)
-	b.add_child(box)
-
 	_action_buttons.append({
-		"button": b, "icon": icon, "name": name,
+		"button": b, "icon": built["icon"], "name": built["label"],
 		"code": action["code"], "role": role_id, "accent": accent,
 	})
 	return b
@@ -307,17 +295,27 @@ func _decision_button(role_id: String, action: Dictionary) -> Control:
 	# Die Entscheidung ist der groesste Knopf im Bild: eigene Zeichnung mit
 	# abgeschraegten Ecken, Lichtkante oben und Schein beim Ueberfahren.
 	var b := DecisionButton.new(accent)
-	b.custom_minimum_size = Vector2(196, 62)
+	# Quadratischer Zuschnitt: das Icon steht mittig ueber der Beschriftung.
+	b.custom_minimum_size = Vector2(148, 96)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.pressed.connect(func() -> void: game.call("act", role_id, action["code"]))
 
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 12)
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	row.add_child(Icons.icon_node(action["code"], 30.0, accent))
-	row.add_child(UiTheme.label(action["label"], 14, accent, 5.0))
-	b.add_child(row)
+	var col := VBoxContainer.new()
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 8)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var icon := Icons.icon_node(action["code"], 34.0, accent)
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(icon)
+	# Lange Beschriftungen wie ZURÜCKSCHICKEN passen nur kleiner in das Quadrat.
+	var label_text := String(action["label"])
+	var text_size := 13 if label_text.length() <= 10 else 10
+	var text := UiTheme.label(label_text, text_size, accent, 4.0 if text_size == 13 else 2.0)
+	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	text.clip_text = true
+	col.add_child(text)
+	b.add_child(col)
 
 	_decision_buttons.append({"button": b, "code": action["code"], "role": role_id})
 	return b

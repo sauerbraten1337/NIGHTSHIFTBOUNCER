@@ -351,21 +351,36 @@ func lobby_show_start(visible_flag: bool) -> void:
 
 # ---------------- Briefing ----------------
 
+## Der Schichtplan vor der Nacht: oben der Kopf mit Nacht, Eckdaten und
+## Kennzahlen, darunter zwei Spalten - links worauf zu achten ist, rechts die
+## Posten mit ihren Tasten. Alles auf einer Seite, ohne Fliesstextwand.
 func briefing(event: Dictionary, tutorial: bool) -> void:
 	var g: Dictionary = game.get("game")
 	var state: Dictionary = g["state"]
 	var roles := Config.roles_for(state["mode"])
 
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
+	box.add_theme_constant_override("separation", 10)
+
+	# ---- Kopf: Nacht links, Eckdaten rechts ----
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 14)
+	var head_left := VBoxContainer.new()
+	head_left.add_theme_constant_override("separation", 1)
+	head_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head_left.add_child(UiTheme.label("NULLWERK · SCHICHTPLAN", 9, UiTheme.RED, 5.0))
 	var title := "EINARBEITUNG" if tutorial \
 		else "NIGHT %s" % str(int(state["nightIndex"]) + 1).pad_zeros(2)
-	box.add_child(UiTheme.label("NULLWERK · SCHICHTPLAN", 9, UiTheme.RED, 5.0))
-	box.add_child(UiTheme.label(title, 26, UiTheme.TEXT, 4.0, true))
+	head_left.add_child(UiTheme.label(title, 30, UiTheme.TEXT, 4.0, true))
+	head.add_child(head_left)
+
 	# Die Eckdaten der Nacht als einzelne Schilder statt einer langen Zeile.
 	var chips := HFlowContainer.new()
+	chips.alignment = FlowContainer.ALIGNMENT_END
 	chips.add_theme_constant_override("h_separation", 6)
 	chips.add_theme_constant_override("v_separation", 6)
+	chips.size_flags_vertical = Control.SIZE_SHRINK_END
+	chips.custom_minimum_size = Vector2(580, 0)
 	chips.add_child(_chip(String(event["label"]), UiTheme.AMBER))
 	chips.add_child(_chip(String(GameState.club_tier(state)["label"]), UiTheme.DIM))
 	chips.add_child(_chip("RUF %d · %s" % [
@@ -373,70 +388,81 @@ func briefing(event: Dictionary, tutorial: bool) -> void:
 		Reputation.rep_band(float(state["reputation"])),
 	], UiTheme.DIM))
 	chips.add_child(_chip(String(Config.MODES[state["mode"]]["label"]), UiTheme.CYAN))
-	box.add_child(chips)
-	box.add_child(UiTheme.separator())
+	head.add_child(chips)
+	box.add_child(head)
+
+	# ---- Kennzahlen ----
+	var stats := HBoxContainer.new()
+	stats.add_theme_constant_override("separation", 8)
+	var artist: Variant = state["bookedArtist"]
+	stats.add_child(_stat_cell(
+		"GELD", "€%s" % UiTheme.money_text(float(state["money"])), UiTheme.GREEN
+	))
+	stats.add_child(_stat_cell("KAPAZITÄT", str(GameState.capacity(state)), UiTheme.CYAN))
+	stats.add_child(_stat_cell("RANG", GameState.rank(state)["label"], UiTheme.AMBER))
+	stats.add_child(_stat_cell(
+		"ACT", (artist as Dictionary)["name"] if artist != null else "—",
+		UiTheme.PURPLE if artist != null else UiTheme.LINE
+	))
+	box.add_child(stats)
+
 	box.add_child(UiTheme.body_label(
 		"Ruhige erste Schicht. Alles wird Schritt für Schritt erklärt." if tutorial
 		else event["desc"], 12, UiTheme.DIM
 	))
 
-	var stats := HBoxContainer.new()
-	stats.add_theme_constant_override("separation", 1)
-	stats.add_child(_stat_cell("GELD", "€%s" % UiTheme.money_text(float(state["money"]))))
-	stats.add_child(_stat_cell("KAPAZITÄT", str(GameState.capacity(state))))
-	stats.add_child(_stat_cell("RANG", GameState.rank(state)["label"]))
-	var artist: Variant = state["bookedArtist"]
-	stats.add_child(_stat_cell("ACT", (artist as Dictionary)["name"] if artist != null else "—"))
-	box.add_child(stats)
-
-	if artist != null:
-		box.add_child(UiTheme.body_label(
-			"%s kommt im Lauf der Nacht. Auch der Act muss durch die Kontrolle."
-			% (artist as Dictionary)["name"], 12, UiTheme.AMBER
-		))
-
 	# Was ab heute zusaetzlich auffaellig sein kann.
 	var brief := Difficulty.difficulty_briefing(int(state["nightIndex"]) + 1)
 	var fresh: Variant = brief["fresh"]
 	if fresh != null:
-		var banner := UiTheme.panel(Color(UiTheme.AMBER.r, UiTheme.AMBER.g, UiTheme.AMBER.b, 0.12), UiTheme.AMBER)
-		banner.add_child(UiTheme.body_label("NEU AB HEUTE — %s: %s" % [
+		box.add_child(_notice("NEU AB HEUTE", "%s — %s" % [
 			(fresh as Dictionary)["label"], (fresh as Dictionary)["desc"],
-		], 12, UiTheme.AMBER))
-		box.add_child(banner)
-	box.add_child(UiTheme.label("WORAUF DU ACHTEST", 13, UiTheme.TEXT, 3.0))
-	for step: Dictionary in (brief["active"] as Array):
+		], UiTheme.AMBER))
+	if artist != null:
+		box.add_child(_notice("ACT", "%s kommt im Lauf der Nacht. Auch der Act muss durch die Kontrolle."
+			% (artist as Dictionary)["name"], UiTheme.PURPLE))
+
+	# ---- Zwei Spalten: Prüfschritte links, Posten rechts ----
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 14)
+
+	var checks := VBoxContainer.new()
+	checks.add_theme_constant_override("separation", 6)
+	checks.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	checks.add_child(UiTheme.section("WORAUF DU ACHTEST", UiTheme.CYAN))
+	var steps: Array = brief["active"]
+	for i in steps.size():
+		var step: Dictionary = steps[i]
 		var is_fresh: bool = fresh != null and step["id"] == (fresh as Dictionary)["id"]
-		box.add_child(UiTheme.body_label(
-			"%s  %s" % [step["label"], step["desc"]], 11,
-			UiTheme.AMBER if is_fresh else UiTheme.DIM
-		))
-
-	box.add_child(UiTheme.label("EURE POSTEN", 13, UiTheme.TEXT, 3.0))
-	for role: Dictionary in roles:
-		var where := "SCHLEUSE (INNEN)" if role["area"] == "airlock" else "TÜR (DRAUSSEN)"
-		box.add_child(UiTheme.label("%s — %s" % [role["label"], where], 11, UiTheme.CYAN, 2.0))
-		var keys: PackedStringArray = []
-		for a: Dictionary in (role["actions"] as Array):
-			keys.append("[%s] %s" % [UiTheme.key_label(a["key"]), a["label"]])
-		if role["area"] == "airlock":
-			keys.append("[J][K][L] Abtast-Zonen")
-		box.add_child(UiTheme.body_label(" · ".join(keys), 11, UiTheme.DIM))
-	box.add_child(UiTheme.body_label(
-		"AUSWEIS PRÜFEN — der Ausweis erscheint links unten. Felder anklicken, die "
-		+ "nicht stimmen: Foto, Name, Geburtsdatum, Gültigkeit, Hologramm.",
-		11, UiTheme.DIM
+		checks.add_child(_check_row(i + 1, step, is_fresh))
+	checks.add_child(_notice(
+		"AUSWEIS PRÜFEN",
+		"Der Ausweis erscheint links unten. Felder anklicken, die nicht stimmen: "
+		+ "Foto, Name, Geburtsdatum, Gültigkeit, Hologramm.", UiTheme.DIM
 	))
+	cols.add_child(checks)
 
+	var posts := VBoxContainer.new()
+	posts.add_theme_constant_override("separation", 6)
+	posts.custom_minimum_size = Vector2(400, 0)
+	posts.add_child(UiTheme.section("EURE POSTEN", UiTheme.RED))
+	for role: Dictionary in roles:
+		posts.add_child(_post_card(role))
+	cols.add_child(posts)
+	box.add_child(cols)
+
+	box.add_child(_gap(2))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	var start := UiTheme.button("SCHICHT BEGINNEN", UiTheme.GREEN, 12, 3.0)
+	start.custom_minimum_size = Vector2(0, 40)
 	start.pressed.connect(func() -> void: game.call("begin_night", tutorial))
 	row.add_child(start)
 	# Vor der ersten Schicht kommt man noch zurueck zum Titel; nach einer
 	# gespielten Nacht waere das ein Rueckweg mitten aus der Karriere heraus.
 	if int(state["nightIndex"]) == 0:
 		var back := UiTheme.button("ZURÜCK ZUM TITEL", UiTheme.LINE, 12, 3.0)
+		back.custom_minimum_size = Vector2(0, 40)
 		back.pressed.connect(func() -> void: game.call("go_menu"))
 		row.add_child(back)
 	box.add_child(row)
@@ -447,7 +473,7 @@ func briefing(event: Dictionary, tutorial: bool) -> void:
 func _chip(text: String, color: Color) -> Control:
 	var panel := PanelContainer.new()
 	var box := UiTheme.panel_box(
-		Color(1, 1, 1, 0.02), Color(color.r, color.g, color.b, 0.45)
+		Color(color.r, color.g, color.b, 0.08), Color(color.r, color.g, color.b, 0.45), 3
 	)
 	box.content_margin_top = 5
 	box.content_margin_bottom = 5
@@ -455,21 +481,94 @@ func _chip(text: String, color: Color) -> Control:
 	panel.add_child(UiTheme.label(text, 10, color, 3.0))
 	return panel
 
-## Eine Zelle des Kennzahlenrasters (`.stat-cell`): eigener Kasten, feste
-## Mindestbreite, Wert in der Anzeigeschrift.
-func _stat_cell(key: String, value: String) -> Control:
+## Eine Zelle des Kennzahlenrasters (`.stat-cell`): eigener Kasten mit
+## farbigem Deckstrich, Wert in der Anzeigeschrift.
+func _stat_cell(key: String, value: String, accent: Color = UiTheme.CYAN) -> Control:
 	var cell := PanelContainer.new()
 	cell.custom_minimum_size = Vector2(150, 0)
 	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cell.add_theme_stylebox_override("panel", UiTheme.panel_box(
+	var style := UiTheme.panel_box(
 		Color(10.0 / 255.0, 12.0 / 255.0, 17.0 / 255.0, 1.0), UiTheme.LINE
-	))
+	)
+	style.border_width_top = 2
+	style.border_color = Color(accent.r, accent.g, accent.b, 0.7)
+	cell.add_theme_stylebox_override("panel", style)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 4)
+	col.add_theme_constant_override("separation", 3)
 	col.add_child(UiTheme.label(key, 9, UiTheme.DIM, 3.0))
-	col.add_child(UiTheme.label(value, 20, UiTheme.TEXT, 1.0, true))
+	var v := UiTheme.label(value, 20, UiTheme.TEXT, 1.0, true)
+	v.clip_text = true
+	col.add_child(v)
 	cell.add_child(col)
 	return cell
+
+## Hinweisstreifen mit Schlagwort links und Text rechts.
+func _notice(tag: String, text: String, accent: Color) -> Control:
+	var card := UiTheme.card(accent, Color(accent.r, accent.g, accent.b, 0.08), 3)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	var t := UiTheme.label(tag, 10, accent, 3.0)
+	t.custom_minimum_size = Vector2(118, 0)
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(t)
+	var body := UiTheme.body_label(text, 11, UiTheme.TEXT)
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(body)
+	card.add_child(row)
+	return card
+
+## Ein Pruefschritt: Nummer, Bezeichnung, Erklaerung. Was heute neu ist,
+## steht in Bernstein.
+func _check_row(index: int, step: Dictionary, fresh: bool) -> Control:
+	var accent := UiTheme.AMBER if fresh else UiTheme.CYAN
+	var card := UiTheme.card(accent)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var num := UiTheme.label(str(index).pad_zeros(2), 14, Color(accent.r, accent.g, accent.b, 0.6), 1.0, true)
+	num.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(num)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 1)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	head.add_child(UiTheme.label(String(step["label"]).to_upper(), 11, UiTheme.TEXT, 2.0))
+	if fresh:
+		head.add_child(UiTheme.label("NEU", 9, UiTheme.AMBER, 2.0))
+	col.add_child(head)
+	col.add_child(UiTheme.body_label(step["desc"], 10, UiTheme.DIM))
+	row.add_child(col)
+	card.add_child(row)
+	return card
+
+## Ein Posten: wer wo steht und welche Tasten dazugehoeren.
+func _post_card(role: Dictionary) -> Control:
+	var airlock: bool = role["area"] == "airlock"
+	var accent := UiTheme.CYAN if airlock else UiTheme.RED
+	var card := UiTheme.card(accent)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	var who := UiTheme.label(String(role["label"]).to_upper(), 12, accent, 3.0)
+	who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(who)
+	head.add_child(UiTheme.label(
+		"SCHLEUSE · INNEN" if airlock else "TÜR · DRAUSSEN", 9, UiTheme.DIM, 2.0
+	))
+	col.add_child(head)
+
+	var keys := GridContainer.new()
+	keys.columns = 2
+	keys.add_theme_constant_override("h_separation", 12)
+	keys.add_theme_constant_override("v_separation", 4)
+	for a: Dictionary in (role["actions"] as Array):
+		keys.add_child(UiTheme.key_cap(UiTheme.key_label(a["key"]), a["label"], accent))
+	if airlock:
+		keys.add_child(UiTheme.key_cap("JKL", "Abtast-Zonen", accent))
+	col.add_child(keys)
+	card.add_child(col)
+	return card
 
 # ---------------- Weiterreichende Bildschirme ----------------
 
@@ -604,11 +703,21 @@ func _ctl_row(key: String, text: String) -> Control:
 
 ## Erst der Code, dann die Werkzeuge. Alles hier greift sofort - die
 ## Nachtwahl verwirft die laufende Schicht und geht ins Briefing.
+##
+## Der Kasten traegt dasselbe Violett wie der Roentgenblick im Spiel: was hier
+## geschaltet wird, gehoert nicht zur Schicht, sondern zum Testwerkzeug.
 func _admin_box() -> Control:
+	var frame := PanelContainer.new()
+	var style := UiTheme.panel_box(
+		Color(UiTheme.PURPLE.r * 0.16, UiTheme.PURPLE.g * 0.12, UiTheme.PURPLE.b * 0.24, 0.5),
+		Color(UiTheme.PURPLE.r, UiTheme.PURPLE.g, UiTheme.PURPLE.b, 0.55), 3
+	)
+	frame.add_theme_stylebox_override("panel", style)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
+	frame.add_child(box)
 	_fill_admin(box)
-	return box
+	return frame
 
 func _fill_admin(box: VBoxContainer) -> void:
 	for child in box.get_children():
@@ -616,21 +725,26 @@ func _fill_admin(box: VBoxContainer) -> void:
 		child.queue_free()
 
 	var msg := UiTheme.label("", 10, UiTheme.DIM)
+	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var say := func(text: String, kind: String) -> void:
 		msg.text = text
 		msg.add_theme_color_override("font_color", UiTheme.kind_color(kind))
 
 	if not Admin.unlocked:
-		box.add_child(UiTheme.label("ADMIN", 11, UiTheme.DIM, 3.0))
+		box.add_child(UiTheme.section("ADMIN · GESPERRT", UiTheme.DIM))
 		box.add_child(UiTheme.body_label(
 			"Testzugang: Nacht frei wählen und Cheats schalten.", 10, UiTheme.DIM
 		))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
 		var code := LineEdit.new()
 		code.secret = true
 		code.placeholder_text = "ADMIN-CODE"
+		code.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		code.add_theme_font_override("font", Fonts.mono())
-		box.add_child(code)
-		var unlock := UiTheme.button("FREISCHALTEN", UiTheme.LINE, 11)
+		code.add_theme_font_size_override("font_size", 11)
+		row.add_child(code)
+		var unlock := UiTheme.button("FREISCHALTEN", UiTheme.PURPLE, 10, 2.0)
 		var attempt := func() -> void:
 			if Admin.unlock_admin(code.text):
 				_fill_admin(box)
@@ -638,40 +752,48 @@ func _fill_admin(box: VBoxContainer) -> void:
 				say.call("Falscher Code.", "bad")
 		unlock.pressed.connect(attempt)
 		code.text_submitted.connect(func(_t: String) -> void: attempt.call())
-		box.add_child(unlock)
+		row.add_child(unlock)
+		box.add_child(row)
 		box.add_child(msg)
 		return
 
 	var night := int((game.get("game") as Dictionary)["state"]["nightIndex"])
-	box.add_child(UiTheme.label("ADMIN — FREIGESCHALTET", 11, UiTheme.GREEN, 3.0))
+	box.add_child(UiTheme.section("ADMIN · FREIGESCHALTET", UiTheme.PURPLE))
 
-	box.add_child(UiTheme.label("NACHT WÄHLEN", 9, UiTheme.DIM, 2.0))
+	# Nacht waehlen: Zahl und Startknopf in einer Zeile.
+	var night_row := HBoxContainer.new()
+	night_row.add_theme_constant_override("separation", 8)
+	var night_key := UiTheme.label("NACHT", 9, UiTheme.DIM, 2.0)
+	night_key.custom_minimum_size = Vector2(64, 0)
+	night_key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	night_row.add_child(night_key)
 	var night_input := SpinBox.new()
 	night_input.min_value = 1
 	night_input.max_value = Admin.ADMIN_MAX_NIGHT
 	night_input.value = maxi(1, night)
-	box.add_child(night_input)
-	var go := UiTheme.button("STARTEN", UiTheme.CYAN, 11)
+	night_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	night_row.add_child(night_input)
+	var go := UiTheme.button("STARTEN", UiTheme.CYAN, 10, 2.0)
 	go.pressed.connect(func() -> void: game.call("admin_night", int(night_input.value)))
-	box.add_child(go)
+	night_row.add_child(go)
+	box.add_child(night_row)
 	box.add_child(UiTheme.body_label(
 		"Bricht die laufende Schicht ab und geht ins Briefing der gewählten Nacht. "
-		+ "Aktuell: NACHT %s." % str(night).pad_zeros(2), 10, UiTheme.DIM
+		+ "Aktuell: NACHT %s." % str(night).pad_zeros(2), 9, UiTheme.DIM
 	))
 
-	box.add_child(UiTheme.label("CHEATS", 9, UiTheme.DIM, 2.0))
+	# Schalter als Knoepfe, die ihren Zustand zeigen - ein Haken sagt aus der
+	# Entfernung nicht, ob der Cheat laeuft.
+	var cheats := HFlowContainer.new()
+	cheats.add_theme_constant_override("h_separation", 6)
+	cheats.add_theme_constant_override("v_separation", 6)
 	for entry: Array in [
 		["noAggro", "KEINE ÜBERGRIFFE"],
-		["fastActions", "KONTROLLEN SOFORT FERTIG"],
-		["reveal", "RÖNTGENBLICK (WAHRHEIT ANZEIGEN)"],
+		["fastActions", "SOFORT FERTIG"],
+		["reveal", "RÖNTGENBLICK"],
 	]:
-		var toggle := CheckBox.new()
-		toggle.text = entry[1]
-		toggle.button_pressed = Admin.get_cheat(entry[0])
-		toggle.add_theme_font_override("font", Fonts.mono())
-		toggle.add_theme_font_size_override("font_size", 10)
-		toggle.toggled.connect(func(on: bool) -> void: Admin.set_cheat(entry[0], on))
-		box.add_child(toggle)
+		cheats.add_child(_cheat_toggle(entry[0], entry[1]))
+	box.add_child(cheats)
 
 	var actions := HFlowContainer.new()
 	actions.add_theme_constant_override("h_separation", 6)
@@ -699,6 +821,28 @@ func _fill_admin(box: VBoxContainer) -> void:
 		_fill_admin(box)
 	)
 	box.add_child(lock)
+
+## Ein Cheat-Schalter. An heisst violett gefuellt, aus bleibt dunkel.
+func _cheat_toggle(id: String, label: String) -> Control:
+	var b := UiTheme.button(label, UiTheme.PURPLE, 10, 1.0)
+	b.toggle_mode = true
+	b.button_pressed = Admin.get_cheat(id)
+	var paint := func(on: bool) -> void:
+		# Auch "pressed" mitfaerben: bei einem Schalter zeigt Godot diesen
+		# Zustand, solange er eingerastet ist.
+		for state: String in ["normal", "pressed"]:
+			b.add_theme_stylebox_override(state, UiTheme.panel_box(
+				Color(UiTheme.PURPLE.r, UiTheme.PURPLE.g, UiTheme.PURPLE.b, 0.28 if on else 0.03),
+				Color(UiTheme.PURPLE.r, UiTheme.PURPLE.g, UiTheme.PURPLE.b, 1.0 if on else 0.35),
+				3, 2 if on else 1
+			))
+		b.add_theme_color_override("font_color", UiTheme.TEXT if on else UiTheme.DIM)
+	paint.call(b.button_pressed)
+	b.toggled.connect(func(on: bool) -> void:
+		Admin.set_cheat(id, on)
+		paint.call(Admin.get_cheat(id))
+	)
+	return b
 
 func _gap(height: float) -> Control:
 	var c := Control.new()

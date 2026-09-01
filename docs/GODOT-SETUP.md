@@ -157,6 +157,33 @@ Aus einer laufenden Karriere führen drei Wege zurück zum Titel: im Pausenmenü
 Online-Raum), im Night Report und im Büro. **SCHICHT BEENDEN** im Pausenmenü
 schliesst die Nacht dagegen regulär ab und zeigt den Report.
 
+### Bildschirme der Schicht
+
+Alle grossen Bildschirme passen ohne Scrollen auf die logische Auflösung
+1280 × 720. Der breite Rahmen von `Screens` lässt dafür 1040 × 580 Platz —
+wer dort etwas hinzufügt, muss diese Höhe im Blick behalten.
+
+* **Charaktereditor** (`scripts/ui/CharacterEditor.gd`) — links die Figur in
+  der Umkleide mit Eckwinkeln, Raster und wanderndem Messstreifen, darunter
+  das Namensschild. Rechts das Namensfeld und die sieben Gruppen in zwei
+  Spalten; jede Karte trägt ihre laufende Nummer und rechts den gewählten
+  Wert.
+* **Briefing** (`Screens.briefing`) — Kopf mit Nacht und Eckdaten, vier
+  Kennzahlen-Zellen mit farbigem Deckstrich, Hinweisstreifen für Neuerungen
+  und den Act, darunter zwei Spalten: nummerierte Prüfschritte links, die
+  Posten mit Tastenkappen rechts.
+* **Night Report** (`scripts/ui/Report.gd`) — Kopf mit Sternen und Note,
+  vier grosse Zahlen (Netto, Ruf, XP, Rang mit Fortschrittsbalken), darunter
+  drei Spalten: Quoten und Zahlenkacheln, die Bilanz, die Bühne mit der
+  eigenen Figur.
+* **Röntgenblick** (`scripts/ui/AdminHud.gd`) und der Admin-Kasten im
+  Pausenmenü tragen beide Violett — was dort geschaltet wird, gehört zum
+  Testwerkzeug, nicht zur Schicht. Auffällige Gäste zeigen ihre Befunde als
+  Marken, Promille und Ausrastrisiko als Balken.
+* **Knöpfe** — Aktions- und Entscheidungsknöpfe sind quadratisch, das Icon
+  steht mittig über der Beschriftung (`UiTheme.icon_button()` und
+  `Hud.DecisionButton`).
+
 ### Prüfen
 
 ```bash

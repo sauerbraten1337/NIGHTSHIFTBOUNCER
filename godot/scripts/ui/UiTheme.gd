@@ -140,6 +140,125 @@ static func _style_button(
 	b.add_theme_stylebox_override("focus", hover)
 	return b
 
+## Quadratischer Knopf: Icon in der Mitte, Beschriftung darunter.
+##
+## Die Leisten im Spiel bestanden aus flachen Rechtecken, in denen das Icon
+## links oben klebte und lange Beschriftungen seitlich herausliefen. Jetzt ist
+## jeder Knopf ein Quadrat, das Icon sitzt mittig darueber, die Zeile darunter
+## wird beschnitten statt ueberzulaufen.
+##
+## Rueckgabe: { button, icon, label } - die Aufrufer faerben das Icon je Zustand.
+static func icon_button(
+	code: String, content: String, accent: Color = CYAN,
+	side: float = 76.0, icon_size: float = 28.0, text_size: int = 8
+) -> Dictionary:
+	var b := button("", accent, text_size, 1.0)
+	b.custom_minimum_size = Vector2(side, side)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.tooltip_text = content
+	b.clip_contents = true
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 6)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var icon := Icons.icon_node(code, icon_size, accent)
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_child(icon)
+
+	var l := label(content, text_size, DIM, 1.0)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Ohne clip_text meldet ein Label seine Textbreite als Mindestbreite - der
+	# Container gibt sie ihm, und die Schrift laeuft aus dem Knopf heraus.
+	l.clip_text = true
+	box.add_child(l)
+
+	b.add_child(box)
+	return {"button": b, "icon": icon, "label": l}
+
+## Karte mit farbigem Balken links - Grundform aller neuen Kaesten.
+static func card(
+	accent: Color = CYAN, fill: Color = Color(1, 1, 1, 0.022), bar: int = 2
+) -> PanelContainer:
+	var p := PanelContainer.new()
+	var box := panel_box(fill, LINE_SOFT)
+	box.border_width_left = bar
+	box.border_color = Color(accent.r, accent.g, accent.b, 0.55)
+	p.add_theme_stylebox_override("panel", box)
+	return p
+
+## Abschnitts-Ueberschrift: farbiger Block, Text, duenne Linie bis zum Rand.
+class SectionHeader extends HBoxContainer:
+	func _init(text: String, accent: Color) -> void:
+		add_theme_constant_override("separation", 8)
+		var tick := ColorRect.new()
+		tick.color = accent
+		tick.custom_minimum_size = Vector2(3, 12)
+		tick.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		add_child(tick)
+		add_child(UiTheme.label(text.to_upper(), 11, TEXT, 3.0))
+		var rule := ColorRect.new()
+		rule.color = Color(accent.r, accent.g, accent.b, 0.18)
+		rule.custom_minimum_size = Vector2(0, 1)
+		rule.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rule.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		add_child(rule)
+
+static func section(text: String, accent: Color = CYAN) -> Control:
+	return SectionHeader.new(text, accent)
+
+## Tastenkappe: der Buchstabe im Kasten, daneben wofuer er steht.
+static func key_cap(key: String, content: String, accent: Color = AMBER) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 7)
+	var cap := PanelContainer.new()
+	var box := panel_box(Color(accent.r, accent.g, accent.b, 0.12), Color(accent.r, accent.g, accent.b, 0.5), 3)
+	box.content_margin_left = 6
+	box.content_margin_right = 6
+	box.content_margin_top = 2
+	box.content_margin_bottom = 2
+	cap.add_theme_stylebox_override("panel", box)
+	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var k := label(key, 10, accent, 1.0)
+	k.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	k.custom_minimum_size = Vector2(maxf(12.0, key.length() * 7.0), 0)
+	cap.add_child(k)
+	row.add_child(cap)
+	var t := label(content, 10, DIM, 1.0)
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(t)
+	return row
+
+## Eckwinkel um einen Bereich - technische Optik ohne vollen Rahmen.
+class Brackets extends Control:
+	var accent := CYAN
+	var arm := 18.0
+	var thickness := 2.0
+
+	func _init(color: Color = CYAN, arm_length: float = 18.0) -> void:
+		accent = color
+		arm = arm_length
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	func _draw() -> void:
+		var w := size.x
+		var h := size.y
+		var c := Color(accent.r, accent.g, accent.b, 0.7)
+		for corner: Array in [
+			[Vector2(0, 0), Vector2(1, 0), Vector2(0, 1)],
+			[Vector2(w, 0), Vector2(-1, 0), Vector2(0, 1)],
+			[Vector2(0, h), Vector2(1, 0), Vector2(0, -1)],
+			[Vector2(w, h), Vector2(-1, 0), Vector2(0, -1)],
+		]:
+			var p: Vector2 = corner[0]
+			var dx: Vector2 = corner[1]
+			var dy: Vector2 = corner[2]
+			draw_line(p + dy * thickness * 0.5, p + dx * arm + dy * thickness * 0.5, c, thickness)
+			draw_line(p + dx * thickness * 0.5, p + dy * arm + dx * thickness * 0.5, c, thickness)
+
 ## Fortschritts-/Messbalken (`.meter`, `.night-bar`).
 class Meter extends Control:
 	var value := 0.0  ## 0..1
