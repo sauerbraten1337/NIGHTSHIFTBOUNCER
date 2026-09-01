@@ -50,11 +50,24 @@ func _init() -> void:
 			_game.call("act", "bouncer", "search")],
 		[216, func() -> void: _game.call("act", "bouncer", "zone", {"zone": "jacket"})],
 		[250, func() -> void: _shot("04b-nacht-ausweis")],
-		[255, func() -> void: _game.call("toggle_pause")],
+		# Der Roentgenblick des Testzugangs - er zeigt die Wahrheit des Gastes.
+		[252, func() -> void:
+			Admin.unlock_admin(Admin.ADMIN_CODE)
+			Admin.set_cheat("reveal", true)],
+		[258, func() -> void: _shot("04c-roentgenblick")],
+		[260, func() -> void: Admin.lock_admin()],
+		[265, func() -> void: _game.call("toggle_pause")],
 		[280, func() -> void: _shot("05-pause")],
-		[285, func() -> void: _game.call("toggle_pause")],
+		# Dasselbe Menue mit freigeschaltetem Testzugang - die Cheat-Schalter.
+		[282, func() -> void:
+			Admin.unlock_admin(Admin.ADMIN_CODE)
+			Admin.set_cheat("reveal", true)
+			_screens().call("pause")],
+		[288, func() -> void: _shot("05b-pause-admin")],
+		[290, func() -> void: Admin.lock_admin()],
+		[292, func() -> void: _game.call("toggle_pause")],
 		# Nachtabschluss: die Schicht abbrechen wie der Admin-Knopf.
-		[290, func() -> void: _game.call("admin_end_shift")],
+		[294, func() -> void: _game.call("admin_end_shift")],
 		# Der Admin-Knopf schliesst zuletzt den Bildschirm - fuer die Aufnahme
 		# den Nachtabschluss danach noch einmal aufrufen.
 		[300, func() -> void: _game.call("go_report")],

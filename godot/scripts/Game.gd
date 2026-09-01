@@ -136,9 +136,9 @@ func _build_ui() -> void:
 	admin_layer.add_child(admin_root)
 	admin_hud = AdminHud.new(self)
 	admin_hud.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	admin_hud.offset_left = -296
+	admin_hud.offset_left = -336
 	admin_hud.offset_right = -16
-	admin_hud.offset_top = 96
+	admin_hud.offset_top = 124
 	admin_root.add_child(admin_hud)
 
 # ---------------- Netzwerk ----------------
