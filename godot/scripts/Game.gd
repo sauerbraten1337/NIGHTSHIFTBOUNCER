@@ -102,7 +102,9 @@ func _build_ui() -> void:
 	idcard.anchor_right = 0.0
 	idcard.anchor_bottom = 1.0
 	idcard.offset_left = 44
-	idcard.offset_bottom = -58
+	# Hoch genug, dass der Ausweis nie auf der Aktionsleiste liegt -
+	# wie `bottom: 210px` fuer `.idcard` in styles/ui.css.
+	idcard.offset_bottom = -210
 	idcard.grow_horizontal = Control.GROW_DIRECTION_END
 	idcard.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	idcard.rotation = deg_to_rad(-2.4)

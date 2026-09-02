@@ -218,7 +218,9 @@ html, body {
 /* ---------- Ausweis ---------- */
 
 .idhand {
-  position: absolute; left: 6px; bottom: 104px;
+  /* Hoch genug, dass der Ausweis nie auf der Aktionsleiste liegt:
+     die Leiste ist rund 100px hoch, darueber bleibt ein klarer Abstand. */
+  position: absolute; left: 6px; bottom: 152px;
   width: 470px; height: 300px;
   pointer-events: none;
 }
@@ -230,7 +232,8 @@ html, body {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
   pointer-events: none;
 }
-.idhand .holding-hand { left: 26px; bottom: -34px; width: 132px; height: 132px; }
+/* Die Hand bleibt am Tresen liegen, auch wenn der Ausweis hoeher haengt. */
+.idhand .holding-hand { left: 26px; bottom: -82px; width: 132px; height: 132px; }
 .notepad-hand { right: 6px; bottom: 86px; width: 116px; height: 116px; }
 
 .idcard {
@@ -242,7 +245,8 @@ html, body {
   border: 1px solid var(--line);
   padding: 10px 12px 12px;
   pointer-events: auto;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+  /* Flacher Schatten: der alte lief bis auf die Knoepfe hinunter. */
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
 }
 
 .idc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; white-space: nowrap; }
@@ -323,18 +327,20 @@ html, body {
 
 .hud-bottom {
   position: absolute; bottom: 0; left: 0; right: 0;
-  display: grid; grid-template-columns: 1fr 1fr;
-  align-items: end; gap: 14px; padding: 14px 18px 12px;
+  /* Links die Aktionen, mittig die Entscheidung, rechts der zweite
+     Spieler - so kann nichts uebereinander liegen. */
+  display: flex; align-items: flex-end; gap: 14px; padding: 14px 18px 12px;
   background: linear-gradient(0deg, rgba(4, 5, 8, 0.95), rgba(4, 5, 8, 0));
 }
 
 /* ---------- Entscheidungs-Buttons: gross, mittig, unten ---------- */
 
 .decisions {
-  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 30px; align-items: flex-end; pointer-events: auto; z-index: 5;
+  display: flex; gap: 14px; align-items: flex-end; justify-content: center;
+  flex: 0 0 auto; pointer-events: auto; z-index: 5;
 }
-.dec-group { display: flex; gap: 10px; align-items: flex-end; position: relative; }
+.decisions:empty { display: none; }
+.dec-group { display: flex; gap: 8px; align-items: flex-end; position: relative; }
 .dec-role {
   position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
   font-size: 8px; letter-spacing: 3px; color: var(--dim); white-space: nowrap;
@@ -525,10 +531,13 @@ html, body {
 .actionbar {
   /* Eine Reihe, keine zweite Zeile: sonst schiebt sie sich über den Ausweis. */
   display: flex; gap: 8px; align-items: flex-end; flex-wrap: nowrap;
+  flex: 1 0 auto;
   pointer-events: auto;
 }
-.actionbar.p2 { justify-content: flex-end; margin-left: auto; }
-.actionbar:empty { display: none; }
+.actionbar.p2 { justify-content: flex-end; }
+/* Leer bleibt sie als Platzhalter stehen, damit die Entscheidung
+   mittig sitzt - klickbar ist dann nichts davon. */
+.actionbar:empty { pointer-events: none; }
 
 /* Kontrollen: Icon-Buttons, anklickbar wie mit der Taste. */
 .act {
@@ -1689,18 +1698,20 @@ kbd {
 /* ---------- Entscheidung: EINLASSEN / ABWEISEN ---------- */
 
 .dec {
-  min-width: 178px;
-  padding: 14px 24px 12px;
-  gap: 4px;
+  /* Kompakt: die beiden Knoepfe duerfen die Aktionsleiste daneben
+     nicht ueberlappen, auch nicht in schmalen Fenstern. */
+  min-width: 116px;
+  padding: 9px 14px 8px;
+  gap: 3px;
   border-width: 1px;
-  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
   backdrop-filter: blur(4px);
 }
-.dec .dec-icon { width: 30px; height: 30px; }
-.dec .dec-label { font-size: 14px; letter-spacing: 5px; color: currentColor; }
+.dec .dec-icon { width: 20px; height: 20px; }
+.dec .dec-label { font-size: 11px; letter-spacing: 3px; color: currentColor; }
 /* Ein dünner Lichtrand in der Farbe der Entscheidung. */
 .dec::before {
-  content: ""; position: absolute; left: 14px; right: 0; top: 0; height: 2px;
+  content: ""; position: absolute; left: 10px; right: 0; top: 0; height: 2px;
   background: currentColor; opacity: 0.5;
 }
 .dec.yes {
@@ -1789,4 +1800,16 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .menu, .menu::before, .menu-scan::after, .menu-title::before, .menu-title::after,
   .ms-dot, .btn::after, .menu-item::after { animation: none !important; transition: none !important; }
+}
+
+/* Schmale Fenster: die untere Leiste muss in eine Zeile passen,
+   sonst schieben sich Aktionen und Entscheidung uebereinander. */
+@media (max-width: 1120px) {
+  .act { width: 66px; min-height: 66px; padding: 8px 4px 6px; }
+  .act .act-icon { width: 22px; height: 22px; }
+  .act .act-name { font-size: 8px; letter-spacing: 1px; }
+  .dec { min-width: 96px; padding: 8px 10px 7px; }
+  .dec .dec-icon { width: 18px; height: 18px; }
+  .dec .dec-label { font-size: 10px; letter-spacing: 2px; }
+  .decisions { gap: 10px; }
 }

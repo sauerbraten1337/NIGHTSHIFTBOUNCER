@@ -193,12 +193,12 @@ func _build_toasts() -> void:
 func _build_bottom() -> void:
 	_decisions = HBoxContainer.new()
 	_decisions.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	_decisions.offset_top = -206
+	_decisions.offset_top = -172
 	_decisions.offset_bottom = -102
 	_decisions.offset_left = -420
 	_decisions.offset_right = 420
 	_decisions.alignment = BoxContainer.ALIGNMENT_CENTER
-	_decisions.add_theme_constant_override("separation", 28)
+	_decisions.add_theme_constant_override("separation", 18)
 	_root.add_child(_decisions)
 
 	var bottom := HBoxContainer.new()
@@ -292,26 +292,26 @@ func _action_button(role_id: String, action: Dictionary, accent: Color) -> Contr
 func _decision_button(role_id: String, action: Dictionary) -> Control:
 	var yes: bool = action["code"] != "reject"
 	var accent := UiTheme.GREEN if yes else UiTheme.RED
-	# Die Entscheidung ist der groesste Knopf im Bild: eigene Zeichnung mit
+	# Kompakter Knopf mit eigener Zeichnung:
 	# abgeschraegten Ecken, Lichtkante oben und Schein beim Ueberfahren.
 	var b := DecisionButton.new(accent)
-	# Quadratischer Zuschnitt: das Icon steht mittig ueber der Beschriftung.
-	b.custom_minimum_size = Vector2(148, 96)
+	# Flacher Zuschnitt: das Icon steht mittig ueber der Beschriftung.
+	b.custom_minimum_size = Vector2(116, 62)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.pressed.connect(func() -> void: game.call("act", role_id, action["code"]))
 
 	var col := VBoxContainer.new()
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_theme_constant_override("separation", 8)
+	col.add_theme_constant_override("separation", 4)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var icon := Icons.icon_node(action["code"], 34.0, accent)
+	var icon := Icons.icon_node(action["code"], 22.0, accent)
 	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(icon)
-	# Lange Beschriftungen wie ZURÜCKSCHICKEN passen nur kleiner in das Quadrat.
+	# Lange Beschriftungen wie ZURÜCKSCHICKEN passen nur kleiner hinein.
 	var label_text := String(action["label"])
-	var text_size := 13 if label_text.length() <= 10 else 10
-	var text := UiTheme.label(label_text, text_size, accent, 4.0 if text_size == 13 else 2.0)
+	var text_size := 11 if label_text.length() <= 10 else 9
+	var text := UiTheme.label(label_text, text_size, accent, 3.0 if text_size == 11 else 1.5)
 	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	text.clip_text = true
 	col.add_child(text)
