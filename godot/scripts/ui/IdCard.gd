@@ -23,7 +23,7 @@ var _body: VBoxContainer = null
 func _init(game_node: Node, initial_role: String = "bouncer") -> void:
 	game = game_node
 	role_id = initial_role
-	custom_minimum_size = Vector2(430, 0)
+	custom_minimum_size = Vector2(380, 0)
 	add_theme_stylebox_override("panel", UiTheme.panel_box(
 		Color(11.0 / 255.0, 13.0 / 255.0, 18.0 / 255.0, 0.94), UiTheme.LINE
 	))
@@ -79,11 +79,11 @@ func _build(guest: Dictionary, inspection: Dictionary, station: Dictionary) -> v
 	# Kopfzeile
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 12)
-	head.add_child(UiTheme.label("AUSWEISKONTROLLE", 11, UiTheme.TEXT, 3.0))
+	head.add_child(UiTheme.label("AUSWEISKONTROLLE", 10, UiTheme.TEXT, 2.5))
 	head.add_child(UiTheme.spacer())
 	head.add_child(UiTheme.label(
 		"HEUTE %s · MINDESTALTER %d" % [Identity.today_string(), int(Config.TUNING["minAge"])],
-		9, UiTheme.DIM, 2.0
+		8, UiTheme.DIM, 1.0
 	))
 	_body.add_child(head)
 	_body.add_child(UiTheme.separator())
@@ -94,7 +94,9 @@ func _build(guest: Dictionary, inspection: Dictionary, station: Dictionary) -> v
 
 	var photo_button := Button.new()
 	photo_button.flat = true
-	photo_button.custom_minimum_size = Vector2(150, 190)
+	# Etwas kleiner als frueher: die Karte bleibt schmal genug, dass
+	# links der Reiter und rechts die Sprechblase frei bleiben.
+	photo_button.custom_minimum_size = Vector2(118, 150)
 	photo_button.tooltip_text = "Foto mit dem Gast vergleichen"
 	photo_button.pressed.connect(func() -> void:
 		game.call("act", role_id, "mark", {"field": "photo"})
@@ -171,7 +173,7 @@ func _static_row(key: String, value: String) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	var k := UiTheme.label(key, 9, UiTheme.DIM, 3.0)
-	k.custom_minimum_size = Vector2(96, 0)
+	k.custom_minimum_size = Vector2(78, 0)
 	row.add_child(k)
 	row.add_child(UiTheme.label(value, 12, UiTheme.TEXT))
 	return row
@@ -209,7 +211,7 @@ func _field_row(
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var k := UiTheme.label(key, 9, UiTheme.DIM, 3.0)
-	k.custom_minimum_size = Vector2(96, 0)
+	k.custom_minimum_size = Vector2(78, 0)
 	row.add_child(k)
 	var v := UiTheme.label(value, 13, UiTheme.TEXT)
 	v.name = "Value"
@@ -255,7 +257,7 @@ func _holo_row(inspection: Dictionary, marks_ok: bool) -> Control:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var k := UiTheme.label("MERKMALE", 9, UiTheme.DIM, 3.0)
-	k.custom_minimum_size = Vector2(96, 0)
+	k.custom_minimum_size = Vector2(78, 0)
 	row.add_child(k)
 	for i in 3:
 		var holo := ColorRect.new()
