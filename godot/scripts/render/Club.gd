@@ -140,6 +140,9 @@ static func draw_club(
 
 ## Waende, Boden, Deckentraverse - der leere Raum.
 static func _draw_shell(ci: CanvasItem, w: float, h: float) -> void:
+	# Deckend, egal was dahinter liegt: waehrend der Schicht steht die Nacht
+	# hinter diesem Bildschirm.
+	ci.draw_rect(Rect2(0, 0, w, h), Color("07090d"))
 	Draw2D.vgradient_rect(ci, Rect2(0, 0, w, ROOM_TOP * h + 2.0), WALL_TOP, WALL_BOTTOM)
 
 	# Seitenwaende: die Keile links und rechts neben dem Grundriss. Sie
