@@ -26,6 +26,9 @@ var _money: Label = null
 var _rep: Label = null
 var _rep_bar: UiTheme.Meter = null
 var _queue: Label = null
+## Der Weg in den Club - waehrend der Schicht die Pause, und der einzige Weg
+## zum Feierabend.
+var _club_button: Button = null
 var _effects: VBoxContainer = null
 var _toasts: VBoxContainer = null
 var _bar1: HBoxContainer = null
@@ -106,6 +109,19 @@ func _build_top() -> void:
 	left.add_child(_clock)
 	left.add_child(_shift_label)
 	left.add_child(_phase)
+
+	# Jederzeit rein in den eigenen Club: die Nacht steht dort still, und von
+	# dort wird auch der Tag beendet. Online geht das nicht - der Host
+	# simuliert weiter (siehe Game.club_break_allowed()).
+	_club_button = UiTheme.button("IN DEN CLUB", UiTheme.AMBER, 9, 3.0)
+	_club_button.custom_minimum_size = Vector2(150, 26)
+	_club_button.pressed.connect(func() -> void:
+		if bool(game.call("club_break_allowed")):
+			game.call("go_club", true)
+	)
+	var club_row := HBoxContainer.new()
+	club_row.add_child(_club_button)
+	left.add_child(club_row)
 	top.add_child(left)
 
 	# Mitte: Clubname, Nacht, Fortschritt
@@ -387,6 +403,9 @@ func update_hud() -> void:
 		UiTheme.CYAN if rep > 33.0 else UiTheme.RED
 	)
 	_rep_bar.set_value(rep / 100.0)
+
+	if _club_button != null:
+		_club_button.visible = bool(game.call("club_break_allowed"))
 
 	if night == null:
 		return

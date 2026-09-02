@@ -154,8 +154,11 @@ angewendet (`Game.apply_settings()` und `Settings.apply_window()`).
 
 Aus einer laufenden Karriere führen drei Wege zurück zum Titel: im Pausenmenü
 **ZURÜCK ZUM HAUPTMENÜ** (mit Rückfrage, verwirft die Nacht und verlässt einen
-Online-Raum), im Night Report und im Büro. **SCHICHT BEENDEN** im Pausenmenü
-schliesst die Nacht dagegen regulär ab und zeigt den Report.
+Online-Raum), im Night Report und im Büro. Regulär abgeschlossen wird die Nacht
+dagegen im Club: **IN DEN CLUB** (Pausenmenü oder Knopf oben links im HUD),
+dort **TAG BEENDEN**. Nur online steht weiterhin **SCHICHT BEENDEN** direkt im
+Pausenmenü — dort simuliert der Host weiter, eine Pause im Club wäre nur bei
+einem von beiden (`Game.club_break_allowed()`).
 
 ### Bildschirme der Schicht
 
@@ -209,6 +212,27 @@ Klickfläche können nicht auseinanderlaufen.
 Anklickbar sind alle sechs Flächen; nur der Eingang führt weiter, die übrigen
 erzählen in der Hinweiszeile unten links von sich. **ZURÜCK INS BÜRO** und
 **HAUPTMENÜ** stehen oben rechts, weil unten im Bild die Toiletten liegen.
+
+#### Der Club als Pause — und als einziger Weg zum Feierabend
+
+Derselbe Bildschirm dient während der Schicht als Pause
+(`Game.go_club(true)` → `Screens.club(true)`):
+
+* **Hinein** kommt man jederzeit — über den Knopf **IN DEN CLUB** oben links
+  im HUD oder über das Pausenmenü (<kbd>ESC</kbd>).
+* **Die Nacht steht dabei still.** `paused` friert `_physics_process()` ein,
+  `state["night"]` bleibt unangetastet: Uhr, Schlange, Geduld und Ausrasten
+  laufen erst weiter, wenn man zurückgeht. Nichts wird neu aufgesetzt — es
+  geht genau dort weiter, wo man aufgehört hat.
+* **Zurück an die Tür** führt der Eingang (dort beschriftet mit *ZURÜCK AN DIE
+  TÜR*) oder <kbd>ESC</kbd>: `Game.resume_shift()`.
+* **TAG BEENDEN** oben rechts schliesst die Nacht ab (`end_shift_now()` →
+  Night Report). Das geht jederzeit — und nur von hier aus.
+* Die Kennzahlen oben rechts zeigen in dieser Fassung den Stand der Nacht:
+  abgefertigt, Schlange, eingelassen · abgewiesen.
+
+`Game.in_club` merkt sich, dass der Bildschirm offen ist; darum weiss
+`toggle_pause()`, dass <kbd>ESC</kbd> im Club „zurück an die Tür" heisst.
 
 ### Prüfen
 

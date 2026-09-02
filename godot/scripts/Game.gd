@@ -20,6 +20,9 @@ var renderer: Renderer = null
 var audio: GameAudio = null
 
 var paused := false
+## Steht der Club-Bildschirm gerade offen? Waehrend der Schicht ist er die
+## Pause: ESC und der Knopf im HUD fuehren dorthin und wieder zurueck.
+var in_club := false
 var local_role := "bouncer"
 var net_role: Variant = null  # null | 'host' | 'guest'
 var tutorial_wanted := true
@@ -331,6 +334,7 @@ func go_menu() -> void:
 	game["state"]["phase"] = "menu"
 	game["state"]["night"] = null
 	paused = false
+	in_club = false
 	net_role = null
 	if hud != null:
 		hud.call("hide_hud")
@@ -350,6 +354,7 @@ func quit_to_menu() -> void:
 ## Schicht vorzeitig abschliessen: Night Report wie am Ende einer Nacht.
 func end_shift_now() -> void:
 	paused = false
+	in_club = false
 	if screens != null:
 		screens.call("hide_screen")
 	var night: Variant = game["state"]["night"]
@@ -417,17 +422,44 @@ func go_office() -> void:
 ## Aus dem Buero in den eigenen Club: der Blick von oben auf den Laden, kurz
 ## bevor die Nacht beginnt. Von hier fuehrt der Eingang an die Tuer - und
 ## damit ins Tuersteher-Spiel.
-func go_club() -> void:
-	game["state"]["phase"] = "club"
+##
+## `from_shift` heisst: die Schicht laeuft schon. Dann bleibt die Nacht in
+## `state["night"]` unangetastet stehen (paused), der Club ist eine Pause -
+## und von hier aus wird auch der Tag beendet.
+func go_club(from_shift: bool = false) -> void:
+	in_club = true
+	if from_shift:
+		# Die Nacht friert ein: keine Uhr, keine Geduld, kein Ausrasten.
+		# Sie laeuft genau dort weiter, wo sie stehen geblieben ist.
+		paused = true
+	else:
+		game["state"]["phase"] = "club"
 	if hud != null:
 		hud.call("hide_hud")
 	# Drinnen laeuft die Anlage schon.
 	audio.start()
 	audio.set_intensity(0.45)
 	if screens != null:
-		screens.call("club")
-	else:
+		screens.call("club", from_shift)
+	elif not from_shift:
 		go_briefing()
+
+## Aus dem Club zurueck an die Tuer - weiter, wo man aufgehoert hat.
+func resume_shift() -> void:
+	in_club = false
+	paused = false
+	if screens != null:
+		screens.call("hide_screen")
+	if hud != null:
+		hud.call("show_hud")
+	audio.set_intensity(0.3)
+
+## Darf man aus der laufenden Schicht in den Club? Online nicht: dort
+## simuliert der Host weiter, eine Pause waere nur bei einem von beiden.
+func club_break_allowed() -> bool:
+	var state: Dictionary = game["state"]
+	return state["mode"] != "online" and state["phase"] == "night" \
+		and state["night"] != null and bool((state["night"] as Dictionary)["running"])
 
 func _on_night_end() -> void:
 	if is_guest:
@@ -553,6 +585,11 @@ func _hit_at(hits: Array, p: Vector2) -> Variant:
 	return null
 
 func toggle_pause() -> void:
+	# Steht man im Club, ist der Weg zurueck an die Tuer gemeint - dort ist
+	# der Club die Pause.
+	if in_club:
+		resume_shift()
+		return
 	paused = not paused
 	if screens == null:
 		return
@@ -570,6 +607,7 @@ func toggle_pause() -> void:
 func admin_night(n: int) -> String:
 	var number := Admin.admin_prepare_night(game["state"], n)
 	paused = false
+	in_club = false
 	tutorial_wanted = false
 	if hud != null:
 		hud.call("hide_hud")
@@ -620,6 +658,7 @@ func admin_end_shift() -> String:
 	if night == null or not bool(night["running"]):
 		return "Keine laufende Schicht."
 	paused = false
+	in_club = false
 	GameState.add_toast(night, "ADMIN: SCHICHT BEENDET", "info")
 	NightCycle.end_night(game)
 	if screens != null:
