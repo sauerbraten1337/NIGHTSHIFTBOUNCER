@@ -16,7 +16,7 @@ static func create_initial_state(mode: String = "solo") -> Dictionary:
 	return {
 		"version": 2,
 		"mode": mode,        # solo | local | online
-		"phase": "menu",     # menu | briefing | night | report | shop
+		"phase": "menu",     # menu | office | club | briefing | night | report | shop
 		"money": float(Config.TUNING["moneyStart"]),
 		"reputation": float(Config.TUNING["reputationStart"]),
 		"xp": 0,

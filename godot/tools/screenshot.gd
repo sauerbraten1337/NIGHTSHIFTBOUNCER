@@ -5,7 +5,7 @@
 ## Ohne Bildschirm laeuft Godot nur headless, und headless zeichnet nichts -
 ## darum ein virtueller X-Server. Das Werkzeug startet die Hauptszene und
 ## laeuft den ganzen Spielfluss ab: Titel, Charaktereditor, Briefing, Nacht
-## (solo und Koop), Nachtabschluss, Buero und Laptop.
+## (solo und Koop), Nachtabschluss, Buero, Club und Laptop.
 extends SceneTree
 
 var _out_dir := "user://shots"
@@ -74,18 +74,22 @@ func _init() -> void:
 		[340, func() -> void: _shot("06-nachtabschluss")],
 		[345, func() -> void: _game.call("go_office")],
 		[380, func() -> void: _shot("07-buero")],
-		[385, func() -> void: _screens().call("shop")],
-		[440, func() -> void: _shot("08-laptop")],
+		# Durch die Bürotür in den eigenen Club - der Blick von oben.
+		[385, func() -> void: _game.call("go_club")],
+		[420, func() -> void: _shot("07b-club")],
+		[425, func() -> void: _game.call("go_office")],
+		[435, func() -> void: _screens().call("shop")],
+		[490, func() -> void: _shot("08-laptop")],
 		# Derselbe Blick im lokalen Koop - der Splitscreen ist eine eigene
 		# Zeichenpfad-Variante.
-		[450, func() -> void:
+		[500, func() -> void:
 			var g: Dictionary = _game.get("game")
 			(g["state"] as Dictionary)["night"] = null
 			(g["state"] as Dictionary)["nightIndex"] = 0
 			_game.call("apply_mode", "local")
 			_game.call("go_briefing")],
-		[480, func() -> void: _game.call("begin_night", false)],
-		[560, func() -> void:
+		[530, func() -> void: _game.call("begin_night", false)],
+		[610, func() -> void:
 			_shot("09-nacht-koop")
 			quit(0)],
 	]
