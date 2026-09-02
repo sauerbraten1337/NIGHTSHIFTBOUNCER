@@ -184,6 +184,32 @@ wer dort etwas hinzufügt, muss diese Höhe im Blick behalten.
   steht mittig über der Beschriftung (`UiTheme.icon_button()` und
   `Hud.DecisionButton`).
 
+### Der Club vor der Schicht
+
+Nur in der Godot-Fassung: Die Bürotür führt nicht mehr direkt ins Briefing,
+sondern zuerst in den **eigenen Club** (`Game.go_club()` → `Screens.club()` →
+`scripts/ui/ClubScreen.gd`, gezeichnet von `scripts/render/Club.gd`).
+
+Der Blick fällt in Zwei-Drittel-Ansicht schräg von oben in den Raum. Grundriss
+und Bild sind getrennt: `Club.AREAS` beschreibt die Flächen als Anteile des
+Grundrisses (x nach rechts, y von der Rückwand nach vorn), `Club.project()`
+rechnet einen Grundrisspunkt in den Bildpunkt um. Dieselbe Rechnung liefert
+über `Club.hotspot_rect()` die Anteilsrechtecke der Klickfelder — Bild und
+Klickfläche können nicht auseinanderlaufen.
+
+| Fläche | Was zu sehen ist |
+|---|---|
+| **Bühne · DJ-Pult** | Podest, Boxenstapel (Höhe nach Soundanlage), Plattenteller, DJ, Leuchtschrift mit dem gebuchten Act. |
+| **Tanzfläche** | Leuchtende Platten im Takt, Tanzende (mehr mit ausgebauter Tanzfläche), Lichtkegel von der Traverse (mehr mit besserer Lichtanlage). |
+| **Bar** | Tresen mit Lichtleiste, Flaschenregal an der Wand (Bretter nach Bar-Ausbau), Barkeeper und Gäste davor. |
+| **Booths** | Sitzecken mit Tisch und Kerze; ab VIP-Ausbau eine Nische mehr und Samt statt Grau. |
+| **Toiletten** | Zwei Türen mit Piktogramm, Leuchtschild, die übliche Schlange davor. |
+| **Eingang** | Doppeltür mit Kordel und Leuchtschild — **hier startet die Schicht** (Briefing, danach die Nacht an der Tür). |
+
+Anklickbar sind alle sechs Flächen; nur der Eingang führt weiter, die übrigen
+erzählen in der Hinweiszeile unten links von sich. **ZURÜCK INS BÜRO** und
+**HAUPTMENÜ** stehen oben rechts, weil unten im Bild die Toiletten liegen.
+
 ### Prüfen
 
 ```bash
