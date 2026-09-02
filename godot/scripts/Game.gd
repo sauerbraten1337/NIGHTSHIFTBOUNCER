@@ -101,9 +101,11 @@ func _build_ui() -> void:
 	idcard.anchor_top = 1.0
 	idcard.anchor_right = 0.0
 	idcard.anchor_bottom = 1.0
-	idcard.offset_left = 44
-	# Hoch genug, dass der Ausweis nie auf der Aktionsleiste liegt -
-	# wie `bottom: 210px` fuer `.idcard` in styles/ui.css.
+	# Etwas weiter rechts als im Browser: hier bleibt der Reiter der
+	# Hausordnung daneben frei.
+	idcard.offset_left = 70
+	# Hoch genug, dass der Ausweis weder auf der Aktionsleiste noch auf
+	# EINLASSEN / ABWEISEN liegt - wie `bottom: 210px` in styles/ui.css.
 	idcard.offset_bottom = -210
 	idcard.grow_horizontal = Control.GROW_DIRECTION_END
 	idcard.grow_vertical = Control.GROW_DIRECTION_BEGIN

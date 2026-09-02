@@ -159,9 +159,12 @@ func _stat_row(parent: Control, key: String) -> Label:
 
 func _build_tutorial() -> void:
 	_tutorial = UiTheme.panel()
-	_tutorial.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	_tutorial.offset_left = 24
-	_tutorial.offset_top = 150
+	# Mittig oben wie `.tutorial` in styles/ui.css - links unten liegt
+	# der Ausweis, der reicht bei langen Aussagen weit nach oben.
+	_tutorial.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_tutorial.offset_left = -210
+	_tutorial.offset_right = 210
+	_tutorial.offset_top = 108
 	_tutorial.custom_minimum_size = Vector2(420, 0)
 	_tutorial.visible = false
 	_root.add_child(_tutorial)

@@ -35,7 +35,8 @@ func _init() -> void:
 	_sheet.visible = false
 	add_child(_sheet)
 
-	_tab = UiTheme.button("HAUS\nORDNUNG", UiTheme.AMBER, 9, 2.0)
+	# Schmaler Reiter: daneben liegt der Ausweis.
+	_tab = UiTheme.button("HAUS\nORDNUNG", UiTheme.AMBER, 8, 1.0)
 	_tab.custom_minimum_size = Vector2(34, 96)
 	_tab.position = Vector2(0, 200)
 	_tab.pressed.connect(func() -> void:
