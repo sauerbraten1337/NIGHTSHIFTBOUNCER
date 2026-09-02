@@ -410,8 +410,24 @@ func go_office() -> void:
 	game["state"]["phase"] = "office"
 	if hud != null:
 		hud.call("hide_hud")
+	audio.set_intensity(0.2)
 	if screens != null:
 		screens.call("office")
+
+## Aus dem Buero in den eigenen Club: der Blick von oben auf den Laden, kurz
+## bevor die Nacht beginnt. Von hier fuehrt der Eingang an die Tuer - und
+## damit ins Tuersteher-Spiel.
+func go_club() -> void:
+	game["state"]["phase"] = "club"
+	if hud != null:
+		hud.call("hide_hud")
+	# Drinnen laeuft die Anlage schon.
+	audio.start()
+	audio.set_intensity(0.45)
+	if screens != null:
+		screens.call("club")
+	else:
+		go_briefing()
 
 func _on_night_end() -> void:
 	if is_guest:

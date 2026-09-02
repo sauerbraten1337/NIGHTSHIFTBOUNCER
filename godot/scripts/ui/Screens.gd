@@ -1,4 +1,4 @@
-## Screens: Menue, Katalog, Online-Lobby, Briefing, Report, Shop, Buero,
+## Screens: Menue, Katalog, Online-Lobby, Briefing, Report, Shop, Buero, Club,
 ## Charaktereditor, Pause.
 ##
 ## Portierung von src/ui/screens.js. Die Vorlage schiebt fertiges HTML in
@@ -595,7 +595,18 @@ func office() -> void:
 				"onBack": func() -> void: office(),
 			}),
 		"onLaptop": func() -> void: shop(),
-		"onDoor": func() -> void: game.call("go_briefing"),
+		# Durch die Tuer geht es nicht direkt an die Arbeit, sondern erst
+		# einmal in den eigenen Club.
+		"onDoor": func() -> void: game.call("go_club"),
+		"onMenu": func() -> void: game.call("quit_to_menu"),
+	}), {"full": true})
+
+## Der Club von innen: der Blick von oben auf Tanzflaeche, Buehne, Bar,
+## Booths und Toiletten. Der Eingang startet die Schicht.
+func club() -> void:
+	show_screen(ClubScreen.build(game, {
+		"onEntrance": func() -> void: game.call("go_briefing"),
+		"onOffice": func() -> void: game.call("go_office"),
 		"onMenu": func() -> void: game.call("quit_to_menu"),
 	}), {"full": true})
 
