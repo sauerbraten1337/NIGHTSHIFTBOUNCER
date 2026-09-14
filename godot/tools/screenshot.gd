@@ -17,6 +17,9 @@ var _frame := 0
 var _plan: Array = []
 var _step := 0
 
+## Der Ausbaustand vor der Aufnahme des voll ausgebauten Clubs.
+var _saved_upgrades: Dictionary = {}
+
 func _init() -> void:
 	var args := OS.get_cmdline_user_args()
 	for i in args.size():
@@ -77,19 +80,33 @@ func _init() -> void:
 		# Durch die Bürotür in den eigenen Club - der Blick von oben.
 		[385, func() -> void: _game.call("go_club")],
 		[420, func() -> void: _shot("07b-club")],
-		[425, func() -> void: _game.call("go_office")],
-		[435, func() -> void: _screens().call("shop")],
-		[490, func() -> void: _shot("08-laptop")],
+		# Derselbe Raum mit allem, was man kaufen kann - das Gegenstueck zum
+		# Kellerloch von oben. Danach wird der Ausbaustand zurueckgesetzt.
+		[422, func() -> void:
+			var state: Dictionary = (_game.get("game") as Dictionary)["state"]
+			_saved_upgrades = (state["upgrades"] as Dictionary).duplicate()
+			var full := {}
+			for u: Dictionary in Config.UPGRADES:
+				full[u["id"]] = int(u["max"])
+			state["upgrades"] = full
+			_game.call("go_club")],
+		[455, func() -> void: _shot("07c-club-ausgebaut")],
+		[458, func() -> void:
+			var state: Dictionary = (_game.get("game") as Dictionary)["state"]
+			state["upgrades"] = _saved_upgrades],
+		[465, func() -> void: _game.call("go_office")],
+		[475, func() -> void: _screens().call("shop")],
+		[530, func() -> void: _shot("08-laptop")],
 		# Derselbe Blick im lokalen Koop - der Splitscreen ist eine eigene
 		# Zeichenpfad-Variante.
-		[500, func() -> void:
+		[540, func() -> void:
 			var g: Dictionary = _game.get("game")
 			(g["state"] as Dictionary)["night"] = null
 			(g["state"] as Dictionary)["nightIndex"] = 0
 			_game.call("apply_mode", "local")
 			_game.call("go_briefing")],
-		[530, func() -> void: _game.call("begin_night", false)],
-		[610, func() -> void:
+		[570, func() -> void: _game.call("begin_night", false)],
+		[650, func() -> void:
 			_shot("09-nacht-koop")
 			quit(0)],
 	]
