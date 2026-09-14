@@ -602,8 +602,21 @@ func office() -> void:
 	}), {"full": true})
 
 ## Der Club von innen: der Blick von oben auf Tanzflaeche, Buehne, Bar,
-## Booths und Toiletten. Der Eingang startet die Schicht.
-func club() -> void:
+## Booths und Toiletten.
+##
+## Vor der Schicht startet der Eingang die Nacht. Waehrend der Schicht ist
+## derselbe Bildschirm die Pause: der Eingang fuehrt zurueck an die Tuer -
+## genau dorthin, wo man aufgehoert hat - und hier, nur hier, wird der Tag
+## beendet.
+func club(during_shift: bool = false) -> void:
+	if during_shift:
+		show_screen(ClubScreen.build(game, {
+			"duringShift": true,
+			"onEntrance": func() -> void: game.call("resume_shift"),
+			"onEndDay": func() -> void: game.call("end_shift_now"),
+			"onMenu": func() -> void: game.call("quit_to_menu"),
+		}), {"full": true})
+		return
 	show_screen(ClubScreen.build(game, {
 		"onEntrance": func() -> void: game.call("go_briefing"),
 		"onOffice": func() -> void: game.call("go_office"),
@@ -640,9 +653,21 @@ func pause() -> void:
 	var resume := UiTheme.button("WEITER", UiTheme.GREEN, 12, 3.0)
 	resume.pressed.connect(func() -> void: game.call("toggle_pause"))
 	main.add_child(resume)
-	var quit := UiTheme.button("SCHICHT BEENDEN", UiTheme.RED, 12, 3.0)
-	quit.pressed.connect(func() -> void: game.call("end_shift_now"))
-	main.add_child(quit)
+
+	# Feierabend gibt es nur drinnen: der Weg zum Tagesende fuehrt durch den
+	# eigenen Club. Online bleibt es beim direkten Abschluss - dort simuliert
+	# der Host weiter, eine Pause im Club waere nur bei einem von beiden.
+	if bool(game.call("club_break_allowed")):
+		var to_club := UiTheme.button("IN DEN CLUB", UiTheme.AMBER, 12, 3.0)
+		to_club.pressed.connect(func() -> void:
+			game.set("paused", false)
+			game.call("go_club", true)
+		)
+		main.add_child(to_club)
+	else:
+		var quit := UiTheme.button("SCHICHT BEENDEN", UiTheme.RED, 12, 3.0)
+		quit.pressed.connect(func() -> void: game.call("end_shift_now"))
+		main.add_child(quit)
 
 	# Zurueck ins Hauptmenue heisst: die Nacht ist weg. Einmal nachfragen.
 	var to_menu := UiTheme.button("ZURÜCK ZUM HAUPTMENÜ", UiTheme.DIM, 12, 3.0)
@@ -656,6 +681,11 @@ func pause() -> void:
 	)
 	main.add_child(to_menu)
 	main.add_child(UiTheme.body_label(
+		"Im Club kannst du in Ruhe stehen bleiben und danach genau dort "
+		+ "weitermachen, wo du warst — oder von dort den Tag beenden: das "
+		+ "schliesst die Nacht ab und zeigt den Night Report. Zurück zum "
+		+ "Hauptmenü verwirft die laufende Schicht."
+		if bool(game.call("club_break_allowed")) else
 		"Beenden schliesst die Nacht ab und zeigt den Night Report. Zurück zum "
 		+ "Hauptmenü verwirft die laufende Schicht.", 10, UiTheme.DIM
 	))
@@ -689,7 +719,7 @@ func pause() -> void:
 	))
 	side.add_child(_ctl_row("Maus", "Taste im Bild anklicken"))
 	side.add_child(UiTheme.label("SYSTEM", 10, UiTheme.CYAN, 2.0))
-	side.add_child(_ctl_row("ESC", "Pause"))
+	side.add_child(_ctl_row("ESC", "Pause · im Club: zurück an die Tür"))
 	side.add_child(_ctl_row("M", "Ton an/aus"))
 	side.add_child(UiTheme.body_label(
 		"Alle Kontrollen lassen sich auch anklicken: die Icons unten, der Ausweis, "

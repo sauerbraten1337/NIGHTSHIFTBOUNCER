@@ -1,11 +1,16 @@
 ## Der Laptop im Buero: NIGHT//OS.
 ##
 ## Statt einer langen Liste ist der Einkauf ein kleines Betriebssystem auf
-## einem Laptop-Bildschirm - mit Wallpaper, Menueleiste, Dock und Fenstern.
+## einem Laptop-Bildschirm, und zwar eines, das wie ein Rechner aussieht:
+## Menueleiste oben, Programmsymbole links auf dem Hintergrundbild, ein
+## Fenster mit Titelleiste und den drei Knoepfen, unten die Leiste mit den
+## laufenden Programmen und der Uhr.
+##
 ## Vier Programme: AUSBAU (Upgrades), TALENTE, BOOKING (Acts) und AKTE
 ## (Status des Clubs). Die Upgrades sind nach Bereichen sortiert, lassen sich
 ## filtern, durchsuchen und nach Empfehlung, Preis, Fortschritt oder Name
-## ordnen.
+## ordnen - und AUSBAU.EXE zeigt daneben den eigenen Club live: was gekauft
+## wird, steht sofort im Bild.
 ##
 ## Portierung von src/ui/shop.js.
 class_name Shop
@@ -47,16 +52,24 @@ var _only_affordable := false
 var _query := ""
 var _flash := ""
 
+## Hoehen der festen Leisten und Breite der Symbolspalte.
+const MENUBAR_H := 32.0
+const TASKBAR_H := 34.0
+const ICON_COLUMN_W := 128.0
+
 var _wall: WallpaperNode = null
 var _bar: HBoxContainer = null
-var _dock: VBoxContainer = null
+var _icons_column: VBoxContainer = null
+var _task_apps: HBoxContainer = null
 var _window_body: VBoxContainer = null
 var _window_head: HBoxContainer = null
 var _clock: Label = null
 var _toast: Label = null
 var _boot: PanelContainer = null
 var _want_boot := false
-var _dock_buttons: Array = []
+## Symbol auf dem Schreibtisch und Knopf in der Leiste zeigen dasselbe
+## Programm - beide stehen hier, damit _paint() das offene hervorheben kann.
+var _app_buttons: Array = []
 
 static func build(game_node: Node, next: Callable) -> Control:
 	var shop := Shop.new()
@@ -90,86 +103,13 @@ func _build_shell() -> void:
 	_wall.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_wall)
 
-	var top := HBoxContainer.new()
-	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	top.offset_left = 20
-	top.offset_right = -20
-	top.offset_top = 14
-	top.add_theme_constant_override("separation", 14)
-
-	var brand := HBoxContainer.new()
-	brand.add_theme_constant_override("separation", 6)
-	brand.add_child(Icons.os_icon("logo", 18.0, accent))
-	brand.add_child(UiTheme.label("NIGHT//OS", 13, UiTheme.TEXT, 3.0, true))
-	brand.add_child(UiTheme.label("v3.1", 9, UiTheme.DIM, 1.0))
-	top.add_child(brand)
-
-	_bar = HBoxContainer.new()
-	_bar.add_theme_constant_override("separation", 14)
-	_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_bar.alignment = BoxContainer.ALIGNMENT_CENTER
-	top.add_child(_bar)
-
-	_clock = UiTheme.label("--:--", 13, UiTheme.TEXT, 2.0)
-	top.add_child(_clock)
-	add_child(top)
-
-	var desk := HBoxContainer.new()
-	desk.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	desk.offset_left = 20
-	desk.offset_right = -20
-	desk.offset_top = 56
-	desk.offset_bottom = -46
-	desk.add_theme_constant_override("separation", 12)
-	add_child(desk)
-
-	_dock = VBoxContainer.new()
-	_dock.custom_minimum_size = Vector2(112, 0)
-	_dock.add_theme_constant_override("separation", 6)
-	desk.add_child(_dock)
-	_build_dock(accent)
-
-	var window := PanelContainer.new()
-	window.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	window.add_theme_stylebox_override("panel", UiTheme.panel_box(
-		Color(6.0 / 255.0, 8.0 / 255.0, 12.0 / 255.0, 0.9),
-		Color(accent.r, accent.g, accent.b, 0.45)
-	))
-	var window_box := VBoxContainer.new()
-	window_box.add_theme_constant_override("separation", 8)
-	_window_head = HBoxContainer.new()
-	_window_head.add_theme_constant_override("separation", 8)
-	window_box.add_child(_window_head)
-	window_box.add_child(UiTheme.separator())
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_window_body = VBoxContainer.new()
-	_window_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_window_body.add_theme_constant_override("separation", 8)
-	scroll.add_child(_window_body)
-	window_box.add_child(scroll)
-	window.add_child(window_box)
-	desk.add_child(window)
-
-	# Statusleiste
-	var task := HBoxContainer.new()
-	task.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	task.offset_left = 20
-	task.offset_right = -20
-	task.offset_top = -34
-	task.offset_bottom = -12
-	task.add_theme_constant_override("separation", 12)
-	task.add_child(Icons.os_icon("disk", 14.0, UiTheme.DIM))
-	task.add_child(UiTheme.label("NULLWERK · CLUBVERWALTUNG", 9, UiTheme.DIM, 2.0))
-	_toast = UiTheme.label("", 10, UiTheme.CYAN, 2.0)
-	_toast.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	task.add_child(_toast)
-	task.add_child(UiTheme.label(
-		"[1][2][3][4] Programme · [ESC] zurück ins Büro", 9, UiTheme.DIM, 1.0
-	))
-	add_child(task)
+	_build_menubar(accent)
+	_build_desktop_icons(accent)
+	_build_window(accent)
+	_build_taskbar(accent)
+	# Erst wenn Schreibtisch und Leiste stehen, koennen beide dieselben
+	# Programmknoepfe bekommen.
+	_rebuild_app_buttons(accent)
 
 	# Kurzer Startbildschirm - schnell genug, dass niemand wartet. Er braucht
 	# Zeitgeber, also erst wenn der Knoten im Baum haengt (siehe _ready).
@@ -184,60 +124,233 @@ func _build_shell() -> void:
 	timer.timeout.connect(_update_clock)
 	add_child(timer)
 
-func _ready() -> void:
-	if _want_boot:
-		_want_boot = false
-		_play_boot()
+## Die Leiste ganz oben: Systemname links, die Kennzahlen des Clubs in der
+## Mitte, rechts die Anzeigen. Sie liegt als eigene Flaeche auf dem
+## Hintergrundbild - so sieht man, dass der Bildschirm einem Rechner gehoert
+## und nicht dem Spiel.
+func _build_menubar(accent: Color) -> void:
+	var strip := PanelContainer.new()
+	strip.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	strip.offset_bottom = MENUBAR_H
+	var box := UiTheme.panel_box(
+		Color(6.0 / 255.0, 8.0 / 255.0, 13.0 / 255.0, 0.88),
+		Color(accent.r, accent.g, accent.b, 0.3)
+	)
+	box.border_width_left = 0
+	box.border_width_right = 0
+	box.border_width_top = 0
+	box.content_margin_top = 4
+	box.content_margin_bottom = 4
+	strip.add_theme_stylebox_override("panel", box)
 
-func _build_dock(accent: Color) -> void:
-	_dock_buttons.clear()
-	for child in _dock.get_children():
-		_dock.remove_child(child)
-		child.queue_free()
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
 
-	var apps := _apps()
-	for i in apps.size():
-		var a: Dictionary = apps[i]
-		var b := UiTheme.button("", accent, 9, 1.0)
-		b.custom_minimum_size = Vector2(0, 62)
-		b.pressed.connect(func() -> void:
-			_app = a["id"]
-			_flash = ""
-			((game.get("game") as Dictionary)["bus"] as Bus).emit("sfx", "ok")
-			_paint()
-		)
-		var col := VBoxContainer.new()
-		col.alignment = BoxContainer.ALIGNMENT_CENTER
-		col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		var icon := Icons.os_icon(a["icon"], 20.0, accent)
-		icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		col.add_child(icon)
-		var name := UiTheme.label(a["dock"], 9, UiTheme.TEXT, 1.0)
-		name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		col.add_child(name)
-		var num := UiTheme.label(str(i + 1), 8, UiTheme.DIM)
-		num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		col.add_child(num)
-		b.add_child(col)
-		_dock.add_child(b)
-		_dock_buttons.append({"button": b, "id": a["id"]})
+	var brand := HBoxContainer.new()
+	brand.add_theme_constant_override("separation", 6)
+	brand.add_child(Icons.os_icon("logo", 16.0, accent))
+	brand.add_child(UiTheme.label("NIGHT//OS", 12, UiTheme.TEXT, 3.0, true))
+	brand.add_child(UiTheme.label("v3.1", 8, UiTheme.DIM, 1.0))
+	row.add_child(brand)
 
-	_dock.add_child(UiTheme.spacer())
+	_bar = HBoxContainer.new()
+	_bar.add_theme_constant_override("separation", 14)
+	_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_child(_bar)
+
+	# Anzeigen wie an einem echten Geraet: Netz, Speicher, Ton.
+	var tray := HBoxContainer.new()
+	tray.add_theme_constant_override("separation", 8)
+	tray.add_child(Icons.os_icon("wave", 13.0, UiTheme.DIM))
+	tray.add_child(Icons.os_icon("disk", 13.0, UiTheme.DIM))
+	tray.add_child(Icons.os_icon("power", 13.0, UiTheme.GREEN))
+	row.add_child(tray)
+
+	strip.add_child(row)
+	add_child(strip)
+
+## Die Programmsymbole liegen links auf dem Hintergrundbild - anklickbar wie
+## auf einem Schreibtisch, mit Nummer als Tastenkuerzel.
+func _build_desktop_icons(_accent: Color) -> void:
+	_icons_column = VBoxContainer.new()
+	_icons_column.position = Vector2(18, MENUBAR_H + 16)
+	_icons_column.add_theme_constant_override("separation", 6)
+	add_child(_icons_column)
+
+## Fenster mit Titelleiste: drei Knoepfe, Name des Programms, Pfad. Der rote
+## Knopf schliesst - und schliessen heisst hier: zurueck ins Buero.
+func _build_window(accent: Color) -> void:
+	var window := PanelContainer.new()
+	window.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	window.offset_left = ICON_COLUMN_W
+	window.offset_right = -18
+	window.offset_top = MENUBAR_H + 14
+	window.offset_bottom = -(TASKBAR_H + 12)
+	var frame := UiTheme.panel_box(
+		Color(6.0 / 255.0, 8.0 / 255.0, 12.0 / 255.0, 0.92),
+		Color(accent.r, accent.g, accent.b, 0.45)
+	)
+	frame.content_margin_left = 0
+	frame.content_margin_right = 0
+	frame.content_margin_top = 0
+	frame.content_margin_bottom = 0
+	window.add_theme_stylebox_override("panel", frame)
+
+	var window_box := VBoxContainer.new()
+	window_box.add_theme_constant_override("separation", 0)
+
+	var title_strip := PanelContainer.new()
+	var title_box := UiTheme.panel_box(
+		Color(1, 1, 1, 0.045), Color(accent.r, accent.g, accent.b, 0.22)
+	)
+	title_box.border_width_left = 0
+	title_box.border_width_right = 0
+	title_box.border_width_top = 0
+	title_box.content_margin_top = 7
+	title_box.content_margin_bottom = 7
+	title_strip.add_theme_stylebox_override("panel", title_box)
+
+	_window_head = HBoxContainer.new()
+	_window_head.add_theme_constant_override("separation", 8)
+	title_strip.add_child(_window_head)
+	window_box.add_child(title_strip)
+
+	var pad := MarginContainer.new()
+	pad.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	pad.add_theme_constant_override("margin_left", 12)
+	pad.add_theme_constant_override("margin_right", 12)
+	pad.add_theme_constant_override("margin_top", 10)
+	pad.add_theme_constant_override("margin_bottom", 10)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_window_body = VBoxContainer.new()
+	_window_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_window_body.add_theme_constant_override("separation", 8)
+	scroll.add_child(_window_body)
+	pad.add_child(scroll)
+	window_box.add_child(pad)
+
+	window.add_child(window_box)
+	add_child(window)
+
+## Die Leiste unten: laufende Programme, Meldung, Speichern, Uhr.
+func _build_taskbar(accent: Color) -> void:
+	var strip := PanelContainer.new()
+	strip.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	strip.offset_top = -TASKBAR_H
+	var box := UiTheme.panel_box(
+		Color(5.0 / 255.0, 7.0 / 255.0, 11.0 / 255.0, 0.92),
+		Color(accent.r, accent.g, accent.b, 0.28)
+	)
+	box.border_width_left = 0
+	box.border_width_right = 0
+	box.border_width_bottom = 0
+	box.content_margin_top = 5
+	box.content_margin_bottom = 5
+	strip.add_theme_stylebox_override("panel", box)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(Icons.os_icon("logo", 15.0, accent))
+	row.add_child(UiTheme.label("NULLWERK", 9, UiTheme.DIM, 2.0))
+
+	_task_apps = HBoxContainer.new()
+	_task_apps.add_theme_constant_override("separation", 5)
+	row.add_child(_task_apps)
+
+	_toast = UiTheme.label("", 10, UiTheme.CYAN, 2.0)
+	_toast.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(_toast)
+
+	row.add_child(UiTheme.label("[1]…[4] PROGRAMME · [ESC] BÜRO", 9, UiTheme.DIM, 1.0))
 
 	var save := UiTheme.button("SICHERN", UiTheme.GREEN, 9, 1.0)
 	save.pressed.connect(func() -> void:
 		game.call("save")
 		_show_toast("SPIELSTAND GESICHERT")
 	)
-	_dock.add_child(save)
+	row.add_child(save)
 
 	var quit := UiTheme.button("BÜRO", UiTheme.RED, 9, 1.0)
 	quit.pressed.connect(func() -> void:
 		if on_next.is_valid():
 			on_next.call()
 	)
-	_dock.add_child(quit)
+	row.add_child(quit)
+
+	_clock = UiTheme.label("--:--", 12, UiTheme.TEXT, 2.0)
+	row.add_child(_clock)
+
+	strip.add_child(row)
+	add_child(strip)
+
+## Symbole auf dem Schreibtisch und Knoepfe in der Leiste zeigen dieselben
+## Programme - beide werden hier zusammen gebaut.
+func _rebuild_app_buttons(accent: Color) -> void:
+	_app_buttons.clear()
+	for column: Node in [_icons_column, _task_apps]:
+		if column == null:
+			continue
+		for child in column.get_children():
+			column.remove_child(child)
+			child.queue_free()
+
+	var apps := _apps()
+	for i in apps.size():
+		var a: Dictionary = apps[i]
+		var open_app := func() -> void:
+			_app = a["id"]
+			_flash = ""
+			((game.get("game") as Dictionary)["bus"] as Bus).emit("sfx", "ok")
+			_paint()
+
+		if _icons_column != null:
+			var icon_button := UiTheme.button("", accent, 9, 1.0)
+			# Umschaltknopf, damit das offene Programm sichtbar eingerastet ist.
+			icon_button.toggle_mode = true
+			icon_button.custom_minimum_size = Vector2(ICON_COLUMN_W - 36, 70)
+			icon_button.pressed.connect(open_app)
+			var col := VBoxContainer.new()
+			col.alignment = BoxContainer.ALIGNMENT_CENTER
+			col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			var glyph := Icons.os_icon(a["icon"], 24.0, accent)
+			glyph.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			col.add_child(glyph)
+			var name := UiTheme.label(a["dock"], 9, UiTheme.TEXT, 1.0)
+			name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			col.add_child(name)
+			var num := UiTheme.label("[%d]" % (i + 1), 8, UiTheme.DIM)
+			num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			col.add_child(num)
+			icon_button.add_child(col)
+			_icons_column.add_child(icon_button)
+			_app_buttons.append({"button": icon_button, "id": a["id"]})
+
+		if _task_apps != null:
+			var task_button := UiTheme.content_button(accent, 9, 1.0)
+			task_button.toggle_mode = true
+			task_button.custom_minimum_size = Vector2(0, 24)
+			task_button.pressed.connect(open_app)
+			var line := HBoxContainer.new()
+			line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			line.alignment = BoxContainer.ALIGNMENT_CENTER
+			line.add_theme_constant_override("separation", 5)
+			line.add_child(Icons.os_icon(a["icon"], 12.0, accent))
+			line.add_child(UiTheme.label(a["dock"], 9, UiTheme.TEXT, 1.0))
+			task_button.add_child(line)
+			_task_apps.add_child(task_button)
+			_app_buttons.append({"button": task_button, "id": a["id"]})
+
+func _ready() -> void:
+	if _want_boot:
+		_want_boot = false
+		_play_boot()
+
 
 ## Tastatur: 1-4 wechselt das Programm, ESC geht zurueck ins Buero.
 func _gui_input(event: InputEvent) -> void:
@@ -344,7 +457,8 @@ func _paint() -> void:
 	for child in _window_head.get_children():
 		_window_head.remove_child(child)
 		child.queue_free()
-	_window_head.add_child(Icons.os_icon(app["icon"], 18.0, accent))
+	_window_head.add_child(_window_dots())
+	_window_head.add_child(Icons.os_icon(app["icon"], 17.0, accent))
 	_window_head.add_child(UiTheme.label(app["title"], 13, UiTheme.TEXT, 2.0, true))
 	_window_head.add_child(UiTheme.label(app["subtitle"], 10, UiTheme.DIM))
 	_window_head.add_child(UiTheme.spacer())
@@ -360,8 +474,32 @@ func _paint() -> void:
 		_: _akte_body()
 
 	_paint_status(accent)
-	for entry: Dictionary in _dock_buttons:
+	for entry: Dictionary in _app_buttons:
 		(entry["button"] as Button).button_pressed = entry["id"] == _app
+
+## Die drei Knoepfe links in der Titelleiste. Der rote schliesst das Fenster,
+## und das heisst hier: Laptop zu, zurueck ins Buero.
+func _window_dots() -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 5)
+	for color: Color in [UiTheme.RED, UiTheme.AMBER, UiTheme.GREEN]:
+		var dot := Button.new()
+		dot.custom_minimum_size = Vector2(11, 11)
+		dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var round_box := StyleBoxFlat.new()
+		round_box.bg_color = Color(color.r, color.g, color.b, 0.75)
+		round_box.set_corner_radius_all(6)
+		for state_name: String in ["normal", "hover", "pressed", "focus"]:
+			dot.add_theme_stylebox_override(state_name, round_box)
+		if color == UiTheme.RED:
+			dot.pressed.connect(func() -> void:
+				if on_next.is_valid():
+					on_next.call()
+			)
+		else:
+			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(dot)
+	return row
 
 ## Die Werte oben: Geld, Ruf, Stufe, Punkte.
 func _paint_status(accent: Color) -> void:
@@ -498,7 +636,16 @@ func _upgrades_body() -> void:
 		UiTheme.GREEN if ready > 0 else UiTheme.TEXT,
 		"Offene Ausbauten, die du dir gerade leisten kannst."
 	))
-	_window_body.add_child(meters)
+	# Kennzahlen links, daneben der Laden selbst: die Vorschau zeichnet
+	# denselben Raum wie der Club-Bildschirm, mit dem Ausbaustand von jetzt.
+	# Jeder Kauf baut _upgrades_body() neu auf - man sieht also sofort, was
+	# das Geld an der Einrichtung geaendert hat.
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 16)
+	meters.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_row.add_child(meters)
+	top_row.add_child(_club_preview(state))
+	_window_body.add_child(top_row)
 
 	if filtered.is_empty():
 		_window_body.add_child(UiTheme.label(
@@ -530,6 +677,35 @@ func _upgrades_body() -> void:
 			_window_body.add_child(_upgrade_grid(in_group))
 	else:
 		_window_body.add_child(_upgrade_grid(filtered))
+
+## Das Fenster im Fenster: der eigene Club, live gezeichnet, mit genau den
+## Ausbaustufen, die gerade gekauft sind.
+func _club_preview(state: Dictionary) -> Control:
+	var tier := GameState.club_tier(state)
+	var accent := Desktop.tier_color(int(tier["level"]))
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 3)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 6)
+	head.add_child(Icons.os_icon("floor", 13.0, accent))
+	head.add_child(UiTheme.label("DEIN CLUB · LIVE", 9, UiTheme.DIM, 3.0))
+	col.add_child(head)
+
+	var frame := PanelContainer.new()
+	var box := UiTheme.panel_box(Color(0, 0, 0, 0.6), Color(accent.r, accent.g, accent.b, 0.4))
+	box.content_margin_left = 2
+	box.content_margin_right = 2
+	box.content_margin_top = 2
+	box.content_margin_bottom = 2
+	frame.add_theme_stylebox_override("panel", box)
+	frame.add_child(ClubPreview.new(ClubScreen.levels_for(state)))
+	col.add_child(frame)
+
+	col.add_child(UiTheme.label(
+		"STUFE %d · %s" % [int(tier["level"]), tier["label"]], 9, accent, 2.0
+	))
+	return col
 
 func _tab(id: String, label: String, count: int, color: Color, icon_name: String) -> Control:
 	var b := UiTheme.content_button(color if _group == id else UiTheme.LINE, 9, 1.0)
@@ -1054,3 +1230,33 @@ class WallpaperNode extends Control:
 		Desktop.draw_desktop(
 			self, _fx, size.x, size.y, _t, int(GameState.club_tier(state)["level"])
 		)
+
+## Der Club in klein. Derselbe Zeichencode wie auf dem Club-Bildschirm -
+## nur eben in Fenstergroesse, damit man beim Kaufen zusieht, wie der
+## Laden besser wird.
+class ClubPreview extends Control:
+	var levels: Dictionary = {}
+	var _t := 0.0
+	var _fx := DrawList.new()
+	var _fx_node: FxReplay = null
+
+	func _init(l: Dictionary) -> void:
+		levels = l
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		clip_contents = true
+		custom_minimum_size = Vector2(320, 180)
+
+	func _ready() -> void:
+		_fx_node = FxReplay.new()
+		_fx_node.list = _fx
+		add_child(_fx_node)
+
+	func _process(delta: float) -> void:
+		_t += minf(0.05, delta)
+		queue_redraw()
+		if _fx_node != null:
+			_fx_node.queue_redraw()
+
+	func _draw() -> void:
+		_fx.clear()
+		Club.draw_club(self, _fx, size.x, size.y, _t, levels)
