@@ -219,6 +219,15 @@ static func levels_for(state: Dictionary) -> Dictionary:
 		"vip": GameState.upgrade_level(state, "vip"),
 		"lights": GameState.upgrade_level(state, "lights"),
 		"sound": GameState.upgrade_level(state, "sound"),
+		# Auch die Ausbauten an der Tuer sind im Raum zu sehen: breitere Tuer,
+		# Garderobe, Buehne, Kameras, Team, Prueftisch, Detektor.
+		"door": GameState.upgrade_level(state, "door"),
+		"comfort": GameState.upgrade_level(state, "comfort"),
+		"backstage": GameState.upgrade_level(state, "backstage"),
+		"cameras": GameState.upgrade_level(state, "cameras"),
+		"team": GameState.upgrade_level(state, "team"),
+		"scanner": GameState.upgrade_level(state, "scanner"),
+		"detector": GameState.upgrade_level(state, "detector"),
 		"tier": int(GameState.club_tier(state)["level"]),
 		"character": CharacterSys.normalize_character(state["character"]),
 		"artist": String((artist as Dictionary)["name"]).to_upper() if artist != null \

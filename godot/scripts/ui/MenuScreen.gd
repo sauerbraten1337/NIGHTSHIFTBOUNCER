@@ -1,5 +1,10 @@
 ## Titelbildschirm: die Menuespalte rechts ueber der Szene.
 ##
+## Das Menue haelt sich kurz. Oben der Clubname als Leuchtschrift, darunter
+## nur die Knoepfe, die eine Schicht starten - fortsetzen, solo, zu zweit.
+## Alles andere (Gegenstaende, Einstellungen, Anleitung, Impressum) steht als
+## eine schmale Zeile darunter und nimmt keinen Platz weg.
+##
 ## Godot bringt fuer so etwas keine Entsprechung zu CSS mit - Verlauf,
 ## Leuchtroehre am Rand, wandernder Lichtbalken und der Lichtwisch ueber einem
 ## Eintrag sind darum kleine Zeichenknoten. Der Rest ist gewoehnliches
@@ -9,7 +14,7 @@
 class_name MenuScreen
 extends RefCounted
 
-const COLUMN_WIDTH := 500.0
+const COLUMN_WIDTH := 520.0
 
 ## opts: { on_mode(String), on_continue(), on_catalog(), on_settings() }
 static func build(opts: Dictionary) -> Control:
@@ -19,7 +24,7 @@ static func build(opts: Dictionary) -> Control:
 	column.custom_minimum_size = Vector2(COLUMN_WIDTH, Layout.WORLD.y)
 
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 3)
+	box.add_theme_constant_override("separation", 4)
 	column.add_child(box)
 
 	var save: Variant = SaveGame.peek_save()
@@ -28,41 +33,33 @@ static func build(opts: Dictionary) -> Control:
 
 	box.add_child(_kicker("NULLWERK PRÄSENTIERT"))
 	box.add_child(NeonTitle.new(Config.CLUB_NAME))
-	box.add_child(_gap(6))
+	box.add_child(_gap(4))
 	box.add_child(_rule_row("NIGHTSHIFT — BOUNCER CO-OP", UiTheme.CYAN))
-	var tag := UiTheme.body_label(
+	box.add_child(UiTheme.body_label(
 		"Tür auf, Tür zu. Du entscheidest, wer reinkommt.", 12, Color("9aa3b1")
-	)
-	box.add_child(tag)
+	))
 	if save != null:
-		box.add_child(_gap(6))
+		box.add_child(_gap(8))
 		box.add_child(_save_strip(save as Dictionary))
-	box.add_child(_gap(10))
+	box.add_child(_gap(16))
 
-	# ---------- Auswahl ----------
+	# ---------- Die Schicht ----------
+	#
+	# Nur was eine Nacht startet. Vier Eintraege, kein Kapitelkopf, keine
+	# Nummern - was hier steht, ist die eigentliche Frage des Bildschirms.
 
 	var items: Array[Dictionary] = [
-		{"group": "SCHICHT ANTRETEN"},
-		{"id": "solo", "label": Config.MODES["solo"]["label"],
-			"note": "Allein an der Tür. Alles liegt bei dir.", "kind": "mode"},
+		{"id": "solo", "label": Config.MODES["solo"]["label"], "note": "Allein an der Tür.",
+			"kind": "mode"},
 		{"id": "local", "label": Config.MODES["local"]["label"],
-			"note": "Zwei an einer Tastatur, geteilter Bildschirm.", "kind": "mode"},
+			"note": "Zu zweit an einer Tastatur.", "kind": "mode"},
 		{"id": "online", "label": Config.MODES["online"]["label"],
-			"note": "Raum erstellen oder mit Code beitreten.", "kind": "mode"},
-		{"group": "CLUB"},
-		{"id": "catalog", "label": "GEGENSTÄNDE",
-			"note": "Alles, was Gäste dabeihaben können.", "kind": "screen"},
-		{"id": "settings", "label": "EINSTELLUNGEN",
-			"note": "Auflösung, Ton, Tutorial, Spielstand.", "kind": "screen"},
-		{"id": "howto", "label": "ANLEITUNG",
-			"note": "Wie eine Schicht abläuft.", "kind": "panel"},
-		{"id": "credits", "label": "ÜBER DAS SPIEL",
-			"note": "Was das hier ist.", "kind": "panel"},
+			"note": "Raum erstellen oder beitreten.", "kind": "mode"},
 	]
 	if save != null:
 		var s := save as Dictionary
-		items.insert(1, {
-			"id": "continue", "label": "KARRIERE FORTSETZEN",
+		items.insert(0, {
+			"id": "continue", "label": "WEITERMACHEN",
 			"note": "Nacht %s · €%s · Ruf %d" % [
 				str(int(s["nightIndex"]) + 1).pad_zeros(2),
 				UiTheme.money_text(float(s["money"])),
@@ -83,23 +80,44 @@ static func build(opts: Dictionary) -> Control:
 
 	var open_panel := {"id": ""}
 	var buttons: Array[Item] = []
-	var number := 0
 	for item: Dictionary in items:
-		if item.has("group"):
-			box.add_child(_group_head(String(item["group"])))
-			continue
-		number += 1
 		var kind := String(item["kind"])
 		var entry := Item.new(
-			str(number).pad_zeros(2), String(item["label"]), String(item["note"]),
+			String(item["label"]), String(item["note"]),
 			UiTheme.GREEN if kind == "continue" else UiTheme.RED,
-			kind == "mode" or kind == "continue"
+			kind == "continue"
 		)
 		entry.pressed.connect(func() -> void:
 			_choose(item, opts, open_panel, panel, panel_body, buttons)
 		)
 		box.add_child(entry)
 		buttons.append(entry)
+
+	# ---------- Alles andere ----------
+	#
+	# Eine Zeile, vier Woerter. Zwei davon klappen ihr Feld direkt darunter auf.
+
+	box.add_child(_gap(14))
+	var links: Array[Dictionary] = [
+		{"id": "catalog", "label": "GEGENSTÄNDE", "kind": "screen"},
+		{"id": "settings", "label": "EINSTELLUNGEN", "kind": "screen"},
+		{"id": "howto", "label": "ANLEITUNG", "kind": "panel"},
+		{"id": "credits", "label": "ÜBER", "kind": "panel"},
+	]
+	var link_row := HBoxContainer.new()
+	link_row.add_theme_constant_override("separation", 6)
+	for i in links.size():
+		var link: Dictionary = links[i]
+		var l := Link.new(String(link["label"]))
+		l.pressed.connect(func() -> void:
+			_choose(link, opts, open_panel, panel, panel_body, buttons)
+		)
+		link_row.add_child(l)
+		if i < links.size() - 1:
+			var sep := UiTheme.label("·", 10, Color("3c434f"))
+			sep.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			link_row.add_child(sep)
+	box.add_child(link_row)
 
 	box.add_child(panel)
 	box.add_child(UiTheme.spacer())
@@ -108,9 +126,7 @@ static func build(opts: Dictionary) -> Control:
 
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 10)
-	var keys := UiTheme.label(
-		"↑ ↓ WÄHLEN · ENTER LOS · ESC PAUSE · M TON", 9, Color("5b626e"), 2.0
-	)
+	var keys := UiTheme.label("↑ ↓ WÄHLEN · ENTER LOS · M TON", 9, Color("5b626e"), 2.0)
 	keys.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	foot.add_child(keys)
 	var fs := UiTheme.button(_fullscreen_label(), UiTheme.CYAN, 9, 3.0)
@@ -220,20 +236,6 @@ static func _rule_row(text: String, color: Color) -> Control:
 	row.add_child(line)
 	return row
 
-static func _group_head(text: String) -> Control:
-	var wrap := VBoxContainer.new()
-	wrap.add_theme_constant_override("separation", 4)
-	wrap.add_child(_gap(8))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	row.add_child(UiTheme.label(text, 8, Color("4e5563"), 5.0))
-	var line := FadeLine.new(Color(1, 1, 1, 0.12))
-	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(line)
-	wrap.add_child(row)
-	return wrap
-
 ## Was im Spielstand steht - direkt unter dem Titel.
 static func _save_strip(save: Dictionary) -> Control:
 	var panel := PanelContainer.new()
@@ -277,10 +279,10 @@ class Column extends MarginContainer:
 	var _t := 0.0
 
 	func _init() -> void:
-		add_theme_constant_override("margin_left", 34)
-		add_theme_constant_override("margin_right", 32)
-		add_theme_constant_override("margin_top", 22)
-		add_theme_constant_override("margin_bottom", 16)
+		add_theme_constant_override("margin_left", 52)
+		add_theme_constant_override("margin_right", 34)
+		add_theme_constant_override("margin_top", 40)
+		add_theme_constant_override("margin_bottom", 20)
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -338,7 +340,7 @@ class NeonTitle extends Control:
 
 	func _init(content: String) -> void:
 		text = content
-		custom_minimum_size = Vector2(0, 50)
+		custom_minimum_size = Vector2(0, 58)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func _ready() -> void:
@@ -357,9 +359,9 @@ class NeonTitle extends Control:
 		return fmod(_t, 6.5) > 6.2
 
 	func _draw() -> void:
-		var font := Fonts.spaced(Fonts.display(), 6.0)
-		var size_px := 42
-		var base := Vector2(0, 44)
+		var font := Fonts.spaced(Fonts.display(), 7.0)
+		var size_px := 48
+		var base := Vector2(0, 50)
 		# Schein: mehrere schwach rote Kopien um den Kern herum.
 		for i in 6:
 			var a := float(i) / 6.0 * TAU
@@ -411,12 +413,11 @@ class Dot extends Control:
 		draw_circle(Vector2(4, 4), 7.0, Color(color.r, color.g, color.b, 0.18 * a))
 		draw_circle(Vector2(4, 4), 3.5, Color(color.r, color.g, color.b, a))
 
-## Ein Eintrag der Auswahl: Nummer, Name, Erklaerung, Pfeil.
+## Ein Eintrag der Auswahl: Name, eine Zeile Erklaerung, Pfeil.
 ##
 ## Der Knopf zeichnet seinen Hintergrund selbst - abgeschraegte Ecke, farbiger
 ## Balken links und ein Lichtwisch, der beim Ueberfahren einmal durchlaeuft.
 class Item extends Button:
-	var number := ""
 	var label_text := ""
 	var note := ""
 	var accent := UiTheme.RED
@@ -424,22 +425,19 @@ class Item extends Button:
 	var open := false
 
 	var _sweep := 1.5          # >1 = kein Wisch sichtbar
-	var _num: Label = null
 	var _name: Label = null
 	var _note: Label = null
 
 	func _init(
-		num: String, name_text: String, note_text: String,
-		accent_color: Color, is_play: bool
+		name_text: String, note_text: String, accent_color: Color, is_play: bool
 	) -> void:
-		number = num
 		label_text = name_text
 		note = note_text
 		accent = accent_color
 		play = is_play
 		flat = true
 		focus_mode = Control.FOCUS_ALL
-		custom_minimum_size = Vector2(0, 46)
+		custom_minimum_size = Vector2(0, 54)
 		# Die eingebauten Zustandskaesten wuerden ueber die eigene Zeichnung
 		# laufen - alle vier auf durchsichtig.
 		var empty := StyleBoxEmpty.new()
@@ -450,25 +448,21 @@ class Item extends Button:
 		var row := HBoxContainer.new()
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		row.offset_left = 14
-		row.offset_right = -12
+		row.offset_left = 20
+		row.offset_right = -14
 		row.add_theme_constant_override("separation", 14)
-
-		_num = UiTheme.label(number, 10, Color("454c5a"), 2.0)
-		_num.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		row.add_child(_num)
 
 		var text := VBoxContainer.new()
 		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		text.alignment = BoxContainer.ALIGNMENT_CENTER
 		text.add_theme_constant_override("separation", 2)
-		_name = UiTheme.label(label_text, 16, Color(1, 1, 1) if play else UiTheme.TEXT, 3.0, true)
+		_name = UiTheme.label(label_text, 19, Color(1, 1, 1) if play else UiTheme.TEXT, 4.0, true)
 		text.add_child(_name)
 		_note = UiTheme.label(note, 10, UiTheme.DIM, 0.5)
 		text.add_child(_note)
 		row.add_child(text)
 
-		var mark := UiTheme.label("▸", 12, accent)
+		var mark := UiTheme.label("▸", 14, accent)
 		mark.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		mark.modulate = Color(1, 1, 1, 0)
 		row.add_child(mark)
@@ -482,7 +476,7 @@ class Item extends Button:
 
 	func _light_up(mark: Control) -> void:
 		mark.modulate = Color(1, 1, 1, 1)
-		_num.add_theme_color_override("font_color", accent)
+		_name.add_theme_color_override("font_color", Color(1, 1, 1))
 		_sweep = 0.0
 		queue_redraw()
 
@@ -490,7 +484,9 @@ class Item extends Button:
 		if is_hovered() or has_focus():
 			return
 		mark.modulate = Color(1, 1, 1, 0)
-		_num.add_theme_color_override("font_color", Color("454c5a"))
+		_name.add_theme_color_override(
+			"font_color", Color(1, 1, 1) if play else UiTheme.TEXT
+		)
 		queue_redraw()
 
 	func _process(delta: float) -> void:
@@ -519,7 +515,7 @@ class Item extends Button:
 		# Balken links: die Farbe des Eintrags.
 		var bar := Color(accent.r, accent.g, accent.b, 1.0) if lit \
 			else Color(UiTheme.LINE.r, UiTheme.LINE.g, UiTheme.LINE.b, 1.0)
-		draw_rect(Rect2(0, 0, 3.0 if lit else 2.0, h), bar)
+		draw_rect(Rect2(0, 0, 4.0 if lit else 2.0, h), bar)
 
 		# Lichtwisch beim Ueberfahren.
 		if _sweep <= 1.2:
@@ -536,3 +532,49 @@ class Item extends Button:
 				Vector2(0, 0.5), Vector2(w - 0.5, 0.5), Vector2(w - 0.5, h - cut),
 				Vector2(w - cut, h - 0.5), Vector2(0, h - 0.5),
 			]), line, 1.0)
+
+## Ein Wort in der Zeile unter der Auswahl. Kein Kasten, kein Balken - nur
+## Schrift, die beim Ueberfahren aufleuchtet und einen Strich bekommt.
+class Link extends Button:
+	var label_text := ""
+	var _label: Label = null
+
+	func _init(text: String) -> void:
+		label_text = text
+		flat = true
+		focus_mode = Control.FOCUS_ALL
+		custom_minimum_size = Vector2(0, 22)
+		var empty := StyleBoxEmpty.new()
+		for state: String in ["normal", "hover", "pressed", "focus", "disabled"]:
+			add_theme_stylebox_override(state, empty)
+
+	func _ready() -> void:
+		_label = UiTheme.label(label_text, 10, Color("6f7787"), 2.0)
+		_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		add_child(_label)
+		custom_minimum_size = Vector2(
+			_label.get_combined_minimum_size().x + 6, custom_minimum_size.y
+		)
+		for signal_name: String in ["mouse_entered", "focus_entered"]:
+			connect(signal_name, _light)
+		for signal_name: String in ["mouse_exited", "focus_exited"]:
+			connect(signal_name, _dim)
+
+	func _light() -> void:
+		_label.add_theme_color_override("font_color", UiTheme.CYAN)
+		queue_redraw()
+
+	func _dim() -> void:
+		if is_hovered() or has_focus():
+			return
+		_label.add_theme_color_override("font_color", Color("6f7787"))
+		queue_redraw()
+
+	func _draw() -> void:
+		if is_hovered() or has_focus():
+			draw_rect(
+				Rect2(0, size.y - 3.0, size.x - 6.0, 1.0),
+				Color(UiTheme.CYAN.r, UiTheme.CYAN.g, UiTheme.CYAN.b, 0.7)
+			)
